@@ -1386,3 +1386,6 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 
 -- v22: merchant cost. products.cost, order_item_capital.cost (snapshot via trg_item_capital; preserved by edit_order),
 -- admin_profit_items() (security definer, is_admin()) feeds the profitability tab.
+
+-- v23: shipping via carriers. tables carriers, carrier_payments, shipment_events; orders.fulfillment/carrier_id/waybill/shipping_cost/ship_status/ship_warehouse/stock_out;
+-- RPCs create_shipment, set_shipment_status, update_shipment, add_carrier_payment; admin_profit_items() extended with fulfillment/shipping_cost/carrier_id.

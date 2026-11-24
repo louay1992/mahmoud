@@ -230,6 +230,8 @@ tr:last-child td{border-bottom:0}
 .hb{margin-bottom:10px}.hl{display:flex;justify-content:space-between;font-size:13.5px;gap:8px}.ht{height:9px;background:#f1f5f9;border-radius:6px;overflow:hidden;margin:4px 0 2px}.ht>div{height:100%;border-radius:6px}
 @media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}.sgrid{grid-template-columns:1fr}}
 .pfl{flex:1;display:flex;flex-direction:column;gap:2px}.pfl small{color:#64748b;font-size:11px}.flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;justify-content:center}.flow>div{flex:1 1 90px;background:#fff;border-radius:12px;padding:8px 10px;text-align:center;min-width:0}.flow>div small{display:block;color:#64748b;font-size:11px}.flow>div b{font-size:14px;word-break:break-word}.flow>div.rem{background:#ccfbf1}.flow>i{align-self:center;font-style:normal;font-weight:800;color:#64748b}
+.seg{display:flex;gap:6px;background:#f1f5f9;padding:4px;border-radius:14px;margin-bottom:10px}.seg button{flex:1;border:0;background:transparent;padding:10px;border-radius:11px;font:inherit;font-weight:700;color:#475569;cursor:pointer}.seg button.on{background:#fff;color:#0f766e;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.shpbox{background:#f0fdfa;border:1px solid #99f6e4;border-radius:14px;padding:10px;margin:6px 0}.stps{display:flex;gap:4px;margin:6px 0 12px}.stp{flex:1;text-align:center;font-size:11px;color:#94a3b8;position:relative}.stp i{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#e2e8f0;margin:0 auto 4px;font-style:normal;font-size:16px;filter:grayscale(1)}.stp.on{color:#0f766e}.stp.on i{background:#ccfbf1;filter:none}.stp.cur i{box-shadow:0 0 0 3px #0f766e55;background:#99f6e4}.stp.cur span{font-weight:800}.shban{padding:12px;border-radius:12px;text-align:center;font-weight:800;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -420,6 +422,7 @@ async function loadAll(initial){
     sb.from("marketer_payments").select("*").order("created_at",{ascending:false}).limit(2000),
     sb.from("order_profits").select("order_id,marketer_id,capital,profit").limit(2000),
     sb.from("notifications").select("*").order("created_at",{ascending:false}).limit(150),
+    sb.from("carriers").select("*").order("name"),
   ];
   const r = await Promise.all(q);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
@@ -433,14 +436,14 @@ async function loadAll(initial){
   CUR = D.settings.currency || "";
   const biz = D.settings.business_name || "إدارة كباتن التوصيل";
   $("hn").textContent = biz; document.title = biz;
-  D.notifs=r[18].data||[]; try{ detectNotifs() }catch(e){ console.warn(e) }
+  D.carriers=r[19].data||[]; D.notifs=r[18].data||[]; try{ detectNotifs() }catch(e){ console.warn(e) }
 }
 const mname = id => (D.marketers.find(m=>m.id===id)||{}).name || "—";
 const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["ship","الشحن","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
 const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
@@ -579,7 +582,7 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,ship:vShip,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -1028,6 +1031,7 @@ function autoCap(){
   upd();
 }
 function vNew(){
+  NOM="delivery";
   $("main").innerHTML = `<div class="card"><h2>تعبئة من رسالة واتساب</h2>
     <p class="mut" style="margin:0 0 8px">الصق رسالة الطلب بالصيغة المحددة وسيُعبَّأ النموذج تلقائياً.</p>
     <textarea id="wapaste" rows="6" placeholder="الصق هنا رسالة الواتساب" style="width:100%"></textarea>
@@ -1035,17 +1039,19 @@ function vNew(){
     <div id="wares"></div>
     <details style="margin-top:8px"><summary class="mut">عرض الكلاشة</summary><textarea id="watpl" rows="7" readonly style="width:100%;margin-top:6px">${WA_TPL}</textarea></details></div>
    <div class="card"><h2>طلب بيع جديد</h2>
+    ${ACC.role!=="staff"?`<div class="seg"><button type="button" id="nm_d" class="on" onclick="setNom('delivery')">🚚 توصيل بكابتن</button><button type="button" id="nm_s" onclick="setNom('shipping')">📦 شحن بشركة</button></div>`:""}
     <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
     <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
     <div class="row"><select id="og" onchange="autoCap()">${govOptions("","— محافظة الطلب —")}</select></div>
     ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<input type="hidden" id="omk" value=""><button type="button" class="pkbtn" id="omkb" onclick="pickMarketer()">— اختر المسوّقة (ابحث) —</button>`:""}</div><div id="ohint" class="mut" style="margin:2px 0 6px;font-size:13px"></div>`:""}
+    ${ACC.role!=="staff"?shipForm():""}
     ${ACC.role==="staff"?`<p class="mut" style="margin:4px 0">اكتب <b>سعر البيع</b> لكل منتج.</p>`:`<p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>`}
     ${itemRows("orows",true)}<br><br>
     <div id="otot" class="mut"></div><br>
     <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
 }
-function upd(){ updFor("orows","otot",()=>{const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)) }
+function upd(){ updFor("orows","otot",()=>{ if(NOM==="shipping"&&$("ofee")) return parseFloat($("ofee").value)||0; const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)) }
 function updFor(rid,tid,feeFn){
   if(!$(tid)||!$(rid)) return;
   let sub=0,lst=0;
@@ -1099,11 +1105,181 @@ async function saveOrder(){
   if(!items.length) return toast("أضف منتجاً");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
   if(ACC.role==="staff"&&items.some(i=>i.unit_price===undefined)) return toast("اكتب سعر البيع لكل منتج");
+  if(NOM==="shipping"&&ACC.role!=="staff"){
+    const car=$("ocar").value; if(!car) return toast("اختر شركة الشحن");
+    if(!($("og")||{}).value) return toast("اختر محافظة الطلب (مطلوبة للشحن)");
+    const cost=parseFloat($("ocost").value||"0"), fee=parseFloat($("ofee").value||"0");
+    if(isNaN(cost)||cost<0||isNaN(fee)||fee<0) return toast("أجور الشحن غير صحيحة","err");
+    if(await run(sb.rpc("create_shipment",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null,p_governorate:$("og").value,p_carrier:car,p_waybill:$("owb").value.trim()||null,p_cost:cost,p_fee:fee,p_wh:$("owh").value||null}),"تم إنشاء الشحنة")){ tab="ship"; renderNav(); refresh() }
+    return }
   if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:($("oc")||{}).value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null,p_governorate:($("og")||{}).value||null}),"تم إنشاء الطلب")){ if(ACC.role==="staff"){ await refresh(); go(can("view_orders")?"orders":"new") } else { tab="orders"; renderNav(); refresh() } }
 }
 
+/* ================= الشحن (قدموس / الهرم ...) ================= */
+const SHS=[["preparing","قيد التجهيز","#64748b","🧰"],["handed","سُلِّمت للشركة","#2563eb","🏢"],["in_transit","في الطريق","#f59e0b","🚚"],["at_branch","وصلت للفرع","#7c3aed","📍"],["delivered","سُلِّمت للزبون","#16a34a","✅"],["returned","مرتجعة","#a855f7","↩️"],["cancelled","ملغاة","#ef4444","❌"]];
+const SHFLOW=["preparing","handed","in_transit","at_branch","delivered"];
+const shl=k=>SHS.find(x=>x[0]===k)||[k,k,"#94a3b8",""];
+const carName=id=>((D.carriers||[]).find(c=>c.id===id)||{}).name||"—";
+const trackUrl=o=>{ const c=(D.carriers||[]).find(x=>x.id===o.carrier_id); return c&&c.tracking_url&&o.waybill?c.tracking_url.replace("{no}",encodeURIComponent(o.waybill)):"" };
+const shTag=o=>{ const s=shl(o.ship_status||"preparing"); return `<span class="tag" style="background:${s[2]}22;color:${s[2]}">${s[3]} ${s[1]}</span>` };
+let NOM="delivery";
+function shipForm(){
+  const whs=D.warehouses||[];
+  return `<div id="shpbox" class="shpbox" style="display:none"><div style="font-weight:800;margin-bottom:6px">📦 بيانات الشحنة</div>
+    <div class="row"><select id="ocar"><option value="">— اختر شركة الشحن —</option>${(D.carriers||[]).filter(c=>c.active).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><label class="pfl"><small>رقم البوليصة (يمكن لاحقاً)</small><input id="owb" dir="ltr"></label></div>
+    <div class="row"><label class="pfl"><small>أجور الشحن للشركة</small><input id="ocost" type="number" min="0" step="0.01" placeholder="0"></label><label class="pfl"><small>أجور على الزبون (اختياري)</small><input id="ofee" type="number" min="0" step="0.01" placeholder="0" oninput="upd()"></label></div>
+    <div class="row"><select id="owh">${whs.map(w=>`<option value="${w.id}" ${w.is_main?"selected":""}>تخرج البضاعة من: ${esc(w.name)}${w.is_main?" (رئيسي)":""}</option>`).join("")}</select></div>
+    <p class="mut" style="margin:4px 0 0;font-size:12.5px">المطلوب تحصيله من الزبون عبر الشركة = المنتجات + أجور الشحن على الزبون. أجور الشحن للشركة تُخصم من ربح الإدارة. تخرج البضاعة من المستودع عند تسليمها للشركة.</p></div>`;
+}
+function setNom(m){ NOM=m; const s=m==="shipping";
+  $("nm_d").classList.toggle("on",!s); $("nm_s").classList.toggle("on",s);
+  if($("oc")) $("oc").style.display=s?"none":""; if($("ohint")) $("ohint").style.display=s?"none":"";
+  if($("shpbox")) $("shpbox").style.display=s?"block":"none"; upd() }
+async function fetchShipOrder(id){
+  const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).maybeSingle();
+  if(error||!data){ toast("تعذّر تحميل الشحنة","err"); return null } return data }
+async function openShip(id){
+  const [o,ev]=await Promise.all([fetchShipOrder(id), sb.from("shipment_events").select("*").eq("order_id",id).order("created_at",{ascending:false})]);
+  if(!o) return;
+  const cur=o.ship_status||"preparing", closed=["delivered","returned","cancelled"].includes(cur), idx=SHFLOW.indexOf(cur);
+  const next=!closed&&idx>=0&&idx<SHFLOW.length-1?SHFLOW[idx+1]:null, tu=trackUrl(o);
+  const step=(k,i)=>{ const x=shl(k), done=idx>=0&&i<=idx&&cur!=="returned"; return `<div class="stp ${done?"on":""} ${k===cur?"cur":""}"><i>${x[3]}</i><span>${x[1]}</span></div>` };
+  const net=Number(o.delivery_fee)-Number(o.shipping_cost);
+  $("modal").innerHTML=`<div class="sheet" style="max-width:640px"><div class="sh-h"><b>📦 شحنة #${o.order_no} — ${esc(o.customer_name)}</b><button class="x" onclick="closeStatus()">${ic("x")}</button></div>
+   ${["returned","cancelled"].includes(cur)?`<div class="shban" style="background:${shl(cur)[2]}22;color:${shl(cur)[2]}">${shl(cur)[3]} ${shl(cur)[1]}</div>`:`<div class="stps">${SHFLOW.map(step).join("")}</div>`}
+   <div class="dsec"><div class="dh">تفاصيل الشحنة</div>
+    ${drow("الشركة",`<b>${esc(carName(o.carrier_id))}</b>`)}
+    ${drow("رقم البوليصة",o.waybill?`<b dir="ltr">${esc(o.waybill)}</b> <button class="b s o" style="padding:2px 8px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(o.waybill)}');toast('تم النسخ','ok')">نسخ</button>`:'<span style="color:#b45309">لم يُدخل بعد — اضغط «تعديل بيانات الشحنة»</span>')}
+    ${drow("الزبون",`${esc(o.customer_name)} · <span dir="ltr">${esc(o.customer_phone)}</span>`)}
+    ${drow("الوجهة",esc((o.governorate||"")+(o.customer_address?" — "+o.customer_address:"")))}
+    ${drow("المطلوب تحصيله (COD)",`<b>${money(o.total)}</b>`)}
+    ${drow("أجور الشحن للشركة",money(o.shipping_cost))}
+    ${drow("أجور محمَّلة على الزبون",money(o.delivery_fee))}
+    ${drow("صافي الشحن",`<b class="${net<0?"dn":"up"}">${money(net)}</b>`)}
+    ${drow("المستودع المصدر",esc((D.warehouses.find(w=>w.id===o.ship_warehouse)||{}).name||"—")+(o.stock_out?" · ✓ خرجت البضاعة":""))}
+    ${drow("المنتجات",o.order_items.map(i=>esc(i.products?.name)+" ×"+i.qty).join("، "))}</div>
+   <div class="capb">${next?`<button class="b" onclick="shipSet('${o.id}','${next}')">${shl(next)[3]} ${shl(next)[1]} ←</button>`:""}
+     ${!closed&&cur!=="preparing"?`<button class="b o" onclick="shipSet('${o.id}','returned')">↩️ مرتجعة</button>`:""}
+     ${cur==="delivered"?`<button class="b o" onclick="shipSet('${o.id}','returned')">↩️ تسجيل مرتجع</button>`:""}
+     ${!closed&&cur==="preparing"?`<button class="b r" onclick="shipSet('${o.id}','cancelled')">❌ إلغاء الشحنة</button>`:""}</div>
+   ${!closed?`<details class="capm"><summary>تغيير الحالة يدوياً</summary><div class="capb">${SHFLOW.filter(k=>k!==cur).map(k=>`<button class="b s o" onclick="shipSet('${o.id}','${k}')">${shl(k)[3]} ${shl(k)[1]}</button>`).join("")}</div></details>`:""}
+   <div class="capb" style="margin-top:12px">${tu?`<a class="b s g" target="_blank" rel="noopener" style="text-decoration:none" href="${esc(tu)}">🔎 تتبع عند الشركة</a>`:""}<button class="b s o" onclick="shipEdit('${o.id}')">✏️ تعديل بيانات الشحنة</button><button class="b s o" onclick="shipLabel('${o.id}')">🏷 ملصق الشحن</button><a class="b s o" style="text-decoration:none" href="tel:${esc(o.customer_phone)}">📞 الزبون</a><a class="b s o" style="text-decoration:none" target="_blank" rel="noopener" href="${waUrl(o,waText(o))}">واتساب</a></div>
+   ${(ev.data||[]).length?`<div class="dsec"><div class="dh">🕒 سجل الشحنة</div>${ev.data.map(e=>`<div class="mut" style="padding:3px 0"><span class="tag" style="background:${shl(e.ship_status)[2]}22;color:${shl(e.ship_status)[2]}">${shl(e.ship_status)[1]}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</div>`:""}</div>`;
+  $("modal").style.display="flex";
+}
+async function shipSet(id,st){
+  const o=await fetchShipOrder(id); if(!o) return; let restock=true, note=null;
+  if(st==="returned"||st==="cancelled"){
+    const f=await askf(st==="returned"?"تسجيل شحنة مرتجعة":"إلغاء الشحنة",[{k:"n",l:"سبب أو ملاحظة (اختياري)",area:true}],"متابعة",{cls:"r"}); if(!f) return; note=f.n.trim()||null;
+    if(o.stock_out){ const r=await ask3("هل عادت البضاعة فعلاً إلى المستودع؟",{title:"الجرد",yes:"نعم، أعدها للجرد",no:"لا، لا تُعد للجرد"}); if(r===null) return; restock=r }
+  } else if(!await askc("تغيير حالة الشحنة #"+o.order_no+" إلى <b>"+shl(st)[1]+"</b>؟"+(st==="delivered"?"<br>سيُسجَّل الطلب مُسلَّماً ويدخل في الأرباح.":"")+(["handed","in_transit","at_branch","delivered"].includes(st)&&!o.stock_out?"<br>ستُخصم البضاعة من المستودع.":""),{title:"تحديث الشحنة",ok:"تأكيد"})) return;
+  if(await run(sb.rpc("set_shipment_status",{p_order:id,p_status:st,p_note:note,p_restock:restock}),"تم تحديث الشحنة")){ await refresh(); openShip(id) }
+}
+async function shipEdit(id){
+  const o=await fetchShipOrder(id); if(!o) return;
+  $("modal").innerHTML=`<div class="sheet" style="max-width:560px"><div class="sh-h"><b>تعديل شحنة #${o.order_no}</b><button class="x" onclick="openShip('${id}')">${ic("x")}</button></div>
+   <div class="row"><select id="sec">${D.carriers.filter(c=>c.active||c.id===o.carrier_id).map(c=>`<option value="${c.id}" ${c.id===o.carrier_id?"selected":""}>${esc(c.name)}</option>`).join("")}</select><input id="sew" value="${esc(o.waybill||"")}" placeholder="رقم البوليصة" dir="ltr"></div>
+   <div class="row"><label class="pfl"><small>أجور الشحن للشركة</small><input id="sek" type="number" min="0" step="0.01" value="${o.shipping_cost}"></label><label class="pfl"><small>أجور محمَّلة على الزبون</small><input id="sef" type="number" min="0" step="0.01" value="${o.delivery_fee}" ${["delivered","returned","cancelled"].includes(o.status)?"disabled":""}></label></div>
+   <div class="row"><select id="sewh" ${o.stock_out?"disabled":""}>${D.warehouses.map(w=>`<option value="${w.id}" ${w.id===o.ship_warehouse?"selected":""}>المستودع: ${esc(w.name)}</option>`).join("")}</select></div>
+   <button class="b" style="width:100%" onclick="shipEditSave('${id}')">حفظ</button></div>`;
+}
+async function shipEditSave(id){
+  const cost=parseFloat($("sek").value), fee=parseFloat($("sef").value); if(isNaN(cost)||cost<0||isNaN(fee)||fee<0) return toast("مبلغ غير صحيح","err");
+  if(await run(sb.rpc("update_shipment",{p_order:id,p_carrier:$("sec").value,p_waybill:$("sew").value.trim()||null,p_cost:cost,p_fee:$("sef").disabled?null:fee,p_wh:$("sewh").disabled?null:$("sewh").value}),"تم الحفظ")){ await refresh(); openShip(id) }
+}
+async function shipLabel(id){
+  const o=await fetchShipOrder(id); if(!o) return; const w=window.open("","_blank"); if(!w) return toast("اسمح بالنوافذ المنبثقة للطباعة");
+  w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>ملصق شحنة #${o.order_no}</title><style>@page{size:A6;margin:6mm}body{font-family:Tahoma,Arial,sans-serif;margin:0;color:#000}.l{border:2px solid #000;border-radius:8px;padding:10px}h1{margin:0 0 4px;font-size:20px;text-align:center}.wb{font-size:26px;font-weight:800;text-align:center;letter-spacing:2px;border:2px dashed #000;padding:6px;margin:8px 0}.r{margin:5px 0;font-size:14px}.cod{font-size:22px;font-weight:800;text-align:center;background:#000;color:#fff;padding:6px;border-radius:6px;margin-top:8px}</style></head><body><div class="l">
+   <h1>${esc(D.settings.business_name||"")} — ${esc(carName(o.carrier_id))}</h1><div class="wb" dir="ltr">${esc(o.waybill||"— بدون رقم —")}</div>
+   <div class="r"><b>المستلم:</b> ${esc(o.customer_name)}</div><div class="r"><b>الهاتف:</b> <span dir="ltr">${esc(o.customer_phone)}</span></div>
+   <div class="r"><b>الوجهة:</b> ${esc(o.governorate||"")}${o.customer_address?" — "+esc(o.customer_address):""}</div>
+   <div class="r"><b>المحتويات:</b> ${o.order_items.map(i=>esc(i.products?.name)+" ×"+i.qty).join("، ")}</div>
+   ${o.note?`<div class="r"><b>ملاحظة:</b> ${esc(o.note)}</div>`:""}<div class="r" style="font-size:12px">طلب #${o.order_no} · ${new Date(o.created_at).toLocaleDateString("ar-EG")}</div>
+   <div class="cod">المطلوب تحصيله: ${money(o.total)}</div></div><script>setTimeout(()=>print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+/* ===== تبويب الشحن ===== */
+let SHF={st:"open",q:"",car:""}, SHIPS=null, CPAYS=[], SHLOAD=0;
+async function vShip(){
+  $("main").innerHTML=`<div id="shbody"><p class="mut" style="text-align:center">جارٍ تحميل الشحنات…</p></div>`;
+  const my=++SHLOAD;
+  const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)]);
+  if(my!==SHLOAD||tab!=="ship") return;
+  if(o.error){ $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
+  SHIPS=o.data; CPAYS=p.data||[]; drawShip();
+}
+const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.filter(x=>x.carrier_id===cid);
+  const col=L.filter(o=>o.status==="delivered").reduce((a,o)=>a+Number(o.total),0), fees=L.filter(o=>["delivered","returned"].includes(o.status)).reduce((a,o)=>a+Number(o.shipping_cost),0), paid=P.reduce((a,x)=>a+Number(x.amount),0);
+  const fly=L.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)), pend=fly.reduce((a,o)=>a+Number(o.total),0);
+  return {col,fees,paid,owed:col-fees-paid,fly:fly.length,pend,n:L.length,dl:L.filter(o=>o.status==="delivered").length,rt:L.filter(o=>o.status==="returned").length} };
+function drawShip(){
+  if(!$("shbody")||!SHIPS) return;
+  const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing");
+  const cnt={open:SHIPS.filter(isOpen).length}; SHS.forEach(([k])=>cnt[k]=SHIPS.filter(o=>(o.ship_status||"preparing")===k).length);
+  const q=nrm(SHF.q);
+  const list=SHIPS.filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):(o.ship_status||"preparing")===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate].some(v=>nrm(v).includes(q))));
+  const tot=D.carriers.reduce((a,c)=>{const b=carBal(c.id);a.owed+=b.owed;a.pend+=b.pend;return a},{owed:0,pend:0});
+  const stuck=SHIPS.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)&&(Date.now()-new Date(o.status_at||o.created_at).getTime())>5*864e5).length;
+  $("shbody").innerHTML=`<div class="kpis"><div class="kp"><div class="kpi" style="background:#e0f2fe">🚚</div><small>شحنات جارية</small><b>${cnt.open}</b></div><div class="kp"><div class="kpi" style="background:#fef3c7">⏳</div><small>تحصيل معلّق عند الشركات</small><b>${money(tot.pend)}</b></div><div class="kp"><div class="kpi" style="background:#ccfbf1">💰</div><small>مستحق لك عند الشركات</small><b class="${tot.owed<0?"dn":"up"}">${money(tot.owed)}</b></div></div>
+   ${stuck?`<div class="card" style="background:#fffbeb;border:1px solid #fcd34d">⚠ <b>${stuck}</b> شحنة عند الشركة منذ أكثر من 5 أيام بلا تحديث — راجعها.</div>`:""}
+   <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 10px"><h2 style="margin:0">شركات الشحن</h2><button class="b s" style="flex:0 0 auto" onclick="carEdit()">+ شركة</button></div>
+    ${D.carriers.length?D.carriers.map(c=>{const b=carBal(c.id);return `<div class="card capc ${c.active?"":"off"}" style="box-shadow:none;border:1px solid #e2e8f0"><div class="caph"><div class="cav">📦</div><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(c.name)}</b>${c.active?"":' <span class="tag cancelled">موقوفة</span>'}<div class="mut" style="font-size:12px">${b.n} شحنة · ${b.dl} مُسلَّمة · ${b.rt} مرتجعة · ${b.fly} في الطريق</div></div></div>
+     <div class="capst"><div><small>مُحصَّل لدى الشركة</small><b>${money(b.col)}</b></div><div><small>أجورها</small><b>${money(b.fees)}</b></div><div><small>حوّلته لك</small><b>${money(b.paid)}</b></div><div class="rem"><small>المستحق لك</small><b class="${b.owed<0?"neg":""}">${money(b.owed)}</b></div></div>
+     <div class="capb"><button class="b s" onclick="carPay('${c.id}')">💵 تسجيل تحويل</button><button class="b s o" onclick="carStatement('${c.id}')">📄 كشف حساب</button><button class="b s o" onclick="carPays('${c.id}')">🧾 التحويلات</button><button class="b s o" onclick="carEdit('${c.id}')">✏️ تعديل</button></div></div>`}).join(""):'<p class="mut">لا توجد شركات</p>'}</div>
+   <div class="card"><h2 style="margin:0 0 8px">الشحنات</h2>
+    <input placeholder="بحث: اسم الزبون، الموبايل، رقم البوليصة، رقم الطلب" value="${esc(SHF.q)}" oninput="SHF.q=this.value;drawShipList()" style="width:100%;margin-bottom:8px">
+    <div class="chips"><button class="chip ${SHF.st==="open"?"on":""}" onclick="SHF.st='open';drawShip()">جارية (${cnt.open})</button><button class="chip ${SHF.st==="all"?"on":""}" onclick="SHF.st='all';drawShip()">الكل (${SHIPS.length})</button>${SHS.map(([k,l,c,i])=>`<button class="chip ${SHF.st===k?"on":""}" onclick="SHF.st='${k}';drawShip()">${i} ${l} (${cnt[k]})</button>`).join("")}</div>
+    <select onchange="SHF.car=this.value;drawShip()" style="margin:8px 0"><option value="">كل الشركات</option>${D.carriers.map(c=>`<option value="${c.id}" ${SHF.car===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
+    <div id="shlist"></div></div>`;
+  drawShipList();
+}
+function drawShipList(){
+  if(!$("shlist")||!SHIPS) return;
+  const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), q=nrm(SHF.q);
+  const list=SHIPS.filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):(o.ship_status||"preparing")===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate].some(v=>nrm(v).includes(q))));
+  $("shlist").innerHTML=list.length?list.map(o=>{ const age=Math.floor((Date.now()-new Date(o.status_at||o.created_at).getTime())/864e5); return `<div class="card" style="padding:12px 14px;margin:0 0 10px;cursor:pointer;box-shadow:none;border:1px solid #e2e8f0" onclick="openShip('${o.id}')">
+    <div class="row" style="justify-content:space-between;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b>${shTag(o)}</div>
+    <div class="mut" style="font-size:13px">📍 ${esc(o.governorate||"—")} · 📞 <span dir="ltr">${esc(o.customer_phone||"")}</span></div>
+    <div class="mut" style="font-size:13px">🏢 ${esc(carName(o.carrier_id))} · بوليصة: <b dir="ltr">${esc(o.waybill||"—")}</b></div>
+    <div style="font-size:13px;margin:3px 0">${o.order_items.map(i=>esc(i.products?.name)+" ×"+i.qty).join("، ")}</div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>COD: <b>${money(o.total)}</b> · أجورها ${money(o.shipping_cost)}</span><span class="mut" style="font-size:12px">${isOpen(o)&&age>=1?"منذ "+age+" يوم":dt(o.status_at||o.created_at)}</span></div></div>`}).join(""):'<p class="mut" style="text-align:center">لا توجد شحنات</p>';
+}
+async function carEdit(id){
+  const c=id?D.carriers.find(x=>x.id===id):null;
+  const f=await askf(c?"تعديل الشركة":"شركة شحن جديدة",[{k:"n",l:"اسم الشركة",v:c?.name||""},{k:"p",l:"هاتف الشركة (اختياري)",v:c?.phone||"",dir:"ltr"},{k:"u",l:"رابط التتبع (اختياري) — استخدم {no} مكان رقم البوليصة",v:c?.tracking_url||"",dir:"ltr",ph:"https://example.com/track?no={no}"}],"حفظ"); if(!f) return;
+  if(!f.n.trim()) return toast("اسم الشركة مطلوب","err");
+  const rec={name:f.n.trim(),phone:f.p.trim()||null,tracking_url:f.u.trim()||null};
+  const ok=c?await run(sb.from("carriers").update(rec).eq("id",id),"تم الحفظ"):await run(sb.from("carriers").insert(rec),"تمت الإضافة");
+  if(ok){ await loadAll(); vShip() }
+}
+async function carPay(cid){
+  const f=await askf("تسجيل تحويل من "+carName(cid),[{k:"a",l:"المبلغ الذي حوّلته الشركة لك",t:"number"},{k:"n",l:"ملاحظة (اختياري)"}],"تسجيل"); if(!f) return;
+  const a=parseFloat(f.a); if(isNaN(a)||a<=0) return toast("مبلغ غير صحيح","err");
+  if(await run(sb.rpc("add_carrier_payment",{p_carrier:cid,p_amount:a,p_note:f.n.trim()||null}),"تم تسجيل التحويل")) vShip();
+}
+function carPays(cid){
+  const L=CPAYS.filter(x=>x.carrier_id===cid), t=L.reduce((a,x)=>a+Number(x.amount),0);
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>تحويلات ${esc(carName(cid))}</b><button class="x" onclick="closeStatus()">${ic("x")}</button></div><div class="mut" style="margin-bottom:8px">العدد: <b>${L.length}</b> · المجموع: <b>${money(t)}</b></div>
+   ${L.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr>${L.map(x=>`<tr><td>${dt(x.created_at)}</td><td><b>${money(x.amount)}</b></td><td>${esc(x.note)}</td><td><button class="b s r" onclick="carPayDel('${x.id}','${cid}')">حذف</button></td></tr>`).join("")}</table>`:'<p class="mut">لا توجد تحويلات</p>'}</div>`;
+  $("modal").style.display="flex";
+}
+async function carPayDel(id,cid){ if(!await askc("سيزيد المستحق لك عند الشركة بقيمتها.",{title:"حذف التحويل؟",ok:"حذف",cls:"r"})) return;
+  if(await run(sb.from("carrier_payments").delete().eq("id",id),"تم الحذف")){ const {data}=await sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000); CPAYS=data||[]; carPays(cid); drawShip() } }
+function carStatement(cid){
+  const c=D.carriers.find(x=>x.id===cid), b=carBal(cid);
+  const L=(SHIPS||[]).filter(o=>o.carrier_id===cid&&["delivered","returned"].includes(o.status)).sort((x,y)=>new Date(x.status_at)-new Date(y.status_at)), P=CPAYS.filter(x=>x.carrier_id===cid).slice().reverse();
+  const w=window.open("","_blank"); if(!w) return toast("اسمح بالنوافذ المنبثقة لطباعة الكشف");
+  w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف حساب ${esc(c.name)}</title><style>body{font-family:Tahoma,Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin:8px 0 20px}th,td{border:1px solid #ccc;padding:6px;text-align:right;font-size:13px}th{background:#f3f3f3}.t{font-size:17px;font-weight:700;line-height:1.9}</style></head><body>
+  <h1>${esc(D.settings.business_name||"")} — كشف حساب شركة الشحن: ${esc(c.name)}</h1><div>التاريخ: ${new Date().toLocaleDateString("ar-EG")}</div>
+  <h2>الشحنات المنتهية</h2><table><tr><th>التاريخ</th><th>#</th><th>البوليصة</th><th>الزبون</th><th>الحالة</th><th>المحصَّل (COD)</th><th>أجور الشركة</th></tr>
+  ${L.map(o=>`<tr><td>${dt(o.status_at)}</td><td>${o.order_no}</td><td dir="ltr">${esc(o.waybill||"")}</td><td>${esc(o.customer_name)}</td><td>${o.status==="delivered"?"مُسلَّمة":"مرتجعة"}</td><td>${o.status==="delivered"?money(o.total):"—"}</td><td>${money(o.shipping_cost)}</td></tr>`).join("")}</table>
+  <h2>التحويلات المستلمة من الشركة</h2><table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th></tr>${P.map(x=>`<tr><td>${dt(x.created_at)}</td><td>${money(x.amount)}</td><td>${esc(x.note)}</td></tr>`).join("")}</table>
+  <div class="t">المحصَّل لدى الشركة: ${money(b.col)} − أجورها: ${money(b.fees)} − ما حوّلته: ${money(b.paid)} = <u>المستحق لك: ${money(b.owed)}</u></div>
+  <script>setTimeout(()=>print(),300)<\/script></body></html>`);
+  w.document.close();
+}
 /* ================= الربحية ================= */
-let PF={from:"",to:"",prod:"",mk:"",cap:"",gov:"",basis:"delivered",sort:"adm",preset:"30"}, PDATA=null, PLOAD=0;
+let PF={ful:"",from:"",to:"",prod:"",mk:"",cap:"",gov:"",basis:"delivered",sort:"adm",preset:"30"}, PDATA=null, PLOAD=0;
 const PPRE=[["today","اليوم"],["7","7 أيام"],["30","30 يوماً"],["month","هذا الشهر"],["lmonth","الشهر الماضي"],["year","هذه السنة"],["all","الكل"]];
 const iso=d=>dayK(d);
 function setPre(k){ const n=new Date(), t=new Date(n.getFullYear(),n.getMonth(),n.getDate()); PF.preset=k; PF.to=iso(t);
@@ -1130,8 +1306,9 @@ function pfBar(){
     <select onchange="PF.mk=this.value;drawProfit()"><option value="">كل المسوّقات</option><option value="none" ${PF.mk==="none"?"selected":""}>بدون مسوّقة</option>${D.marketers.map(m=>`<option value="${m.id}" ${PF.mk===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
    <div class="row" style="margin:6px 0 0"><select onchange="PF.cap=this.value;drawProfit()">${opt(D.captains.map(c=>[c.id,c.name]),PF.cap,"كل الكباتن")}</select>
     <select onchange="PF.gov=this.value;drawProfit()">${opt(govs.map(g=>[g,g]),PF.gov,"كل المحافظات")}</select>
+    <select onchange="PF.ful=this.value;drawProfit()"><option value="">توصيل وشحن</option><option value="delivery" ${PF.ful==="delivery"?"selected":""}>🚚 توصيل فقط</option><option value="shipping" ${PF.ful==="shipping"?"selected":""}>📦 شحن فقط</option></select>
     <select onchange="PF.basis=this.value;drawProfit()"><option value="delivered" ${PF.basis==="delivered"?"selected":""}>الأرباح المحقَّقة (المسلَّمة)</option><option value="all" ${PF.basis==="all"?"selected":""}>تقديري (يشمل الطلبات المفتوحة)</option></select></div>
-   <div style="margin-top:8px"><button class="chip" onclick="PF={from:'',to:'',prod:'',mk:'',cap:'',gov:'',basis:'delivered',sort:'adm',preset:'30'};setPre('30')">إعادة ضبط ✕</button> <button class="chip" onclick="pfCsv()">⬇ تصدير Excel/CSV</button></div>`;
+   <div style="margin-top:8px"><button class="chip" onclick="PF={ful:'',from:'',to:'',prod:'',mk:'',cap:'',gov:'',basis:'delivered',sort:'adm',preset:'30'};setPre('30')">إعادة ضبط ✕</button> <button class="chip" onclick="pfCsv()">⬇ تصدير Excel/CSV</button></div>`;
 }
 function pfRows(){
   const f=PF.from?new Date(PF.from+"T00:00:00").getTime():0, t=PF.to?new Date(PF.to+"T23:59:59").getTime():Infinity;
@@ -1139,9 +1316,9 @@ function pfRows(){
   return (PDATA||[]).filter(r=>{
     const isD=r.status==="delivered"; if(PF.basis==="delivered"&&!isD) return false; if(!isD&&!open.includes(r.status)) return false;
     const ts=new Date(isD?(r.delivered_at||r.created_at):r.created_at).getTime(); if(ts<f||ts>t) return false;
-    return (!PF.prod||r.product_id===PF.prod)&&(!PF.mk||(PF.mk==="none"?!r.marketer_id:r.marketer_id===PF.mk))&&(!PF.cap||r.captain_id===PF.cap)&&(!PF.gov||r.governorate===PF.gov) });
+    return (!PF.prod||r.product_id===PF.prod)&&(!PF.mk||(PF.mk==="none"?!r.marketer_id:r.marketer_id===PF.mk))&&(!PF.cap||r.captain_id===PF.cap)&&(!PF.gov||r.governorate===PF.gov)&&(!PF.ful||r.fulfillment===PF.ful) });
 }
-const pv=r=>({rev:r.qty*r.unit_price,cst:r.qty*r.cost,adm:r.qty*(r.capital-r.cost),mkp:r.qty*(r.unit_price-r.capital)});
+const pv=r=>{ const shp=(r.first_item&&r.fulfillment==="shipping")?(r.delivery_fee-r.shipping_cost):0; return {rev:r.qty*r.unit_price,cst:r.qty*r.cost,adm:r.qty*(r.capital-r.cost)+shp,mkp:r.qty*(r.unit_price-r.capital),shp} };
 function pfAgg(rows,keyF,labF){ const m={}; rows.forEach(r=>{ const k=keyF(r); const x=m[k]=m[k]||{k,l:labF(r),q:0,o:new Set(),rev:0,cst:0,adm:0,mkp:0}; const v=pv(r); x.q+=r.qty; x.o.add(r.order_id); x.rev+=v.rev; x.cst+=v.cst; x.adm+=v.adm; x.mkp+=v.mkp }); return Object.values(m).sort((a,b)=>b[PF.sort]-a[PF.sort]) }
 const sg2=v=>`<span class="${v>0?"up":v<0?"dn":""}">${v>0?"+":""}${money(v)}</span>`;
 function pfTable(title,rows,first){
@@ -1152,7 +1329,9 @@ function pfTable(title,rows,first){
 function drawProfit(){
   if(!PDATA||!$("pbody")) return; pfBar();
   const rows=pfRows(), T=rows.reduce((a,r)=>{const v=pv(r);a.rev+=v.rev;a.cst+=v.cst;a.adm+=v.adm;a.mkp+=v.mkp;return a},{rev:0,cst:0,adm:0,mkp:0});
-  const ords=new Set(rows.map(r=>r.order_id)), fee=rows.filter(r=>r.first_item).reduce((a,r)=>a+r.delivery_fee,0);
+  const ords=new Set(rows.map(r=>r.order_id)), fee=rows.filter(r=>r.first_item&&r.fulfillment!=="shipping").reduce((a,r)=>a+r.delivery_fee,0), shipRows=rows.filter(r=>r.first_item&&r.fulfillment==="shipping"), shipCost=shipRows.reduce((a,r)=>a+r.shipping_cost,0);
+  const ff=PF.from?new Date(PF.from+"T00:00:00").getTime():0, tt=PF.to?new Date(PF.to+"T23:59:59").getTime():Infinity;
+  const retRows=(PDATA||[]).filter(r=>r.first_item&&r.fulfillment==="shipping"&&r.status==="returned"&&(!PF.ful||PF.ful==="shipping")&&(!PF.mk||(PF.mk==="none"?!r.marketer_id:r.marketer_id===PF.mk))&&(!PF.gov||r.governorate===PF.gov)&&new Date(r.created_at).getTime()>=ff&&new Date(r.created_at).getTime()<=tt), retLoss=PF.basis==="delivered"?retRows.reduce((a,r)=>a+r.shipping_cost,0):0; T.adm-=retLoss;
   const noCost=D.products.filter(p=>Number(p.cost||0)===0&&p.active);
   const est=PF.basis==="all";
   const kp=(ic2,l,v,c,sub)=>`<div class="kp"><div class="kpi" style="background:${c}">${ic2}</div><small>${l}</small><b>${v}</b>${sub?`<small>${sub}</small>`:""}</div>`;
@@ -1175,6 +1354,7 @@ function drawProfit(){
     ${kp("🏭","تكلفة البضاعة (رأس مال التاجر)",money(T.cst),"#e0e7ff","")}
     ${kp("🛍️","أرباح المسوّقات",money(T.mkp),"#fce7f3","من فروقات البيع")}
     ${kp("🚚","أجور التوصيل (للكباتن)",money(fee),"#ffedd5","ليست من ربحك")}
+    ${shipRows.length||retLoss?kp("📦","تكلفة الشحن (مخصومة)",money(shipCost),"#ffedd5",shipRows.length+" شحنة"):""}${retLoss?kp("↩️","خسارة مرتجعات الشحن",`<span class="dn">${money(retLoss)}</span>`,"#fee2e2",retRows.length+" مرتجعة"):""}
     ${kp("📊","متوسط ربح الطلب",money(ords.size?T.adm/ords.size:0),"#dcfce7","للإدارة")}</div>
    <div class="card"><h3 style="margin:0 0 4px">📈 الربح اليومي</h3><div class="mut" style="font-size:12px;margin-bottom:8px">${est?"حسب تاريخ إنشاء الطلب":"حسب تاريخ التسليم"} · ربح الإدارة = رأس مال المسوّقة − رأس مال التاجر · ربح المسوّقة = سعر البيع − رأس مال المسوّقة</div>${chart}</div>
    <div class="card" style="background:#f8fafc"><h3 style="margin:0 0 8px">🧮 كيف يُحسب الربح؟</h3><div class="flow"><div><small>سعر البيع للزبون</small><b>${money(T.rev)}</b></div><i>−</i><div><small>حصة المسوّقات</small><b>${money(T.mkp)}</b></div><i>−</i><div><small>تكلفة البضاعة</small><b>${money(T.cst)}</b></div><i>=</i><div class="rem"><small>صافي ربحك</small><b>${money(T.adm)}</b></div></div></div>
@@ -1309,7 +1489,7 @@ function drawCustomers(){
         <div style="font-size:13px">${(o.order_items||[]).map(i=>esc(i.products?.name)+" ×"+i.qty).join("، ")}</div><div><b>${money(o.total)}</b></div></div>`).join("")}</div></details>`}).join("")||'<div class="card mut" style="text-align:center">لا يوجد عملاء</div>';
 }
 /* ================= الطلبات ================= */
-let orderCap="", orderMk="", orderPer="all", orderGrp="none";
+let orderFul="", orderCap="", orderMk="", orderPer="all", orderGrp="none";
 const ORD_STATUS=["new","assigned","in_delivery","no_answer","closed","other","delivered","cancelled","returned"];
 const SCOL={new:"#64748b",assigned:"#f59e0b",in_delivery:"#2563eb",no_answer:"#ea580c",closed:"#475569",other:"#0891b2",delivered:"#16a34a",cancelled:"#ef4444",returned:"#a855f7"};
 function ordBase(skipStatus){
@@ -1317,7 +1497,8 @@ function ordBase(skipStatus){
   const from=orderPer==="today"?d0:orderPer==="week"?d0-6*864e5:orderPer==="month"?new Date(now.getFullYear(),now.getMonth(),1).getTime():0;
   return D.orders.filter(o=>
     (skipStatus||orderFilter==="all"||o.status===orderFilter)&&
-    (!orderCap||(orderCap==="none"?!o.captain_id:o.captain_id===orderCap))&&
+    (!orderCap||(orderCap==="none"?(!o.captain_id&&o.fulfillment!=="shipping"):o.captain_id===orderCap))&&
+    (!orderFul||o.fulfillment===orderFul)&&
     (!orderMk||(orderMk==="none"?!o.marketer_id:o.marketer_id===orderMk))&&
     (!from||new Date(o.created_at).getTime()>=from)&&
     (!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id),mname(o.marketer_id)].some(v=>String(v||"").toLowerCase().includes(q))));
@@ -1327,12 +1508,13 @@ function vOrders(){
     <div class="row" style="margin-bottom:8px"><input id="oq" placeholder="بحث: اسم الزبون، الموبايل، رقم الطلب، الكابتن، المسوّقة" value="${esc(orderQuery)}" oninput="orderQuery=this.value;renderOrderList()"></div>
     <div class="chips" id="ochips"></div>
     <div class="row" style="margin-bottom:8px">
+      <select onchange="orderFul=this.value;renderOrderList()"><option value="">توصيل وشحن</option><option value="delivery" ${orderFul==="delivery"?"selected":""}>🚚 توصيل فقط</option><option value="shipping" ${orderFul==="shipping"?"selected":""}>📦 شحن فقط</option></select>
       <select onchange="orderCap=this.value;renderOrderList()"><option value="">كل الكباتن</option><option value="none" ${orderCap==="none"?"selected":""}>غير مُسنَد لكابتن</option>${D.captains.map(c=>`<option value="${c.id}" ${orderCap===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
       <select onchange="orderMk=this.value;renderOrderList()"><option value="">كل المسوّقات</option><option value="none" ${orderMk==="none"?"selected":""}>بدون مسوّقة</option>${D.marketers.map(m=>`<option value="${m.id}" ${orderMk===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select>
       <select onchange="orderPer=this.value;renderOrderList()">${[["all","كل الأوقات"],["today","اليوم"],["week","آخر 7 أيام"],["month","هذا الشهر"]].map(([k,l])=>`<option value="${k}" ${orderPer===k?"selected":""}>${l}</option>`).join("")}</select>
     </div>
     <div class="chips" style="margin:0;align-items:center"><span class="mut">تجميع:</span>${[["none","بدون"],["status","حسب الحالة"],["captain","حسب الكابتن"],["marketer","حسب المسوّقة"],["day","حسب اليوم"]].map(([k,l])=>`<button class="chip ${orderGrp===k?"on":""}" data-g="${k}" onclick="orderGrp='${k}';document.querySelectorAll('[data-g]').forEach(c=>c.classList.toggle('on',c.dataset.g==='${k}'));renderOrderList()">${l}</button>`).join("")}
-      <button class="chip" onclick="orderFilter='all';orderCap='';orderMk='';orderPer='all';orderQuery='';orderGrp='none';vOrders()">إعادة ضبط ✕</button></div>
+      <button class="chip" onclick="orderFilter='all';orderFul='';orderCap='';orderMk='';orderPer='all';orderQuery='';orderGrp='none';vOrders()">إعادة ضبط ✕</button></div>
     </div><div id="osum" class="mut" style="margin:0 4px 10px"></div><div id="olist"></div>`;
   renderOrderList();
 }
@@ -1340,11 +1522,11 @@ function oc2(o){
   const prq=(D.pr[o.id]||[]).some(x=>x.status==="pending");
   const items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
   return `<div class="card oc s-${o.status}" style="padding:12px 14px;margin-bottom:10px;cursor:pointer" onclick="openOrder('${o.id}')">
-    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b><div style="text-align:end;flex:0 0 auto"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0 0 4px;flex-wrap:nowrap"><b>${o.fulfillment==="shipping"?"📦 ":""}#${o.order_no} — ${esc(o.customer_name)}</b><div style="text-align:end;flex:0 0 auto">${o.fulfillment==="shipping"?shTag(o):`<span class="tag ${o.status}">${ST[o.status]}</span>`}<div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
     <div class="mut" style="font-size:13px">📞 <span dir="ltr">${esc(o.customer_phone||"")}</span>${o.governorate||o.customer_address?" · 📍 "+esc(o.governorate||"")+(o.governorate&&o.customer_address?" — ":"")+esc(o.customer_address||""):""}</div>
     <div style="margin:4px 0">${items}</div>
     <div class="ocinfo">
-      <div><small>الكابتن</small><b>${o.captain_id?esc(cname(o.captain_id)):'<span style="color:#ea580c">لم يُسنَد</span>'}</b></div>
+      ${o.fulfillment==="shipping"?`<div><small>شركة الشحن</small><b>${esc(carName(o.carrier_id))}${o.waybill?" · "+esc(o.waybill):""}</b></div>`:`<div><small>الكابتن</small><b>${o.captain_id?esc(cname(o.captain_id)):'<span style="color:#ea580c">لم يُسنَد</span>'}</b></div>`}
       <div><small>المسوّقة</small><b>${o.marketer_id?esc(mname(o.marketer_id)):"—"}</b></div>
       ${o.marketer_id&&D.prof[o.id]?`<div><small>نسبة المسوّقة</small><b class="${Number(D.prof[o.id].profit)>0?"up":""}">${money(D.prof[o.id].profit||0)}</b></div>`:""}
       <div><small>المنتجات</small><b>${money(o.items_total)}</b></div>
@@ -1355,6 +1537,7 @@ function oc2(o){
     ${o.note?`<div class="mut" style="font-size:13px;margin-top:4px">📝 ${esc(o.note)}</div>`:""}
     <div class="ocb" onclick="event.stopPropagation()">
       <button class="b s" onclick="openOrder('${o.id}')">التفاصيل</button>
+      ${o.fulfillment==="shipping"?`<button class="b s g" onclick="openShip('${o.id}')">📦 إدارة الشحنة</button>`:""}
       ${o.status==="new"||OPEN.includes(o.status)?`<button class="b s o" onclick="openEdit('${o.id}')">✏️ تعديل</button>`:""}
       <a class="b s o" href="tel:${esc(o.customer_phone||"")}">📞 اتصال</a>
       <a class="b s o" target="_blank" rel="noopener" href="${waUrl(o,waText(o))}">واتساب</a>
@@ -1392,7 +1575,9 @@ function orderCard(o){
     ${o.status==="cancelled"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="restoreO('${o.id}')">استرجاع الطلب الملغي</button></div>`:""}
   </div>`;
 }
-function orderActions(o){ return `    ${o.status==="new"||OPEN.includes(o.status)?`<div class="row" style="margin:8px 0 0">
+function orderActions(o){
+  if(o.fulfillment==="shipping") return `<div class="row" style="margin:8px 0 0"><button class="b s g" style="flex:0 0 auto" onclick="closeStatus();openShip('${o.id}')">📦 إدارة الشحنة</button><button class="b s o" style="flex:0 0 auto" onclick="shipLabel('${o.id}')">🏷 ملصق الشحن</button>${o.status==="new"||OPEN.includes(o.status)?`<button class="b s o" style="flex:0 0 auto" onclick="openEdit('${o.id}')">✏️ تعديل الطلب</button>`:""}</div>`;
+  return `    ${o.status==="new"||OPEN.includes(o.status)?`<div class="row" style="margin:8px 0 0">
       <select id="as_${o.id}">${capOptions(o.captain_id,"— اختر كابتن —")}</select>
       <button class="b s" style="flex:0 0 auto" onclick="assign('${o.id}')">${o.status==="new"?"إسناد":"تغيير الكابتن"}</button>
       <button class="b s o" style="flex:0 0 auto" onclick="openPrices('${o.id}')">تعديل الأسعار</button>
@@ -1412,7 +1597,7 @@ function orderDetail(o){
       <div style="text-align:end"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>`
   +dsec("👤 الزبون",drow("الاسم",`<b>${esc(o.customer_name)}</b>`)+drow("الموبايل",`<a dir="ltr" href="tel:${esc(o.customer_phone)}">${esc(o.customer_phone)}</a>`)+drow("المحافظة",esc(o.governorate||""))+drow("العنوان",esc(o.customer_address||""))
     +`<div class="row" style="margin:8px 0 0"><a class="b s g" style="flex:0 0 auto;text-decoration:none" target="_blank" rel="noopener" href="${waUrl(o,waText(o))}">واتساب الزبون</a>${mapUrl(o)?`<a class="b s o" style="flex:0 0 auto;text-decoration:none" target="_blank" rel="noopener" href="${mapUrl(o)}">🗺 الخريطة</a>`:""}</div>`)
-  +dsec("🚚 التوصيل",drow("الكابتن",o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد بعد</b>')+drow("أجور التوصيل",money(o.delivery_fee)))
+  +(o.fulfillment==="shipping"?dsec("📦 الشحن",drow("الشركة",`<b>${esc(carName(o.carrier_id))}</b>`)+drow("رقم البوليصة",o.waybill?`<b dir="ltr">${esc(o.waybill)}</b>`:'<span class="mut">لم يُدخل بعد</span>')+drow("حالة الشحنة",shTag(o))+drow("أجور الشحن (للشركة)",money(o.shipping_cost))+drow("أجور على الزبون",money(o.delivery_fee))+drow("المطلوب تحصيله (COD)",`<b>${money(o.total)}</b>`)+`<div class="row" style="margin:8px 0 0"><button class="b s g" style="flex:0 0 auto" onclick="closeStatus();openShip('${o.id}')">📦 إدارة الشحنة</button></div>`):dsec("🚚 التوصيل",drow("الكابتن",o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد بعد</b>')+drow("أجور التوصيل",money(o.delivery_fee))))
   +(o.marketer_id?dsec("🛍️ المسوّقة",drow("الاسم",`<b>${esc(mname(o.marketer_id))}</b>`)+drow("رأس المال",money(pf.capital||0))+drow("ربحها",`<b class="up">${money(pf.profit||0)}</b>${o.status==="delivered"?"":' <small class="mut">(تُستحق بعد التسليم)</small>'}`)):"")
   +dsec("📦 المنتجات",`<div class="dit dhd"><div class="din">المنتج</div><div class="dq">الكمية</div><div class="dp">السعر</div><div class="ds">المجموع</div></div>${items}
     <div class="dtot"><div>مجموع المنتجات <b>${money(o.items_total)}</b></div><div>أجور التوصيل <b>${money(o.delivery_fee)}</b></div><div class="g">المطلوب من الزبون <b>${money(o.total)}</b></div>
