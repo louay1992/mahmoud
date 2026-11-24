@@ -232,6 +232,11 @@ tr:last-child td{border-bottom:0}
 .pfl{flex:1;display:flex;flex-direction:column;gap:2px}.pfl small{color:#64748b;font-size:11px}.flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;justify-content:center}.flow>div{flex:1 1 90px;background:#fff;border-radius:12px;padding:8px 10px;text-align:center;min-width:0}.flow>div small{display:block;color:#64748b;font-size:11px}.flow>div b{font-size:14px;word-break:break-word}.flow>div.rem{background:#ccfbf1}.flow>i{align-self:center;font-style:normal;font-weight:800;color:#64748b}
 .seg{display:flex;gap:6px;background:#f1f5f9;padding:4px;border-radius:14px;margin-bottom:10px}.seg button{flex:1;border:0;background:transparent;padding:10px;border-radius:11px;font:inherit;font-weight:700;color:#475569;cursor:pointer}.seg button.on{background:#fff;color:#0f766e;box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .shpbox{background:#f0fdfa;border:1px solid #99f6e4;border-radius:14px;padding:10px;margin:6px 0}.stps{display:flex;gap:4px;margin:6px 0 12px}.stp{flex:1;text-align:center;font-size:11px;color:#94a3b8;position:relative}.stp i{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#e2e8f0;margin:0 auto 4px;font-style:normal;font-size:16px;filter:grayscale(1)}.stp.on{color:#0f766e}.stp.on i{background:#ccfbf1;filter:none}.stp.cur i{box-shadow:0 0 0 3px #0f766e55;background:#99f6e4}.stp.cur span{font-weight:800}.shban{padding:12px;border-radius:12px;text-align:center;font-weight:800;margin-bottom:10px}
+.shc{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin:0 0 10px;cursor:pointer}.shc:active{background:#f8fafc}
+.shc-h{display:flex;gap:10px;align-items:center;margin-bottom:8px}.shc-i{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:19px;flex:0 0 auto}.shc-n{font-size:16px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shc-g{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;background:#f8fafc;border-radius:10px;padding:8px 10px}.shc-g small,.shc-m small{display:block;color:#64748b;font-size:11.5px}.shc-g b{font-size:13.5px;word-break:break-word}
+.shc-p{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}.shc-p span{background:#ecfeff;color:#0f766e;border-radius:999px;padding:2px 9px;font-size:12.5px}
+.shc-m{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;border-top:1px dashed #e2e8f0;padding-top:8px}.shc-m b{font-size:14.5px}
 </style>
 </head>
 <body>
@@ -1118,12 +1123,13 @@ async function saveOrder(){
 }
 
 /* ================= الشحن (قدموس / الهرم ...) ================= */
-const SHS=[["preparing","قيد التجهيز","#64748b","🧰"],["handed","سُلِّمت للشركة","#2563eb","🏢"],["in_transit","في الطريق","#f59e0b","🚚"],["at_branch","وصلت للفرع","#7c3aed","📍"],["delivered","سُلِّمت للزبون","#16a34a","✅"],["returned","مرتجعة","#a855f7","↩️"],["cancelled","ملغاة","#ef4444","❌"]];
-const SHFLOW=["preparing","handed","in_transit","at_branch","delivered"];
-const shl=k=>SHS.find(x=>x[0]===k)||[k,k,"#94a3b8",""];
+const SHS=[["preparing","قيد التجهيز","#64748b","🧰"],["handed","سُلِّمت للشركة","#2563eb","🏢"],["delivered","سُلِّمت للزبون","#16a34a","✅"],["returned","مرتجعة","#a855f7","↩️"]];
+const SHFLOW=["preparing","handed","delivered"];
+const NS=k=>({in_transit:"handed",at_branch:"handed",cancelled:"returned"})[k]||k||"preparing";
+const shl=k=>SHS.find(x=>x[0]===NS(k))||[k,k,"#94a3b8",""];
 const carName=id=>((D.carriers||[]).find(c=>c.id===id)||{}).name||"—";
 const trackUrl=o=>{ const c=(D.carriers||[]).find(x=>x.id===o.carrier_id); return c&&c.tracking_url&&o.waybill?c.tracking_url.replace("{no}",encodeURIComponent(o.waybill)):"" };
-const shTag=o=>{ const s=shl(o.ship_status||"preparing"); return `<span class="tag" style="background:${s[2]}22;color:${s[2]}">${s[3]} ${s[1]}</span>` };
+const shTag=o=>{ const s=shl(o.ship_status); return `<span class="tag" style="background:${s[2]}22;color:${s[2]}">${s[3]} ${s[1]}</span>` };
 let NOM="delivery";
 function shipForm(){
   const whs=D.warehouses||[];
@@ -1143,7 +1149,7 @@ async function fetchShipOrder(id){
 async function openShip(id){
   const [o,ev]=await Promise.all([fetchShipOrder(id), sb.from("shipment_events").select("*").eq("order_id",id).order("created_at",{ascending:false})]);
   if(!o) return;
-  const cur=o.ship_status||"preparing", closed=["delivered","returned","cancelled"].includes(cur), idx=SHFLOW.indexOf(cur);
+  const cur=NS(o.ship_status), closed=["delivered","returned","cancelled"].includes(cur), idx=SHFLOW.indexOf(cur);
   const next=!closed&&idx>=0&&idx<SHFLOW.length-1?SHFLOW[idx+1]:null, tu=trackUrl(o);
   const step=(k,i)=>{ const x=shl(k), done=idx>=0&&i<=idx&&cur!=="returned"; return `<div class="stp ${done?"on":""} ${k===cur?"cur":""}"><i>${x[3]}</i><span>${x[1]}</span></div>` };
   const net=Number(o.delivery_fee)-Number(o.shipping_cost);
@@ -1218,7 +1224,7 @@ const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.f
   return {col,fees,paid,owed:col-fees-paid,fly:fly.length,pend,n:L.length,dl:L.filter(o=>o.status==="delivered").length,rt:L.filter(o=>o.status==="returned").length} };
 const shFilt=()=>{ const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), q=nrm(SHF.q), n=new Date(), d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
   const from=SHF.per==="today"?d0:SHF.per==="week"?d0-6*864e5:SHF.per==="month"?new Date(n.getFullYear(),n.getMonth(),1).getTime():0;
-  return (SHIPS||[]).filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):(o.ship_status||"preparing")===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!SHF.mk||(SHF.mk==="none"?!o.marketer_id:o.marketer_id===SHF.mk))&&(!SHF.gov||o.governorate===SHF.gov)&&(!from||new Date(o.created_at).getTime()>=from)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate,mname(o.marketer_id)].some(v=>nrm(v).includes(q)))) };
+  return (SHIPS||[]).filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):NS(o.ship_status)===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!SHF.mk||(SHF.mk==="none"?!o.marketer_id:o.marketer_id===SHF.mk))&&(!SHF.gov||o.governorate===SHF.gov)&&(!from||new Date(o.created_at).getTime()>=from)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate,mname(o.marketer_id)].some(v=>nrm(v).includes(q)))) };
 function drawCarriers(){
   if(!$("shbody")||!SHIPS) return;
   const rows=D.carriers.map(c=>({c,b:carBal(c.id)})), T=rows.reduce((a,x)=>{a.owed+=x.b.owed;a.pend+=x.b.pend;a.col+=x.b.col;a.fees+=x.b.fees;a.paid+=x.b.paid;return a},{owed:0,pend:0,col:0,fees:0,paid:0});
@@ -1232,7 +1238,7 @@ function drawCarriers(){
 function drawShip(){
   if(!$("shbody")||!SHIPS) return;
   const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing");
-  const cnt={open:SHIPS.filter(isOpen).length}; SHS.forEach(([k])=>cnt[k]=SHIPS.filter(o=>(o.ship_status||"preparing")===k).length);
+  const cnt={open:SHIPS.filter(isOpen).length}; SHS.forEach(([k])=>cnt[k]=SHIPS.filter(o=>NS(o.ship_status)===k).length);
   const tot=D.carriers.reduce((a,c)=>{const b=carBal(c.id);a.owed+=b.owed;a.pend+=b.pend;return a},{owed:0,pend:0});
   const stuck=SHIPS.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)&&(Date.now()-new Date(o.status_at||o.created_at).getTime())>5*864e5).length;
   $("shbody").innerHTML=`<div class="kpis"><div class="kp"><div class="kpi" style="background:#e0f2fe">🚚</div><small>شحنات جارية</small><b>${cnt.open}</b></div><div class="kp"><div class="kpi" style="background:#fef3c7">⏳</div><small>تحصيل معلّق عند الشركات</small><b>${money(tot.pend)}</b></div><div class="kp"><div class="kpi" style="background:#ccfbf1">📦</div><small>إجمالي الشحنات</small><b>${SHIPS.length}</b></div></div>
@@ -1252,12 +1258,13 @@ function drawShipList(){
   if(!$("shlist")||!SHIPS) return;
   const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), list=shFilt();
   if($("shcnt")) $("shcnt").textContent=list.length;
-  $("shlist").innerHTML=list.length?list.map(o=>{ const age=Math.floor((Date.now()-new Date(o.status_at||o.created_at).getTime())/864e5); return `<div class="card" style="padding:12px 14px;margin:0 0 10px;cursor:pointer;box-shadow:none;border:1px solid #e2e8f0" onclick="openShip('${o.id}')">
-    <div class="row" style="justify-content:space-between;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b>${shTag(o)}</div>
-    <div class="mut" style="font-size:13px">📍 ${esc(o.governorate||"—")} · 📞 <span dir="ltr">${esc(o.customer_phone||"")}</span></div>
-    <div class="mut" style="font-size:13px">🏢 ${esc(carName(o.carrier_id))} · بوليصة: <b dir="ltr">${esc(o.waybill||"—")}</b></div>
-    <div style="font-size:13px;margin:3px 0">${o.order_items.map(i=>esc(i.products?.name)+" ×"+i.qty).join("، ")}</div>
-    <div class="row" style="justify-content:space-between;margin:0"><span>COD: <b>${money(o.total)}</b> · أجورها ${money(o.shipping_cost)}</span><span class="mut" style="font-size:12px">${isOpen(o)&&age>=1?"منذ "+age+" يوم":dt(o.status_at||o.created_at)}</span></div></div>`}).join(""):'<p class="mut" style="text-align:center">لا توجد شحنات</p>';
+  $("shlist").innerHTML=list.length?list.map(o=>{ const st=shl(o.ship_status), age=Math.floor((Date.now()-new Date(o.status_at||o.created_at).getTime())/864e5), net=Number(o.delivery_fee||0)-Number(o.shipping_cost||0), its=o.order_items||[], late=isOpen(o)&&NS(o.ship_status)==="handed"&&age>=5;
+    return `<div class="shc" style="border-inline-start:5px solid ${st[2]}" onclick="openShip('${o.id}')">
+    <div class="shc-h"><div class="shc-i" style="background:${st[2]}22" title="${st[1]}">${st[3]}</div><div style="flex:1;min-width:0"><b class="shc-n">${esc(o.customer_name)}</b><div class="mut" style="font-size:12px">طلب #${o.order_no} · ${dt(o.created_at)}</div></div><span class="tag" style="background:${st[2]}22;color:${st[2]};white-space:nowrap">${st[1]}</span></div>
+    <div class="shc-g"><div><small>🏢 الشركة</small><b>${esc(carName(o.carrier_id))}</b></div><div><small>🧾 البوليصة</small><b dir="ltr">${esc(o.waybill||"—")}</b></div><div><small>📍 الوجهة</small><b>${esc(o.governorate||"—")}</b></div><div><small>📞 الموبايل</small><b dir="ltr">${esc(o.customer_phone||"—")}</b></div></div>
+    <div class="shc-p">${its.map(i=>`<span>${esc(i.products?.name||"—")} ×${i.qty}</span>`).join("")}</div>
+    <div class="shc-m"><div><small>المطلوب تحصيله</small><b>${money(o.total)}</b></div><div><small>أجور الشركة</small><b>${money(o.shipping_cost)}</b></div><div><small>صافي الشحن</small><b class="${net<0?"dn":"up"}">${money(net)}</b></div></div>
+    <div class="mut" style="font-size:12px;margin-top:6px">${late?'<span style="color:#b45309">⚠ عند الشركة منذ '+age+' يوم</span>':isOpen(o)&&age>=1?"منذ "+age+" يوم في هذه الحالة":"آخر تحديث: "+dt(o.status_at||o.created_at)}${o.marketer_id?" · 👤 "+esc(mname(o.marketer_id)):""}</div></div>`}).join(""):'<p class="mut" style="text-align:center">لا توجد شحنات</p>';
 }
 async function carEdit(id){
   const c=id?D.carriers.find(x=>x.id===id):null;
