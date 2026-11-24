@@ -210,6 +210,7 @@ tr:last-child td{border-bottom:0}
 .nh{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.nh b{font-size:15px}.nh span{font-size:12px;color:#64748b;white-space:nowrap}
 .nb{white-space:pre-line;font-size:14px;color:#334155;margin:6px 0 8px;line-height:1.6}
 .nf{display:flex;justify-content:space-between;align-items:center}.ncat{font-size:11.5px;background:#eef2f7;color:#475569;padding:2px 9px;border-radius:99px;font-weight:700}.nlk{font-size:12.5px;color:var(--p);font-weight:700}
+.chk{display:flex;flex-wrap:wrap;gap:8px 14px}.chk label{display:flex;align-items:center;gap:6px;font-size:14px;background:#f1f5f9;padding:6px 10px;border-radius:10px}
 </style>
 </head>
 <body>
@@ -332,6 +333,11 @@ function askf(title,fields,ok="حفظ",o={}){
 
 const GOVS=["دمشق","ريف دمشق","حلب","حمص","حماة","اللاذقية","طرطوس","إدلب","درعا","السويداء","القنيطرة","دير الزور","الرقة","الحسكة"];
 const govOptions=(sel,empty)=>`<option value="">${empty}</option>`+GOVS.map(g=>`<option ${g===sel?"selected":""}>${g}</option>`).join("");
+const whCaps=w=>D.captains.filter(c=>c.warehouse_id===w.id);
+const whCapNames=w=>{const n=whCaps(w).map(c=>esc(c.name)); return n.length?n.join("، "):""};
+const checks=(cls,items,sel)=>`<div class="chk">${items.map(([v,l])=>`<label><input type="checkbox" class="${cls}" value="${esc(v)}" ${sel.includes(v)?"checked":""}> ${esc(l)}</label>`).join("")}</div>`;
+const govChecks=sel=>checks("gvc",GOVS.map(g=>[g,g]),sel);
+const capChecks=(sel)=>checks("wcc",D.captains.filter(c=>c.active||sel.includes(c.id)).map(c=>{const w=D.warehouses.find(x=>x.id===c.warehouse_id);return [c.id,c.name+(w&&!sel.includes(c.id)?" (حالياً: "+w.name+")":"")]}),sel);
 let ACC={role:"none",perms:[]};
 const can=p=>ACC.role==="full"||(ACC.perms||[]).includes(p);
 let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[], movements:[], admins:[], settings:{}, stats:null, ev:{}};
@@ -689,7 +695,7 @@ function vCaptains(){
   $("main").innerHTML = `
   <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">الكباتن (${D.captains.length})</h2>
     <button class="b s" style="flex:0 0 auto" onclick="CV='addc';vCaptains();scrollTo({top:0})">+ إضافة كابتن</button></div>
-  ${D.captains.length?D.captains.map(c=>{const w=D.warehouses.find(w=>w.captain_id===c.id);return `<div class="card" style="box-shadow:none;border:1px solid #e1ecea;margin:0 0 12px;${c.active?"":"opacity:.55"}">
+  ${D.captains.length?D.captains.map(c=>{const w=D.warehouses.find(w=>w.id===c.warehouse_id);return `<div class="card" style="box-shadow:none;border:1px solid #e1ecea;margin:0 0 12px;${c.active?"":"opacity:.55"}">
     <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 6px"><b style="font-size:17px">${esc(c.name)}</b>${c.active?"":'<span class="mut">موقوف</span>'}</div>
     <div class="dr"><span class="dl">الموبايل</span><span class="dv2" dir="ltr">${esc(c.phone)||"—"}</span></div>
     <div class="dr"><span class="dl">بريد الدخول</span><span class="dv2" dir="ltr">${esc(c.email)||"—"}</span></div>
@@ -715,16 +721,18 @@ function vWarehouses(){
   if(CV==="editw"){
     const w=D.warehouses.find(x=>x.id===EWID); if(!w){ CV="list"; return vWarehouses() }
     $("main").innerHTML = backBtn("vWarehouses")+`<div class="card"><h2>تعديل المستودع</h2>
-    <div class="row"><input id="ewn" value="${esc(w.name)}" placeholder="اسم المستودع"><select id="ewg">${govOptions(w.governorate||"","— محافظة المستودع —")}</select></div>
-    <div class="row"><select id="ewc">${capOptions(w.captain_id||"","— بدون كابتن —")}</select></div>
-    ${w.is_main?'<p class="mut">المستودع الرئيسي: إذا ربطت به كابتناً تُخصم مبيعاته من هنا.</p>':""}
-    <button class="b" onclick="saveWarehouse('${w.id}')">حفظ التعديلات</button></div>`;
+    <div class="row"><input id="ewn" value="${esc(w.name)}" placeholder="اسم المستودع"></div>
+    <h3 style="margin:10px 0 4px">المحافظات التي يخدمها</h3>${govChecks(w.governorates||[])}
+    <h3 style="margin:10px 0 4px">كباتن التوصيل المرتبطون</h3>${capChecks(whCaps(w).map(c=>c.id))}
+    ${w.is_main?'<p class="mut">المستودع الرئيسي: تُخصم مبيعات الكباتن المرتبطين به من هنا.</p>':""}
+    <button class="b" style="margin-top:12px" onclick="saveWarehouse('${w.id}')">حفظ التعديلات</button></div>`;
     return;
   }
   if(CV==="addw"){
     $("main").innerHTML = backBtn("vWarehouses")+`<div class="card"><h2>إضافة مستودع</h2>
-    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع حلب)"><select id="wg">${govOptions("","— محافظة المستودع —")}</select></div>
-    <div class="row"><select id="wc">${capOptions("","— بدون كابتن —")}</select></div>
+    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع حلب)"></div>
+    <h3 style="margin:10px 0 4px">المحافظات التي يخدمها</h3>${govChecks([])}
+    <h3 style="margin:10px 0 4px">كباتن التوصيل المرتبطون</h3>${capChecks([])}
     <button class="b" onclick="addWarehouse()">حفظ</button></div>`;
     return;
   }
@@ -733,7 +741,7 @@ function vWarehouses(){
     <button class="b s" style="flex:0 0 auto" onclick="CV='addw';vWarehouses();scrollTo({top:0})">+ إضافة مستودع</button></div>
   ${D.warehouses.length?`<div class="tw"><table>
    <tr><th>المستودع</th><th>المحافظة</th><th>الكابتن المرتبط</th><th></th></tr>
-   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td>${w.governorate?esc(w.governorate):'<span class="mut">—</span>'}</td><td>${w.captain_id?esc(cname(w.captain_id)):'<span class="mut">—</span>'}</td><td><button class="b s o" onclick="EWID='${w.id}';CV='editw';vWarehouses();scrollTo({top:0})">تعديل</button></td></tr>`).join("")}
+   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td>${(w.governorates||[]).length?esc(w.governorates.join("، ")):'<span class="mut">—</span>'}</td><td>${whCapNames(w)||'<span class="mut">—</span>'}</td><td><button class="b s o" onclick="EWID='${w.id}';CV='editw';vWarehouses();scrollTo({top:0})">تعديل</button></td></tr>`).join("")}
   </table></div>`:'<p class="mut">لا توجد مستودعات بعد</p>'}</div>`;
 }
 async function addCaptain(){
@@ -753,29 +761,31 @@ async function editCaptain(id){
   if(await run(sb.from("captains").update({name:f.name.trim(),phone:f.phone.trim()||null,email:f.email.trim().toLowerCase()||null,delivery_fee:fee}).eq("id",id),"تم الحفظ")) refresh();
 }
 async function toggleCaptain(id,v){ if(await run(sb.from("captains").update({active:v}).eq("id",id))) refresh() }
+const pickedGovs=()=>[...document.querySelectorAll(".gvc:checked")].map(x=>x.value);
+const pickedCaps=()=>[...document.querySelectorAll(".wcc:checked")].map(x=>x.value);
+async function setWhCaps(id,caps){
+  const cur=D.captains.filter(c=>c.warehouse_id===id).map(c=>c.id);
+  const rem=cur.filter(x=>!caps.includes(x)), add=caps.filter(x=>!cur.includes(x));
+  if(rem.length&&!await run(sb.from("captains").update({warehouse_id:null}).in("id",rem))) return false;
+  if(add.length&&!await run(sb.from("captains").update({warehouse_id:id}).in("id",add))) return false;
+  return true;
+}
 async function addWarehouse(){
   const name=$("wn").value.trim(); if(!name) return toast("أدخل اسم المستودع");
-  if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null,governorate:$("wg").value||null}),"تمت الإضافة")){ CV="list"; refresh() }
+  const {data,error}=await sb.from("warehouses").insert({name,governorates:pickedGovs()}).select("id").single();
+  if(error) return toast(error.message,"err");
+  if(!await setWhCaps(data.id,pickedCaps())) return;
+  toast("تمت الإضافة","ok"); CV="list"; refresh();
 }
 async function saveWarehouse(id){
-  const w=D.warehouses.find(x=>x.id===id), name=$("ewn").value.trim(), gov=$("ewg").value||null, cap=$("ewc").value||null;
-  if(!name) return toast("أدخل اسم المستودع","err");
-  if(cap){ const other=D.warehouses.find(x=>x.captain_id===cap&&x.id!==id);
-    if(other){ if(!await askc("الكابتن <b>"+esc(cname(cap))+"</b> مرتبط حالياً بمستودع «"+esc(other.name)+"». سيُفصل عنه ويُربط بهذا المستودع، وبعدها تُخصم مبيعاته من هنا. متابعة؟",{title:"نقل ربط الكابتن",ok:"نعم، انقله"})) return;
-      if(!await run(sb.from("warehouses").update({captain_id:null}).eq("id",other.id))) return } }
-  if(await run(sb.from("warehouses").update({name,governorate:gov,captain_id:cap}).eq("id",id),"تم حفظ التعديلات")){ CV="list"; refresh() }
+  const name=$("ewn").value.trim(), caps=pickedCaps(); if(!name) return toast("أدخل اسم المستودع","err");
+  const moved=caps.map(c=>D.captains.find(x=>x.id===c)).filter(c=>c&&c.warehouse_id&&c.warehouse_id!==id);
+  if(moved.length&&!await askc("سيُنقل إلى هذا المستودع: <b>"+moved.map(c=>esc(c.name)).join("، ")+"</b> (يُفصلون عن مستودعاتهم الحالية وتُخصم مبيعاتهم من هنا). متابعة؟",{title:"نقل كباتن",ok:"نعم، انقلهم"})) return;
+  if(!await run(sb.from("warehouses").update({name,governorates:pickedGovs()}).eq("id",id))) return;
+  if(!await setWhCaps(id,caps)) return;
+  toast("تم حفظ التعديلات","ok"); CV="list"; refresh();
 }
-async function linkWarehouse(id,cap){
-  if(cap){ const other=D.warehouses.find(w=>w.captain_id===cap&&w.id!==id);
-    if(other){ if(!await askc("الكابتن <b>"+esc(cname(cap))+"</b> مرتبط حالياً بمستودع «"+esc(other.name)+"». سيُفصل عنه ويُربط بهذا المستودع، وبعدها تُخصم مبيعاته من هنا. متابعة؟",{title:"نقل ربط الكابتن",ok:"نعم، انقله"})){ refresh(); return }
-      if(!await run(sb.from("warehouses").update({captain_id:null}).eq("id",other.id))) return } }
-  if(await run(sb.from("warehouses").update({captain_id:cap||null}).eq("id",id),"تم الربط")) refresh();
-}
-
-/* ================= المخزون ================= */
-let SV={v:"list",wh:null};
-function sv(v,wh){ SV={v,wh:wh||null}; render(); window.scrollTo(0,0) }
-const whOpts=sel=>D.warehouses.map(w=>`<option value="${w.id}" ${w.id===sel?"selected":""}>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?" (رئيسي)":w.captain_id?" — "+esc(cname(w.captain_id)):""}</option>`).join("");
+const whOpts=sel=>D.warehouses.map(w=>`<option value="${w.id}" ${w.id===sel?"selected":""}>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?" (رئيسي)":whCapNames(w)?" — "+whCapNames(w):""}</option>`).join("");
 const prodOpts=()=>D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
 const waNum=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/\D/g,""); const cc=(D.settings.phone_country||"").replace(/\D/g,""); if(d.startsWith("00")) d=d.slice(2); else if(d.startsWith("0")&&cc) d=cc+d.slice(1); return d };
 const waUrl=(o,t)=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURIComponent(t);
@@ -805,7 +815,7 @@ function vStock(){ ({list:vStockList,wh:vWarehouse,invoice:vInvoice,transfer:vTr
 function vStockList(){
   $("main").innerHTML = `<div class="row" style="margin-bottom:12px"><button class="b" onclick="sv('invoice')">＋ فاتورة إدخال بضاعة</button><button class="b o" onclick="sv('transfer')">⇄ نقل بين مستودعين</button></div>
   <div class="whgrid">${D.warehouses.map(w=>{const s=whStats(w);return `<div class="whcard" onclick="sv('wh','${w.id}')" style="${w.is_main?"border:2px solid var(--p)":""}">
-    <div class="whn">${w.is_main?"🏢":"🏬"} ${esc(w.name)}${w.is_main?' <span class="tag assigned" style="background:var(--p)">رئيسي</span>':""}</div><div class="mut">${w.is_main?"مصدر البضاعة للمستودعات الثانوية"+(w.captain_id?" · 👤 "+esc(cname(w.captain_id))+" (تُخصم مبيعاته من هنا)":""):w.captain_id?"👤 "+esc(cname(w.captain_id)):"مستودع ثانوي — بدون كابتن"}</div>
+    <div class="whn">${w.is_main?"🏢":"🏬"} ${esc(w.name)}${w.is_main?' <span class="tag assigned" style="background:var(--p)">رئيسي</span>':""}</div><div class="mut">${w.is_main?"مصدر البضاعة للمستودعات الثانوية"+(whCapNames(w)?" · 👤 "+whCapNames(w)+" (تُخصم مبيعاتهم من هنا)":""):whCapNames(w)?"👤 "+whCapNames(w):"مستودع ثانوي — بدون كابتن"}</div>
     <div class="whs"><div><b>${s.types}</b><span>صنف</span></div><div><b>${s.units}</b><span>قطعة</span></div><div class="${s.low?"neg":""}"><b>${s.low}</b><span>منخفض</span></div></div></div>`}).join("")
     ||'<p class="mut">لا توجد مستودعات. أضفها من تبويب «المستودعات».</p>'}</div>`;
 }
@@ -816,7 +826,7 @@ function vWarehouse(){
   const low=Number(D.settings.low_stock||3), st=whStats(w);
   const rows=D.products.filter(p=>p.active||by[p.id]).map(p=>({p,q:by[p.id]||0})).sort((a,b)=>(b.q>0)-(a.q>0)||a.p.name.localeCompare(b.p.name,"ar"));
   const mv=D.movements.filter(m=>m.warehouse_id===w.id), inv=D.invoices.filter(i=>i.warehouse_id===w.id);
-  $("main").innerHTML = `<div class="pg"><button class="b s o" onclick="sv('list')">← كل المستودعات</button><h2>${w.is_main?"🏢":"🏬"} ${esc(w.name)}</h2><span class="mut">${w.is_main?"المستودع الرئيسي"+(w.captain_id?" · 👤 "+esc(cname(w.captain_id)):""):w.captain_id?"👤 "+esc(cname(w.captain_id)):"مستودع ثانوي — بدون كابتن"}</span></div>
+  $("main").innerHTML = `<div class="pg"><button class="b s o" onclick="sv('list')">← كل المستودعات</button><h2>${w.is_main?"🏢":"🏬"} ${esc(w.name)}</h2><span class="mut">${w.is_main?"المستودع الرئيسي"+(whCapNames(w)?" · 👤 "+whCapNames(w):""):whCapNames(w)?"👤 "+whCapNames(w):"مستودع ثانوي — بدون كابتن"}</span></div>
   <div class="stats"><div class="stat" style="cursor:default"><div class="mut">أصناف متوفرة</div><div class="big">${st.types}</div></div>
     <div class="stat" style="cursor:default"><div class="mut">إجمالي القطع</div><div class="big">${st.units}</div></div>
     <div class="stat" style="cursor:default"><div class="mut">أصناف منخفضة</div><div class="big ${st.low?"neg":""}">${st.low}</div></div></div>
@@ -920,9 +930,14 @@ function fillFromWa(){
 function copyWaTpl(){ (navigator.clipboard?navigator.clipboard.writeText(WA_TPL):Promise.reject()).then(()=>toast("تم نسخ الكلاشة","ok")).catch(()=>{ $("watpl").select(); toast("انسخها يدوياً") }) }
 function autoCap(){
   const g=$("og").value, h=$("ohint"); if(!$("oc")||!g){ if(h) h.textContent=""; upd(); return }
-  const w=D.warehouses.find(w=>w.governorate===g&&w.captain_id&&(D.captains.find(c=>c.id===w.captain_id)||{}).active!==false);
-  if(w){ $("oc").value=w.captain_id; if(h) h.innerHTML=`✓ تم اختيار الكابتن تلقائياً: <b>${esc(cname(w.captain_id))}</b> (${esc(w.name)})` }
-  else { $("oc").value=""; if(h) h.textContent="لا يوجد كابتن مرتبط بمستودع في "+g+" — اختر الكابتن يدوياً أو اتركه للإسناد لاحقاً" }
+  const open=["new","assigned","in_delivery","no_answer","closed","other"];
+  const cands=[]; D.warehouses.filter(w=>(w.governorates||[]).includes(g)).forEach(w=>whCaps(w).filter(c=>c.active!==false).forEach(c=>cands.push({c,w})));
+  if(cands.length){
+    const load=c=>(D.orders||[]).filter(o=>o.captain_id===c.id&&open.includes(o.status)).length;
+    cands.sort((a,b)=>load(a.c)-load(b.c)||a.c.name.localeCompare(b.c.name,"ar"));
+    const p=cands[0]; $("oc").value=p.c.id;
+    if(h) h.innerHTML=`✓ تم اختيار الكابتن تلقائياً: <b>${esc(p.c.name)}</b> (${esc(p.w.name)})`+(cands.length>1?" — "+(ACC.role==="staff"?"":"الأقل طلبات مفتوحة بين ")+cands.length+" كباتن في هذه المحافظة":"");
+  } else { $("oc").value=""; if(h) h.textContent="لا يوجد كابتن مرتبط بمستودع في "+g+" — اختر الكابتن يدوياً أو اتركه للإسناد لاحقاً" }
   upd();
 }
 function vNew(){
