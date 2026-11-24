@@ -381,7 +381,7 @@ function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 /* ===== الإشعارات ===== */
@@ -492,12 +492,19 @@ async function toggleProduct(id,v){ if(await run(sb.from("products").update({act
 
 
 /* ================= المسوّقات ================= */
+let MSV="list";
 function vMarketers(){
+  if(MSV==="add"){
+    $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="MSV='list';vMarketers();scrollTo({top:0})">→ رجوع للمسوّقات</button>
+    <div class="card"><h2>إضافة مسوّقة</h2>
+      <div class="row"><input id="mn" placeholder="اسم المسوّقة"><input id="mg" placeholder="المحافظة"><input id="mph" placeholder="رقم الموبايل" dir="ltr" inputmode="tel"></div>
+      <button class="b" onclick="addMarketer()">حفظ</button></div>`;
+    return;
+  }
   $("main").innerHTML = `
-  <div class="card"><h2>إضافة مسوّقة</h2>
-    <div class="row"><input id="mn" placeholder="اسم المسوّقة"><input id="mg" placeholder="المحافظة"><input id="mph" placeholder="رقم الموبايل" dir="ltr" inputmode="tel"></div>
-    <button class="b" onclick="addMarketer()">إضافة</button></div>
-  <div class="card"><h2>المسوّقات (${D.marketers.length})</h2>${D.marketers.length?`<div class="tw"><table>
+  <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">المسوّقات (${D.marketers.length})</h2>
+    <button class="b s" style="flex:0 0 auto" onclick="MSV='add';vMarketers();scrollTo({top:0})">+ إضافة</button></div>
+  ${D.marketers.length?`<div class="tw"><table>
    <tr><th>الاسم</th><th>المحافظة</th><th>الموبايل</th><th></th></tr>
    ${D.marketers.map(m=>`<tr style="${m.active?"":"opacity:.45"}"><td>${esc(m.name)}</td><td>${esc(m.governorate)}</td><td dir="ltr">${esc(m.phone)}</td>
     <td style="white-space:nowrap"><button class="b s o" onclick="editMarketer('${m.id}')">تعديل</button> <button class="b s o" onclick="toggleMarketer('${m.id}',${!m.active})">${m.active?"إيقاف":"تفعيل"}</button></td></tr>`).join("")}
@@ -505,7 +512,7 @@ function vMarketers(){
 }
 async function addMarketer(){
   const name=$("mn").value.trim(); if(!name) return toast("أدخل اسم المسوّقة");
-  if(await run(sb.from("marketers").insert({name,governorate:$("mg").value.trim()||null,phone:$("mph").value.trim()||null}),"تمت إضافة المسوّقة")) refresh();
+  if(await run(sb.from("marketers").insert({name,governorate:$("mg").value.trim()||null,phone:$("mph").value.trim()||null}),"تمت إضافة المسوّقة")){ MSV="list"; refresh() }
 }
 async function editMarketer(id){
   const m=D.marketers.find(x=>x.id===id);
