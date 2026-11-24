@@ -323,7 +323,14 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 const SUPABASE_URL = "https://jabapvnmfdflysxfxwwf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYmFwdm5tZmRmbHlzeGZ4d3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTg2OTQsImV4cCI6MjExMTA5NDY5NH0.V-Axtg4cGwiSYNhcefmks0MP4iOn2DW5Ai74Ji8cv9I";
 // ===================================================================
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-captain-auth"}});
+/* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
+let _lc=0,_le=null;
+document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b) return;
+  const now=Date.now();
+  if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800)){ e.stopPropagation(); e.preventDefault(); return }
+  _le=b; _lc=now },true);
+
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let CUR = "", BIZ = "";
@@ -390,8 +397,9 @@ function hideSplash(){ $("splash").classList.add("off") }
 async function boot(){
   const {data:{session}} = await sb.auth.getSession();
   if(!session){ showLogin(); return }
-  const {data} = await sb.from("captains").select("*").limit(1);
-  if(!data || !data.length){ toast("هذا الحساب غير مرتبط بكابتن","err"); await sb.auth.signOut(); showLogin(); return }
+  const em=String(session.user.email||"").toLowerCase();
+  const {data} = await sb.from("captains").select("*").eq("email",em).limit(1);
+  if(!data || !data.length || String(data[0].email||"").toLowerCase()!==em){ toast("هذا الحساب غير مرتبط بكابتن","err"); await sb.auth.signOut(); showLogin(); return }
   me = data[0];
   $("login").style.display="none"; $("app").style.display="block";
   $("av").textContent=(me.name||"ك").trim().charAt(0); $("hn").textContent=me.name;
@@ -410,7 +418,9 @@ async function logout(){ if(!await ask("تسجيل الخروج","هل تريد 
 
 /* ===== تحميل البيانات + كشف الجديد ===== */
 let firstLoad=true;
+let LSEQ=0;
 async function load(initial){
+  const seq=++LSEQ, who=me&&me.id;
   const r = await Promise.all([
     sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("captain_id",me.id).order("created_at",{ascending:false}).limit(200),
     sb.from("stock").select("qty, products(name), warehouses!inner(captain_id)").eq("warehouses.captain_id",me.id),
@@ -420,6 +430,7 @@ async function load(initial){
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(1000),
     sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
   ]);
+  if(seq!==LSEQ||!me||me.id!==who) return;
   const bad=r.find(x=>x.error); if(bad){ if(!initial) return; toast("خطأ تحميل: "+bad.error.message,"err") }
   const prev=D.orders;
   D.orders=r[0].data||[]; D.stock=(r[1].data||[]).sort((a,b)=>(a.products?.name||"").localeCompare(b.products?.name||"","ar"));

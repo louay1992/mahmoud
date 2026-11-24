@@ -1358,3 +1358,9 @@ begin
 end $$;
 revoke execute on function marketer_return_impact(uuid) from public, anon;
 grant execute on function marketer_return_impact(uuid) to authenticated;
+
+-- ===== v16: حماية من التكرار =====
+-- op_guard + guard_once(key, secs): يرفض نفس العملية إذا تكررت خلال ثوانٍ.
+-- trigger trg_dup_guard على captain_payments / marketer_payments / orders (إدراج مكرر خلال 15 ثانية يُرفض).
+-- transfer_stock و create_stock_invoice: guard_once + قفل صفوف الجرد (FOR UPDATE).
+-- (النص الكامل للدوال محفوظ في migration v16_duplicate_guards)
