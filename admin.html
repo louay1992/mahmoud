@@ -215,6 +215,12 @@ tr:last-child td{border-bottom:0}
 .pkr{background:#f1f5f9;border-radius:12px;padding:8px 10px}.pkr.on{background:#ccfbf1}.pkr label{display:flex;align-items:center;gap:10px;background:none;padding:2px;cursor:pointer}.pkr input[type=checkbox]{width:auto}.pkd{gap:8px;margin-top:8px}.pkd>div{flex:1}.pkd small{display:block;color:#475569;margin-bottom:2px}.pkd input{width:100%}
 .ocinfo{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.ocinfo>div{background:#f1f5f9;border-radius:10px;padding:6px 8px;min-width:0}.ocinfo small{display:block;color:#64748b;font-size:11px}.ocinfo b{font-size:13px;word-break:break-word}.ocb{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.ocb .b{flex:0 0 auto;text-decoration:none;display:inline-flex;align-items:center}
 .cus summary::-webkit-details-marker{display:none}.cuo{background:#f1f5f9;border-radius:10px;padding:8px 10px;margin-top:6px;cursor:pointer}
+.capsum,.capst{display:grid;gap:8px}.capsum{grid-template-columns:repeat(3,1fr)}.capst{grid-template-columns:repeat(4,1fr);margin:10px 0}
+.capsum>div,.capst>div{background:#f1f5f9;border-radius:12px;padding:8px 10px;min-width:0}.capsum small,.capst small{display:block;color:#64748b;font-size:11px}.capsum b,.capst b{font-size:14px;word-break:break-word}
+.capsum .rem,.capst .rem{background:#ccfbf1}.capsum .rem b,.capst .rem b{color:#0f766e;font-size:15px}.capsum .rem b.neg,.capst .rem b.neg{color:#dc2626}
+.capc{padding:14px}.capc.off{opacity:.6}.caph{display:flex;gap:10px;align-items:center}.cav{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#0f766e,#2dd4bf);color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px;flex:0 0 auto}
+.capb{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.capb .b{flex:1 1 auto}.capm{margin-top:10px;border-top:1px solid #e2e8f0;padding-top:8px}.capm summary{cursor:pointer;font-weight:700;color:#0f766e;padding:4px 0}
+@media(max-width:480px){.capst{grid-template-columns:repeat(2,1fr)}.capsum{grid-template-columns:1fr 1fr}.capsum .rem{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -425,7 +431,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["customers","العملاء","users"],["captains","الكباتن","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
 const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
@@ -538,7 +544,7 @@ let rt, deb;
 function idle(){ return $("modal").style.display!=="flex"&&!document.querySelector(".dlg")&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) }
 async function autoRefresh(){
   await loadAll(); renderNav();
-  if(["home","orders","accounts","notifs"].includes(tab)&&idle()){ const y=scrollY; render(); scrollTo(0,y) }
+  if(["home","orders","captains","notifs"].includes(tab)&&idle()){ const y=scrollY; render(); scrollTo(0,y) }
   else if(tab==="stock"&&SV.v==="list"&&idle()){ render() }
 }
 function startLive(){
@@ -564,7 +570,7 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -696,16 +702,28 @@ function vCaptains(){
     <p class="mut">إذا كتبتَ رقم الموبايل وكلمة المرور يصبح الكابتن جاهزاً للدخول فوراً. يمكنك تغيير كلمة المرور لاحقاً من زر «كلمة المرور».</p></div>`;
     return;
   }
+  const mode=D.settings.price_mode==="list"?"list":"actual";
+  const bal=id=>D.balances.find(b=>b.captain_id===id)||{delivered_count:0,delivered_total:0,paid_total:0,balance:0};
+  const totBal=D.captains.reduce((a,c)=>a+Number(bal(c.id).balance||0),0), totPaid=D.captains.reduce((a,c)=>a+Number(bal(c.id).paid_total||0),0), totDel=D.captains.reduce((a,c)=>a+Number(bal(c.id).delivered_total||0),0);
   $("main").innerHTML = `
-  <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">الكباتن (${D.captains.length})</h2>
+  <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 10px"><h2 style="margin:0">الكباتن والمستحقات</h2>
     <button class="b s" style="flex:0 0 auto" onclick="CV='addc';vCaptains();scrollTo({top:0})">+ إضافة كابتن</button></div>
-  ${D.captains.length?D.captains.map(c=>{const w=D.warehouses.find(w=>w.id===c.warehouse_id);return `<div class="card" style="box-shadow:none;border:1px solid #e1ecea;margin:0 0 12px;${c.active?"":"opacity:.55"}">
-    <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 6px"><b style="font-size:17px">${esc(c.name)}</b>${c.active?"":'<span class="mut">موقوف</span>'}</div>
-    <div class="dr"><span class="dl">الموبايل</span><span class="dv2" dir="ltr">${esc(c.phone)||"—"}</span></div>
-    <div class="dr"><span class="dl">اسم الدخول</span><span class="dv2" dir="ltr">${esc(c.email&&!c.email.endsWith("@captain.local")?c.email:c.phone)||"—"}</span></div>
-    <div class="dr"><span class="dl">أجور التوصيل</span><span class="dv2">${money(c.delivery_fee)}</span></div>
-    <div class="dr"><span class="dl">المستودع</span><span class="dv2">${w?esc(w.name):'<span class="neg">غير مرتبط</span>'}</span></div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="b s o" onclick="editCaptain('${c.id}')">تعديل</button><button class="b s" onclick="setCapPw('${c.id}')">🔑 كلمة المرور</button><button class="b s o" onclick="toggleCaptain('${c.id}',${!c.active})">${c.active?"إيقاف":"تفعيل"}</button></div></div>`}).join(""):'<p class="mut">لا يوجد كباتن بعد</p>'}</div>`;
+    <div class="capsum"><div><small>إجمالي المطلوب</small><b>${money(totDel)}</b></div><div><small>إجمالي المستلَم</small><b>${money(totPaid)}</b></div><div class="rem"><small>المتبقي على الكباتن</small><b class="${totBal<0?"neg":""}">${money(totBal)}</b></div></div></div>
+  ${D.captains.length?D.captains.map(c=>{const w=D.warehouses.find(w=>w.id===c.warehouse_id), b=bal(c.id), loginName=c.email&&!c.email.endsWith("@captain.local")?c.email:c.phone;
+    const openN=D.orders.filter(o=>o.captain_id===c.id&&["assigned","in_delivery","no_answer","closed","other"].includes(o.status)).length;
+    return `<div class="card capc ${c.active?"":"off"}">
+    <div class="caph"><div class="cav">${esc((c.name||"ك").trim().charAt(0))}</div>
+      <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(c.name)}</b>${c.active?"":' <span class="tag cancelled">موقوف</span>'}
+        <div class="mut" dir="ltr" style="text-align:right;font-size:13px">${esc(c.phone)||"—"}</div></div>
+      <div style="text-align:end"><span class="tag ${w?"assigned":"cancelled"}">${w?"🏬 "+esc(w.name):"غير مرتبط بمستودع"}</span>${openN?`<div class="mut" style="font-size:12px;margin-top:4px">${openN} طلب مفتوح</div>`:""}</div></div>
+    <div class="capst"><div><small>طلبات مسلَّمة</small><b>${b.delivered_count}</b></div><div><small>المطلوب منه</small><b>${money(b.delivered_total)}</b></div><div><small>المستلَم</small><b>${money(b.paid_total)}</b></div><div class="rem"><small>المتبقي</small><b class="${b.balance<0?"neg":""}">${money(b.balance)}</b></div></div>
+    <div class="capb"><button class="b" onclick="addPayment('${c.id}')">💵 استلام دفعة</button><button class="b o" onclick="statement('${c.id}')">📄 كشف حساب</button><button class="b o" onclick="showPayments('${c.id}')">🧾 الدفعات</button><button class="b o" onclick="priceDiffs('${c.id}')">± فروقات الأسعار</button></div>
+    <details class="capm"><summary>⚙ إدارة الكابتن</summary>
+      <div class="dr"><span class="dl">اسم الدخول</span><span class="dv2" dir="ltr">${esc(loginName)||"—"}</span></div>
+      <div class="dr"><span class="dl">أجور التوصيل لكل طلب</span><span class="dv2">${money(c.delivery_fee)}</span></div>
+      <div class="capb"><button class="b s o" onclick="editCaptain('${c.id}')">✏️ تعديل البيانات</button><button class="b s o" onclick="setFee('${c.id}')">أجور التوصيل</button><button class="b s" onclick="setCapPw('${c.id}')">🔑 كلمة المرور</button><button class="b s ${c.active?"r":"g"}" onclick="toggleCaptain('${c.id}',${!c.active})">${c.active?"إيقاف":"تفعيل"}</button></div>
+    </details></div>`}).join(""):'<div class="card mut" style="text-align:center">لا يوجد كباتن بعد</div>'}
+  <p class="mut" style="padding:0 6px">${mode==="list"?"نمط الحساب: الكابتن يسلّمك <b>السعر المثبت</b>؛ الزيادة عن المثبت له والنقص عليه.":"نمط الحساب: الكابتن يسلّمك <b>ما قبضه فعلياً</b>؛ الفرق عن المثبت يظهر في «فروقات الأسعار»."} المتبقي = المطلوب منه − الدفعات المستلمة، وأجور التوصيل تبقى مع الكابتن (يمكن تغيير النمط من الإعدادات).</p>`;
 }
 async function callSetPw(captain_id,password,email){
   const {data:{session}}=await sb.auth.getSession();
@@ -1333,7 +1351,7 @@ function vHome(){
   const total=Object.values(bs).reduce((a,b)=>a+Number(b),0)||D.orders.length;
   $("main").innerHTML = `<div class="stats">
     <div class="stat" style="cursor:default"><div class="ico" style="background:#16a34a">${ic("checkc")}</div><div class="mut">سُلِّم اليوم</div><div class="big">${s.delivered_today??0}</div><div class="mut">مبيعات: ${money(s.sales_today)}</div></div>
-    <div class="stat" onclick="go('accounts')"><div class="ico" style="background:#0f766e">${ic("wallet")}</div><div class="mut">مستحق على الكباتن</div><div class="big">${money(s.owed_total)}</div></div>
+    <div class="stat" onclick="go('captains')"><div class="ico" style="background:#0f766e">${ic("wallet")}</div><div class="mut">مستحق على الكباتن</div><div class="big">${money(s.owed_total)}</div></div>
     <div class="stat" onclick="go('new')"><div class="ico" style="background:#2563eb">${ic("plus")}</div><div class="mut">إنشاء</div><div class="big" style="font-size:18px">طلب جديد</div></div></div>
   ${prCard()}
   <div class="card"><h2>كل الطلبات</h2>
