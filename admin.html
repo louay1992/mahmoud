@@ -381,7 +381,7 @@ function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="captains") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="mbal") MF={q:"",f:"all",g:""}; if(k==="captains") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 /* ===== الإشعارات ===== */
@@ -522,17 +522,42 @@ async function editMarketer(id){
 }
 async function toggleMarketer(id,v){ if(await run(sb.from("marketers").update({active:v}).eq("id",id))) refresh() }
 
+let MF={q:"",f:"all",g:""};
+const mkRows=()=>{
+  const q=MF.q.trim().toLowerCase();
+  return D.mbal.filter(b=>{
+    const m=D.marketers.find(x=>x.id===b.marketer_id)||{};
+    if(MF.g&&m.governorate!==MF.g) return false;
+    const bal=Number(b.balance), has=Number(b.earned)>0||Number(b.paid)>0||Number(b.delivered_count)>0;
+    if(MF.f==="due"&&!(bal>0.004)) return false;
+    if(MF.f==="settled"&&!(has&&Math.abs(bal)<0.005)) return false;
+    if(MF.f==="pending"&&!(Number(b.pending)!==0)) return false;
+    if(MF.f==="none"&&has) return false;
+    if(q&&![b.name,m.governorate,m.phone].some(v=>String(v||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+};
+function mbList(){
+  const rows=mkRows(), tot=rows.reduce((a,b)=>a+Number(b.balance),0);
+  $("mblist").innerHTML=`<div class="mut" style="margin-bottom:8px">${rows.length} مسوّقة · مجموع المتبقي لهن: <b>${money(tot)}</b></div>`+(rows.length?rows.map(b=>{const m=D.marketers.find(x=>x.id===b.marketer_id)||{};return `<div class="card" style="box-shadow:none;border:1px solid var(--line,#e2ecec);margin:0 0 12px">
+    <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 6px"><b style="font-size:17px">${esc(b.name)}${m.governorate?` <span class="mut" style="font-weight:400">— ${esc(m.governorate)}</span>`:""}</b><span class="mut">${b.delivered_count} طلب مُسلَّم</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 6px"><div><div class="mut">الأرباح</div><b>${money(b.earned)}</b></div><div><div class="mut">المسدَّد</div><b>${money(b.paid)}</b></div><div><div class="mut">المتبقي لها</div><span class="big ${b.balance<0?"neg":""}">${money(b.balance)}</span></div></div>
+    ${Number(b.pending)?`<div class="mut" style="margin-bottom:8px">أرباح بانتظار التسليم: ${money(b.pending)}</div>`:""}
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="b s" onclick="payMarketer('${b.marketer_id}')">تسديد دفعة</button><button class="b s o" onclick="mDetails('${b.marketer_id}')">التفاصيل</button></div></div>`}).join(""):'<p class="mut">لا توجد نتائج مطابقة</p>');
+}
+function mbFilter(k,v){ MF[k]=v; if(k==="f") document.querySelectorAll("#mbchips .chip").forEach(c=>c.classList.toggle("on",c.dataset.k===v)); mbList() }
 function vMbal(){
   const tot=D.mbal.reduce((a,b)=>({e:a.e+Number(b.earned),p:a.p+Number(b.paid),b:a.b+Number(b.balance)}),{e:0,p:0,b:0});
+  const govs=[...new Set(D.marketers.map(m=>m.governorate).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"ar"));
+  const chips=[["all","الكل"],["due","لها رصيد"],["settled","مسدَّدة بالكامل"],["pending","أرباح بانتظار التسليم"],["none","بدون نشاط"]];
   $("main").innerHTML = `<div class="card"><h2>أرصدة المسوّقات</h2>
-   <div class="mut" style="margin-bottom:8px">مستحقات الكل: <b>${money(tot.b)}</b> · إجمالي الأرباح: ${money(tot.e)} · المسدَّد: ${money(tot.p)}</div>
-   ${D.mbal.length?`<div class="tw"><table>
-   <tr><th>المسوّقة</th><th>طلبات مُسلَّمة</th><th>الأرباح المستحقة</th><th>المسدَّد</th><th>المتبقي لها</th><th>أرباح بانتظار التسليم</th><th></th></tr>
-   ${D.mbal.map(b=>`<tr><td>${esc(b.name)}</td><td>${b.delivered_count}</td><td>${money(b.earned)}</td><td>${money(b.paid)}</td>
-     <td class="big ${b.balance<0?"neg":""}">${money(b.balance)}</td><td class="mut">${money(b.pending)}</td>
-     <td style="white-space:nowrap"><button class="b s" onclick="payMarketer('${b.marketer_id}')">تسديد دفعة</button> <button class="b s o" onclick="mDetails('${b.marketer_id}')">التفاصيل</button></td></tr>`).join("")}
-   </table></div>`:'<p class="mut">أضف مسوّقات من تبويب «المسوّقات»</p>'}
+   <div class="mut" style="margin-bottom:10px">مستحقات الكل: <b>${money(tot.b)}</b> · إجمالي الأرباح: ${money(tot.e)} · المسدَّد: ${money(tot.p)}</div>
+   <div class="row"><input id="mbq" placeholder="بحث: اسم المسوّقة أو المحافظة أو الموبايل" value="${esc(MF.q)}" oninput="mbFilter('q',this.value)">
+    <select onchange="mbFilter('g',this.value)"><option value="">كل المحافظات</option>${govs.map(g=>`<option ${MF.g===g?"selected":""}>${esc(g)}</option>`).join("")}</select></div>
+   <div class="chips" id="mbchips">${chips.map(([k,l])=>`<button class="chip ${MF.f===k?"on":""}" data-k="${k}" onclick="mbFilter('f','${k}')">${l}</button>`).join("")}</div>
+   <div id="mblist"></div>
    <p class="mut">الربح = سعر البيع − رأس المال، يُحتسب فقط للطلبات <b>المُسلَّمة</b>. المتبقي = الأرباح − الدفعات المسدَّدة لها.</p></div>`;
+  mbList();
 }
 async function payMarketer(id){
   const m=D.marketers.find(x=>x.id===id), b=D.mbal.find(x=>x.marketer_id===id)||{};
