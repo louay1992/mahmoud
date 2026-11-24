@@ -113,6 +113,7 @@
       for(const [k,records] of groups){const label=orderGrp==='status'?ST[k]:orderGrp==='captain'?(k==='-'?'بلا كابتن':cname(k)):orderGrp==='marketer'?(k==='-'?'بلا مسوّقة':mname(k)):k;html+=`<h2 class="am-group">${esc(label)} <span>${records.length}</span></h2>`+records.map(o=>card(o)).join('');}
     }
     $('olist').innerHTML=html||empty(orderFilter==='new'&&!orderQuery?'لا توجد طلبات جديدة':'لا توجد نتائج مطابقة','جرّب بحثًا آخر أو اعرض كل الطلبات.');
+    globalThis.AdminWorkspace?.decorateEvents();
     if(list.length>page.length) $('olist').insertAdjacentHTML('beforeend',button(`عرض طلبات إضافية (${page.length} من ${list.length})`,'load-more','delivery','am-btn am-load-more'));
   }
   function shipBase(skipStatus=false){
@@ -143,6 +144,7 @@
     $('am-ship-summary').innerHTML=`<span><b>${list.length}</b> شحنة</span><span>${state.sort==='recent'?'الأحدث أولًا':state.sort==='oldest'?'الأقدم أولًا':'حسب الأولوية'}</span>`;
     const page=list.slice(0,state.shippingLimit);
     $('shlist').innerHTML=page.map(o=>card(o,true)).join('')||empty('لا توجد شحنات مطابقة','جرّب حالة أخرى أو عدّل الفلاتر.','all-shipments');
+    globalThis.AdminWorkspace?.decorateEvents();
     if(list.length>page.length)$('shlist').insertAdjacentHTML('beforeend',button(`عرض شحنات إضافية (${page.length} من ${list.length})`,'load-more','shipping','am-btn am-load-more'));
   }
   const select=(id,label,options,value)=>`<label class="am-filter-field"><span>${label}</span><select id="${id}">${options.map(([k,l])=>`<option value="${esc(k)}" ${k===value?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`;
