@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1d4ed8">
 <title>كابتن التوصيل</title>
+<link rel="manifest" href="/manifest-captain.json">
+<link rel="apple-touch-icon" href="/icons/captain-apple.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--p:#1d4ed8;--bg:#f4f6f8;--bd:#e2e8f0;--tx:#1e293b;--mut:#64748b;--red:#dc2626;--grn:#16a34a;--amb:#d97706}
@@ -134,6 +138,7 @@ function vAcc(){
    <div class="card"><h2>الدفعات التي سلّمتُها</h2>${D.payments.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th></tr>${D.payments.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td></tr>`).join("")}</table>`:'<p class="mut">لا توجد دفعات</p>'}</div>`;
 }
 setInterval(()=>{ if(me && !document.hidden && tab==="orders") refresh() }, 30000);
+if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 boot();
 </script>
 </body>

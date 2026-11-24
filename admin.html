@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0f766e">
 <title>الإدارة - كباتن التوصيل</title>
+<link rel="manifest" href="/manifest-admin.json">
+<link rel="apple-touch-icon" href="/icons/admin-apple.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--p:#0f766e;--bg:#f4f6f8;--card:#fff;--bd:#e2e8f0;--tx:#1e293b;--mut:#64748b;--red:#dc2626;--grn:#16a34a;--amb:#d97706}
@@ -406,6 +410,7 @@ async function resetData(){
   if(await run(sb.rpc("reset_test_data"),"تم مسح البيانات")) refresh();
 }
 
+if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 boot();
 </script>
 </body>

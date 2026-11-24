@@ -1,0 +1,17 @@
+{
+  "id": "/admin.html",
+  "name": "إدارة كباتن التوصيل",
+  "short_name": "الإدارة",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/admin.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#0f766e",
+  "icons": [
+    {"src": "/icons/admin-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/icons/admin-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/icons/admin-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
