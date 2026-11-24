@@ -1,6 +1,6 @@
 // الشبكة أولاً (حتى لا تبقى نسخة قديمة)، وإن لم يتوفر الإنترنت تُعرض آخر نسخة محفوظة.
 // مكتبة Supabase من CDN تُحفظ أيضاً ليعمل التطبيق عند ضعف الشبكة.
-const CACHE = "shell-v3";
+const CACHE = "shell-v4";
 self.addEventListener("install", () => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -15,6 +15,15 @@ self.addEventListener("fetch", e => {
     if (res.ok || res.type === "opaque") { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req)));
+});
+// استلام إشعار Push من الخادم (يعمل والتطبيق مغلق)
+self.addEventListener("push", e => {
+  let d = {};
+  try { d = e.data.json(); } catch (_) { d = { title: "كابتن التوصيل", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "كابتن التوصيل", {
+    body: d.body || "", tag: d.tag || undefined, icon: "/icons/captain-192.png", badge: "/icons/captain-192.png",
+    dir: "rtl", lang: "ar", renotify: true, vibrate: [200, 100, 200], data: { url: d.url || "/captain.html" }
+  }));
 });
 // الضغط على الإشعار يفتح التطبيق
 self.addEventListener("notificationclick", e => {

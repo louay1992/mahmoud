@@ -27,6 +27,7 @@ main{max-width:980px;margin:0 auto;padding:14px}
 input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff}
 button.b{background:var(--p);color:#fff;border:0;padding:9px 16px;border-radius:8px;font:inherit;cursor:pointer}
 button.b.s{padding:5px 10px;font-size:13px}
+a.b{display:inline-block;background:var(--p);color:#fff;padding:9px 16px;border-radius:8px}a.b.s{padding:5px 10px;font-size:13px}a.b.g{background:var(--grn)}a.b.o{background:#fff;color:var(--p);border:1px solid var(--p)}
 button.b.r{background:var(--red)}button.b.g{background:var(--grn)}button.b.o{background:#fff;color:var(--p);border:1px solid var(--p)}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;vertical-align:middle}
@@ -260,6 +261,10 @@ let SV={v:"list",wh:null};
 function sv(v,wh){ SV={v,wh:wh||null}; render(); window.scrollTo(0,0) }
 const whOpts=sel=>D.warehouses.map(w=>`<option value="${w.id}" ${w.id===sel?"selected":""}>${esc(w.name)}${w.captain_id?" — "+esc(cname(w.captain_id)):""}</option>`).join("");
 const prodOpts=()=>D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+const waNum=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/\D/g,""); const cc=(D.settings.phone_country||"").replace(/\D/g,""); if(d.startsWith("00")) d=d.slice(2); else if(d.startsWith("0")&&cc) d=cc+d.slice(1); return d };
+const waUrl=(o,t)=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURIComponent(t);
+const mapUrl=o=>o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):"");
+const waText=o=>`مرحباً ${o.customer_name}، بخصوص طلبك رقم #${o.order_no}${D.settings.business_name?" من "+D.settings.business_name:""}. المبلغ المطلوب: ${money(o.total)}.`;
 const num2=x=>Number(Number(x).toFixed(2));
 function itemRows(id,priced){ return `<div class="items" id="${id}" data-priced="${priced?1:0}"></div><button class="b s o" onclick="addRow('${id}')">+ منتج</button>` }
 function addRow(id){
@@ -350,6 +355,7 @@ async function transferStock(){
 function vNew(){
   $("main").innerHTML = `<div class="card"><h2>طلب بيع جديد</h2>
     <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
+    <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
     <div class="row"><select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select></div>
     <p class="mut" style="margin:4px 0">السعر يُملأ تلقائياً بسعر المنتج المثبت، وتستطيع تعديله لكل بند. الفرق عن المثبت يظهر بجانبه.</p>
@@ -358,24 +364,50 @@ function vNew(){
     <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
   addRow("orows");
 }
-function upd(){
-  if(!$("otot")||!$("orows")) return;
+function upd(){ updFor("orows","otot",()=>{const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)) }
+function updFor(rid,tid,feeFn){
+  if(!$(tid)||!$(rid)) return;
   let sub=0,lst=0;
-  [...$("orows").children].forEach(r=>{
+  [...$(rid).children].forEach(r=>{
     const p=D.products.find(x=>x.id===r.querySelector("select").value), q=parseInt(r.querySelector(".q").value)||0;
     const lp=p?Number(p.price):0, up=parseFloat(r.querySelector(".pr").value), a=isNaN(up)?lp:up, d=a-lp, dv=r.querySelector(".dv");
     sub+=a*q; lst+=lp*q; dv.textContent=d?((d>0?"+":"")+num2(d)):""; dv.className="dv "+(d>0?"up":"dn");
   });
-  const c=D.captains.find(c=>c.id===$("oc").value), fee=c?Number(c.delivery_fee):0, v=sub-lst;
-  $("otot").innerHTML=`المنتجات: <b>${money(sub)}</b> + التوصيل: <b>${money(fee)}</b> = <span class="big">${money(sub+fee)}</span>`
+  const fee=feeFn(), v=sub-lst;
+  $(tid).innerHTML=`المنتجات: <b>${money(sub)}</b> + التوصيل: <b>${money(fee)}</b> = <span class="big">${money(sub+fee)}</span>`
     +(v?`<div>بالسعر المثبت: ${money(lst)} — الفرق: <b class="${v>0?"up":"dn"}">${v>0?"+":""}${money(v)}</b></div>`:"");
+}
+let EO=null;
+function openEdit(id){
+  const o=D.orders.find(x=>x.id===id); EO=o;
+  $("modal").innerHTML=`<div class="sheet" style="max-width:720px"><div class="sh-h"><b>تعديل الطلب #${o.order_no}</b><button class="x" onclick="closeEdit()">✕</button></div>
+   <div class="row"><input id="en" placeholder="اسم الزبون" value="${esc(o.customer_name)}"><input id="ep" placeholder="رقم الموبايل" dir="ltr" value="${esc(o.customer_phone)}"></div>
+   <div class="row"><input id="ea" placeholder="عنوان الزبون" value="${esc(o.customer_address||"")}"><input id="em2" placeholder="رابط الخرائط (اختياري)" dir="ltr" value="${esc(o.map_url||"")}"></div>
+   <h3 style="margin:10px 0 4px">بنود الطلب</h3>
+   ${itemRows("erows",true)}<br><br><div id="etot" class="mut"></div>
+   <p class="mut">تعديل البنود يلغي أي طلب تعديل سعر معلّق، ويصل الكابتن إشعار بالتعديل.</p>
+   <button class="b" style="width:100%" onclick="saveEdit('${id}')">حفظ التعديلات</button></div>`;
+  $("modal").style.display="flex"; OD=null;
+  o.order_items.forEach(i=>{ addRow("erows"); const r=$("erows").lastChild, sel=r.querySelector("select");
+    const pid=(D.products.find(p=>p.name===i.products?.name)||{}).id;
+    if(pid){ if(![...sel.options].some(x=>x.value===pid)){ const op=document.createElement("option"); op.value=pid; op.textContent=i.products.name; sel.appendChild(op) } sel.value=pid }
+    r.querySelector(".q").value=i.qty; r.querySelector(".pr").value=i.unit_price });
+  upd();
+}
+function closeEdit(){ EO=null; closeStatus() }
+async function saveEdit(id){
+  const name=$("en").value.trim(), phone=$("ep").value.trim(), items=readRows("erows");
+  if(!name||!phone) return toast("اسم الزبون ورقمه مطلوبان");
+  if(!items.length) return toast("أضف منتجاً واحداً على الأقل");
+  if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
+  if(await run(sb.rpc("edit_order",{p_order:id,p_info:{name,phone,address:$("ea").value.trim(),map_url:$("em2").value.trim()},p_items:items}),"تم تعديل الطلب")){ closeEdit(); refresh() }
 }
 async function saveOrder(){
   const name=$("on").value.trim(), phone=$("op").value.trim(), items=readRows("orows");
   if(!name||!phone) return toast("أدخل اسم الزبون ورقم الموبايل");
   if(!items.length) return toast("أضف منتجاً");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
-  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:$("oc").value||null,p_items:items}),"تم إنشاء الطلب")){ tab="orders"; renderNav(); refresh() }
+  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:$("oc").value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null}),"تم إنشاء الطلب")){ tab="orders"; renderNav(); refresh() }
 }
 
 /* ================= الطلبات ================= */
@@ -392,6 +424,7 @@ function orderCard(o){
   return `<div class="card">
     <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
+    ${o.customer_address?`<div>📍 ${esc(o.customer_address)}</div>`:""}
     <div>${itemsLine(o)}</div>
     <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
     ${Number(o.items_total)!==Number(o.list_total)?`<div class="${o.items_total>o.list_total?"up":"dn"}" style="font-size:13px">فرق عن السعر المثبت (${money(o.list_total)}): <b>${o.items_total>o.list_total?"+":""}${money(o.items_total-o.list_total)}</b></div>`:""}
@@ -404,8 +437,10 @@ function orderCard(o){
       <button class="b s" style="flex:0 0 auto" onclick="assign('${o.id}')">${o.status==="new"?"إسناد":"تغيير الكابتن"}</button>
       <button class="b s o" style="flex:0 0 auto" onclick="openPrices('${o.id}')">تعديل الأسعار</button>
       <button class="b s o" style="flex:0 0 auto" onclick="openNote('${o.id}')">💬 ملاحظة للكابتن</button>
+      <button class="b s o" style="flex:0 0 auto" onclick="openEdit('${o.id}')">✏️ تعديل الطلب</button>
       ${OPEN.includes(o.status)?`<button class="b s g" style="flex:0 0 auto" onclick="openStatus('${o.id}')">تحديث الحالة</button>`:""}
       ${o.status==="new"?`<button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button>`:""}</div>`:""}
+    <div class="row" style="margin:8px 0 0"><a class="b s g" style="flex:0 0 auto;text-decoration:none" target="_blank" rel="noopener" href="${waUrl(o,waText(o))}">واتساب الزبون</a>${mapUrl(o)?`<a class="b s o" style="flex:0 0 auto;text-decoration:none" target="_blank" rel="noopener" href="${mapUrl(o)}">🗺 الخريطة</a>`:""}</div>
     ${o.status==="delivered"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="returnO('${o.id}')">إرجاع الطلب</button></div>`:""}
     ${o.status==="cancelled"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="restoreO('${o.id}')">استرجاع الطلب الملغي</button></div>`:""}
   </div>`;
@@ -630,7 +665,7 @@ function vSettings(){
   const st=D.settings;
   $("main").innerHTML = `
   <div class="card"><h2>بيانات النشاط</h2>
-    <div class="row"><input id="sb" placeholder="اسم النشاط" value="${esc(st.business_name)}"><input id="sc" placeholder="رمز العملة (د.أ)" value="${esc(st.currency)}"><input id="sl" type="number" min="0" placeholder="حد تنبيه المخزون المنخفض" value="${esc(st.low_stock)}"></div>
+    <div class="row"><input id="sb" placeholder="اسم النشاط" value="${esc(st.business_name)}"><input id="sc" placeholder="رمز العملة (د.أ)" value="${esc(st.currency)}"><input id="sl" type="number" min="0" placeholder="حد تنبيه المخزون المنخفض" value="${esc(st.low_stock)}"><input id="spc" placeholder="رمز الدولة للواتساب (مثال 963)" dir="ltr" value="${esc(st.phone_country||"963")}"></div>
     <button class="b" onclick="saveSettings()">حفظ</button></div>
   <div class="card"><h2>حساب فروقات الأسعار</h2>
     <div class="row"><select id="spm"><option value="actual" ${st.price_mode!=="list"?"selected":""}>الفعلي: الكابتن يسلّمني ما قبضه فعلياً</option><option value="list" ${st.price_mode==="list"?"selected":""}>المثبت: الكابتن يسلّمني سعر المنتج المثبت (الزيادة له والنقص عليه)</option></select>
@@ -651,7 +686,7 @@ async function savePriceSettings(){
   if(await run(sb.from("settings").upsert([{key:"price_mode",value:$("spm").value},{key:"captain_can_edit_price",value:$("sce").value}]),"تم الحفظ")) refresh();
 }
 async function saveSettings(){
-  const rows=[{key:"business_name",value:$("sb").value.trim()},{key:"currency",value:$("sc").value.trim()},{key:"low_stock",value:String(parseInt($("sl").value)||0)}];
+  const rows=[{key:"business_name",value:$("sb").value.trim()},{key:"currency",value:$("sc").value.trim()},{key:"low_stock",value:String(parseInt($("sl").value)||0)},{key:"phone_country",value:($("spc").value||"").replace(/\D/g,"")}];
   if(await run(sb.from("settings").upsert(rows),"تم الحفظ")) refresh();
 }
 async function addAdmin(){

@@ -959,3 +959,183 @@ end $$;
 revoke execute on function set_order_note(uuid, text) from public, anon;
 grant execute on function set_order_note(uuid, text) to authenticated;
 alter publication supabase_realtime add table public.orders, public.captain_payments, public.price_requests;
+-- =====================================================
+-- الإصدار 9: عنوان الطلب والخرائط + تعديل الطلب (بيانات وبنود) من الإداري + رمز الدولة للواتساب
+-- =====================================================
+alter table orders add column if not exists customer_address text;
+alter table orders add column if not exists map_url text;
+insert into settings(key, value) values ('phone_country', '963') on conflict (key) do nothing;
+
+drop function if exists create_order(text, text, text, uuid, jsonb);
+create or replace function create_order(p_name text, p_phone text, p_note text, p_captain uuid, p_items jsonb, p_address text default null, p_map text default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare oid uuid; it jsonb; pr numeric; up numeric; sub numeric := 0; lsub numeric := 0; fee numeric := 0;
+begin
+  if not is_admin() then raise exception 'غير مسموح'; end if;
+  if jsonb_array_length(coalesce(p_items,'[]'::jsonb)) = 0 then raise exception 'أضف منتجاً واحداً على الأقل'; end if;
+  if p_captain is not null then select delivery_fee into fee from captains where id = p_captain; end if;
+  insert into orders(customer_name, customer_phone, note, captain_id, status, delivery_fee, customer_address, map_url)
+  values (p_name, p_phone, p_note, p_captain, case when p_captain is null then 'new' else 'assigned' end, coalesce(fee,0),
+          nullif(trim(coalesce(p_address,'')),''), nullif(trim(coalesce(p_map,'')),''))
+  returning id into oid;
+  for it in select * from jsonb_array_elements(p_items) loop
+    select price into pr from products where id = (it->>'product_id')::uuid;
+    up := coalesce(nullif(it->>'unit_price','')::numeric, pr);
+    if up < 0 then raise exception 'السعر لا يكون سالباً'; end if;
+    insert into order_items(order_id, product_id, qty, unit_price, list_price)
+    values (oid, (it->>'product_id')::uuid, (it->>'qty')::int, up, pr);
+    sub := sub + up * (it->>'qty')::int;
+    lsub := lsub + pr * (it->>'qty')::int;
+  end loop;
+  update orders set items_total = sub, list_total = lsub, total = sub + coalesce(fee,0) where id = oid;
+  return oid;
+end $$;
+
+create or replace function edit_order(p_order uuid, p_info jsonb, p_items jsonb default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare o orders; it jsonb; pr numeric; up numeric; lp numeric; sub numeric := 0; lsub numeric := 0; summ text := '';
+  pid uuid; q int; pn text;
+begin
+  if not is_admin() then raise exception 'غير مسموح'; end if;
+  select * into o from orders where id = p_order for update;
+  if not found then raise exception 'الطلب غير موجود'; end if;
+  if o.status not in ('new','assigned','in_delivery','no_answer','closed','other') then raise exception 'لا يمكن تعديل هذا الطلب في حالته الحالية'; end if;
+  if p_info is not null and jsonb_typeof(p_info) = 'object' then
+    if coalesce(trim(p_info->>'name'),'') = '' or coalesce(trim(p_info->>'phone'),'') = '' then raise exception 'اسم الزبون ورقمه مطلوبان'; end if;
+    update orders set customer_name = trim(p_info->>'name'), customer_phone = trim(p_info->>'phone'),
+      customer_address = nullif(trim(coalesce(p_info->>'address','')),''), map_url = nullif(trim(coalesce(p_info->>'map_url','')),'')
+      where id = p_order;
+  end if;
+  if p_items is not null then
+    if jsonb_array_length(p_items) = 0 then raise exception 'أضف منتجاً واحداً على الأقل'; end if;
+    create temp table _old_items on commit drop as select product_id, unit_price, list_price from order_items where order_id = p_order;
+    delete from order_items where order_id = p_order;
+    for it in select * from jsonb_array_elements(p_items) loop
+      pid := (it->>'product_id')::uuid; q := (it->>'qty')::int;
+      if q is null or q <= 0 then raise exception 'الكمية غير صالحة'; end if;
+      select price, name into pr, pn from products where id = pid;
+      if not found then raise exception 'منتج غير موجود'; end if;
+      select unit_price, list_price into up, lp from _old_items where product_id = pid limit 1;
+      lp := coalesce(lp, pr);
+      up := coalesce(nullif(it->>'unit_price','')::numeric, up, pr);
+      if up < 0 then raise exception 'السعر لا يكون سالباً'; end if;
+      insert into order_items(order_id, product_id, qty, unit_price, list_price) values (p_order, pid, q, up, lp);
+      sub := sub + up * q; lsub := lsub + lp * q;
+      summ := summ || pn || ' ×' || q || ' @ ' || up || '؛ ';
+    end loop;
+    update orders set price_adjust = 0, items_total = sub, list_total = lsub, total = sub + delivery_fee where id = p_order;
+    update price_requests set status = 'rejected', admin_note = 'أُلغي لأن الإداري عدّل بنود الطلب', decided_at = now()
+      where order_id = p_order and status = 'pending';
+    insert into order_events(order_id, status, note) values (p_order, o.status, 'عدّل الإداري بنود الطلب: ' || summ || 'الإجمالي الجديد ' || (sub + o.delivery_fee));
+  elsif p_info is not null then
+    insert into order_events(order_id, status, note) values (p_order, o.status, 'عدّل الإداري بيانات الزبون/العنوان');
+  end if;
+end $$;
+
+revoke execute on function create_order, edit_order from public, anon;
+grant execute on function create_order, edit_order to authenticated;
+
+-- =====================================================
+-- الإصدار 10: إشعارات Push (تصل والتطبيق مغلق)
+-- تتطلب Edge Function باسم send-push (الكود في supabase/functions/send-push/index.ts) بدون verify_jwt.
+-- مفاتيح VAPID تُولَّد تلقائياً داخل الدالة وتُحفظ في push_config ولا يصل إليها أي تطبيق.
+-- =====================================================
+create extension if not exists pg_net with schema extensions;
+
+create table if not exists push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  captain_id uuid not null references captains(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists push_config (key text primary key, value text not null);
+alter table push_subscriptions enable row level security;
+alter table push_config enable row level security;
+revoke all on push_subscriptions, push_config from anon, authenticated;
+grant all on push_subscriptions, push_config to service_role;
+
+insert into push_config(key, value) values
+  ('push_secret', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')),
+  ('fn_url', 'https://jabapvnmfdflysxfxwwf.supabase.co/functions/v1/send-push')
+on conflict (key) do nothing;
+
+create or replace function save_push_subscription(p_endpoint text, p_p256dh text, p_auth text)
+returns void language plpgsql security definer set search_path = public as $$
+declare cid uuid := my_captain_id();
+begin
+  if cid is null then raise exception 'غير مسموح'; end if;
+  insert into push_subscriptions(captain_id, endpoint, p256dh, auth) values (cid, p_endpoint, p_p256dh, p_auth)
+  on conflict (endpoint) do update set captain_id = excluded.captain_id, p256dh = excluded.p256dh, auth = excluded.auth;
+end $$;
+
+create or replace function remove_push_subscription(p_endpoint text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  delete from push_subscriptions where endpoint = p_endpoint and captain_id = my_captain_id();
+end $$;
+
+create or replace function push_to_captain(p_captain uuid, p_title text, p_body text, p_tag text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+declare u text; sec text;
+begin
+  select value into u from push_config where key = 'fn_url';
+  select value into sec from push_config where key = 'push_secret';
+  if u is null or sec is null or p_captain is null then return; end if;
+  if not exists (select 1 from push_subscriptions where captain_id = p_captain) then return; end if;
+  perform net.http_post(url := u,
+    body := jsonb_build_object('captain_id', p_captain, 'title', p_title, 'body', p_body, 'tag', p_tag),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', sec));
+exception when others then null;
+end $$;
+
+create or replace function trg_orders_push() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then return new; end if;
+  if new.captain_id is null then return new; end if;
+  if tg_op = 'INSERT' then
+    perform push_to_captain(new.captain_id, 'طلب جديد #' || new.order_no, new.customer_name || ' — ' || new.total, 'o' || new.id);
+  elsif new.captain_id is distinct from old.captain_id then
+    perform push_to_captain(new.captain_id, 'طلب جديد #' || new.order_no, new.customer_name || ' — ' || new.total, 'o' || new.id);
+  elsif new.note is distinct from old.note and new.note is not null then
+    perform push_to_captain(new.captain_id, 'ملاحظة من الإداري — طلب #' || new.order_no, new.note, 'n' || new.id);
+  elsif new.total is distinct from old.total or new.customer_address is distinct from old.customer_address or new.map_url is distinct from old.map_url then
+    perform push_to_captain(new.captain_id, 'تم تعديل الطلب #' || new.order_no, 'الإجمالي الآن ' || new.total, 'e' || new.id);
+  elsif new.status is distinct from old.status then
+    perform push_to_captain(new.captain_id, 'تغيّرت حالة الطلب #' || new.order_no, 'أصبحت: ' || new.status, 's' || new.id);
+  end if;
+  return new;
+end $$;
+drop trigger if exists orders_push on orders;
+create trigger orders_push after insert or update on orders for each row execute function trg_orders_push();
+
+create or replace function trg_pr_push() returns trigger language plpgsql security definer set search_path = public as $$
+declare no int;
+begin
+  if old.status = 'pending' and new.status <> 'pending' and is_admin() then
+    select order_no into no from orders where id = new.order_id;
+    perform push_to_captain(new.captain_id,
+      case when new.status = 'approved' then 'تمت الموافقة على تعديل السعر' else 'تم رفض تعديل السعر' end,
+      'طلب #' || no || coalesce(' — ' || new.admin_note, ''), 'r' || new.id);
+  end if;
+  return new;
+end $$;
+drop trigger if exists pr_push on price_requests;
+create trigger pr_push after update on price_requests for each row execute function trg_pr_push();
+
+create or replace function trg_pay_push() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform push_to_captain(new.captain_id, 'تم تسجيل دفعة', new.amount || coalesce(' — ' || new.note, ''), 'p' || new.id);
+  return new;
+end $$;
+drop trigger if exists pay_push on captain_payments;
+create trigger pay_push after insert on captain_payments for each row execute function trg_pay_push();
+
+revoke execute on function push_to_captain, trg_orders_push, trg_pr_push, trg_pay_push from public, anon, authenticated;
+revoke execute on function save_push_subscription, remove_push_subscription from public, anon;
+grant execute on function save_push_subscription, remove_push_subscription to authenticated;
+
+-- تحصين دوال المشغّلات
+revoke execute on function trg_order_created(), trg_stock_invoice_item() from public, anon, authenticated;
+alter function trg_keep_one_admin() set search_path = public;

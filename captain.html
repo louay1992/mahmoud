@@ -145,6 +145,10 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .tag{display:inline-flex;align-items:center;gap:4px;padding:3px 11px;border-radius:20px;font-size:12.5px;font-weight:700;color:#fff;background:var(--sc,#64748b);white-space:nowrap}
 .call{display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(135deg,#eaf6ee,#e1f3e8);color:#15803d;font-weight:800;text-decoration:none;border-radius:13px;padding:11px;margin-bottom:10px;font-size:17px;transition:transform .12s}
 .call:active{transform:scale(.97)}
+.qa{display:flex;gap:8px;margin-bottom:10px}
+.qb{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:13px;padding:11px;font-weight:800;text-decoration:none;transition:transform .12s}
+.qb:active{transform:scale(.96)}.qb.wa{background:#e3f8ea;color:#128c4a}.qb.mp{background:#e8f0ff;color:#1d4ed8}
+.addr{display:flex;gap:8px;align-items:flex-start;margin:-2px 2px 10px;font-weight:600;line-height:1.6}.addr svg{margin-top:5px;color:#ef4444}
 .items{background:#f7f9fd;border-radius:13px;padding:6px 12px;margin-bottom:10px}
 .it{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--bd)}
 .it:last-child{border:0}
@@ -271,6 +275,9 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let CUR = "", BIZ = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
+const waNum=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/\D/g,""); const cc=(D.settings.phone_country||"").replace(/\D/g,""); if(d.startsWith("00")) d=d.slice(2); else if(d.startsWith("0")&&cc) d=cc+d.slice(1); return d };
+const waUrl=o=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURIComponent(`السلام عليكم ${o.customer_name}، أنا ${me?me.name:"كابتن التوصيل"}${BIZ?" من "+BIZ:""}، كابتن توصيل طلبك رقم #${o.order_no}. المبلغ المطلوب: ${money(o.total)}.`);
+const mapUrl=o=>o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):"");
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
 
 /* ===== الأيقونات ===== */
@@ -297,6 +304,8 @@ const IC = {
  chev:'<path d="M6 9l6 6 6-6"/>',
  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
  eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+ pin:'<path d="M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/>',
+ wa:'<path d="M21 11.5a8.5 8.5 0 01-12.6 7.4L3 20.5l1.7-5.2A8.5 8.5 0 1121 11.5z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-.9.8a5 5 0 01-2.3-2.3l.8-.9-1-2z"/>',
  msg:'<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>',
  cash:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
  sparkle:'<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>',
@@ -328,7 +337,7 @@ async function boot(){
   me = data[0];
   $("login").style.display="none"; $("app").style.display="block";
   $("av").textContent=(me.name||"ك").trim().charAt(0); $("hn").textContent=me.name;
-  await load(true); go("orders"); hideSplash(); startLive(); initNotifUI(); checkUpdate();
+  await load(true); go("orders"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate();
 }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
 async function login(){
@@ -339,7 +348,7 @@ async function login(){
   if(error) return toast("فشل الدخول: تحقق من البيانات","err");
   $("splash").classList.remove("off"); boot();
 }
-async function logout(){ if(!await ask("تسجيل الخروج","هل تريد الخروج من حسابك؟","نعم، خروج","r","logout")) return; await sb.auth.signOut(); location.reload() }
+async function logout(){ if(!await ask("تسجيل الخروج","هل تريد الخروج من حسابك؟","نعم، خروج","r","logout")) return; await dropPush(); await sb.auth.signOut(); location.reload() }
 
 /* ===== تحميل البيانات + كشف الجديد ===== */
 let firstLoad=true;
@@ -372,14 +381,16 @@ function setBadge(n){
 function detect(prev){
   const key="cap_seen_"+me.id; let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
   const cur={o:{},p:D.payments.map(x=>x.id),r:{}};
-  D.orders.forEach(o=>cur.o[o.id]={n:o.note||"",s:o.status});
+  D.orders.forEach(o=>cur.o[o.id]={n:o.note||"",s:o.status,t:Number(o.total),a:(o.customer_address||"")+"|"+(o.map_url||"")});
   Object.values(D.pr).flat().forEach(x=>cur.r[x.id]=x.status);
   if(S){
     const quiet=Date.now()-lastSelf<5000, msgs=[];
     const fresh=D.orders.filter(o=>!S.o[o.id]&&o.status==="assigned");
     if(fresh.length) msgs.push(fresh.length===1?["طلب جديد #"+fresh[0].order_no,fresh[0].customer_name+" — "+money(fresh[0].total),"o"+fresh[0].id]:["لديك "+fresh.length+" طلبات جديدة","افتح التطبيق لمراجعتها","newo"]);
+    const decided=new Set(Object.values(D.pr).flat().filter(x=>S.r[x.id]==="pending"&&x.status!=="pending").map(x=>x.order_id));
     D.orders.forEach(o=>{ const b=S.o[o.id]; if(!b) return;
       if((o.note||"")!==b.n && o.note) msgs.push(["ملاحظة من الإداري — طلب #"+o.order_no,o.note,"n"+o.id]);
+      else if(b.t!==undefined&&(Number(o.total)!==b.t||((o.customer_address||"")+"|"+(o.map_url||""))!==b.a)&&!quiet&&!decided.has(o.id)) msgs.push(["تم تعديل الطلب #"+o.order_no,Number(o.total)!==b.t?"الإجمالي الجديد "+money(o.total):"تغيّر عنوان الزبون","e"+o.id+o.total]);
       else if(!quiet && o.status!==b.s) msgs.push(["تغيّرت حالة الطلب #"+o.order_no,"أصبحت: "+(ST[o.status]||o.status),"s"+o.id]) });
     Object.values(D.pr).flat().forEach(x=>{ if(S.r[x.id]==="pending"&&x.status!=="pending"){ const o=D.orders.find(z=>z.id===x.order_id)||{};
       msgs.push([x.status==="approved"?"تمت الموافقة على تعديل السعر":"تم رفض تعديل السعر","طلب #"+(o.order_no||"")+(x.admin_note?" — "+x.admin_note:""),"r"+x.id]) } });
@@ -412,8 +423,20 @@ async function bellClick(){
   if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");
   if(s==="granted"){ beep(); return toast("الإشعارات مفعّلة — ستصلك الطلبات الجديدة وملاحظات الإداري","ok") }
   if(s==="denied") return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
-  const r=await Notification.requestPermission(); initNotifUI(); if(r==="granted"){ beep(); toast("تم تفعيل الإشعارات","ok"); render() }
+  const r=await Notification.requestPermission(); initNotifUI(); if(r==="granted"){ ensurePush(); beep(); toast("تم تفعيل الإشعارات","ok"); render() }
 }
+/* اشتراك Push: يصل الإشعار حتى والتطبيق مغلق */
+const b64u8=b=>{ const p="=".repeat((4-b.length%4)%4), r=atob((b+p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from([...r].map(c=>c.charCodeAt(0))) };
+async function ensurePush(){
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||notifState()!=="granted"||!me) return;
+  try{
+    const reg=await navigator.serviceWorker.ready; let sub=await reg.pushManager.getSubscription();
+    if(!sub){ const r=await fetch(SUPABASE_URL+"/functions/v1/send-push",{headers:{apikey:SUPABASE_KEY}}); const {key}=await r.json();
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u8(key)}) }
+    const j=sub.toJSON(); await sb.rpc("save_push_subscription",{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});
+  }catch(e){ console.warn("push",e) }
+}
+async function dropPush(){ try{ const reg=await navigator.serviceWorker.getRegistration(); const sub=reg&&await reg.pushManager.getSubscription(); if(sub){ await sb.rpc("remove_push_subscription",{p_endpoint:sub.endpoint}); await sub.unsubscribe() } }catch(e){} }
 /* تحديث لحظي من القاعدة + احتياطي بالاستعلام الدوري */
 let rt, deb;
 function startLive(){
@@ -467,6 +490,8 @@ function oCard(o){
   return `<article class="card oc s-${k}">
     <div class="oc-h"><span class="no">#${o.order_no}</span><div class="who"><b>${esc(o.customer_name)}</b><span class="mut">${dt(o.created_at)}</span></div><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span></div>
     <a class="call" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
+    <div class="qa"><a class="qb wa" href="${waUrl(o)}" target="_blank" rel="noopener">${ic("wa")} واتساب</a>${mapUrl(o)?`<a class="qb mp" href="${mapUrl(o)}" target="_blank" rel="noopener">${ic("pin")} الخريطة</a>`:""}</div>
+    ${o.customer_address?`<div class="addr">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}
     ${itemsLine(o)}
     <div class="tot"><div><div class="mut">المطلوب من الزبون</div><div class="amt">${money(o.total)}</div></div><div class="mut" style="text-align:end">منتجات ${money(o.items_total)}<br>توصيل ${money(o.delivery_fee)}</div></div>
     ${o.note?`<div class="note adm">${ic("msg")}<div><b>من الإداري:</b> ${esc(o.note)}</div></div>`:""}
