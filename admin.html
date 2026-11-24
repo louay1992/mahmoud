@@ -329,7 +329,7 @@ async function logout(){ if(!await askc("هل تريد الخروج من حسا�
 let firstLoad=true;
 async function loadAll(initial){
   const q = [
-    sb.from("products").select("*").order("name"),
+    sb.rpc("admin_products"),
     sb.from("captains").select("*").order("name"),
     sb.from("warehouses").select("*").order("name"),
     sb.from("stock").select("*"),
@@ -343,6 +343,10 @@ async function loadAll(initial){
     sb.rpc("dashboard_stats"),
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(2000),
     sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
+    sb.from("marketers").select("*").order("name"),
+    sb.from("marketer_balances").select("*"),
+    sb.from("marketer_payments").select("*").order("created_at",{ascending:false}).limit(2000),
+    sb.from("order_profits").select("order_id,marketer_id,capital,profit").limit(2000),
   ];
   const r = await Promise.all(q);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
@@ -350,17 +354,19 @@ async function loadAll(initial){
   D.settings = Object.fromEntries((r[10].data || []).map(x => [x.key, x.value]));
   D.stats = r[11].data || null;
   D.ev = {}; (r[12].data || []).forEach(e => (D.ev[e.order_id] = D.ev[e.order_id] || []).push(e));
+  D.marketers=r[14].data||[]; D.mbal=r[15].data||[]; D.mpay=r[16].data||[]; D.prof={}; (r[17].data||[]).forEach(x=>D.prof[x.order_id]=x);
   D.prs = r[13].data || []; D.pr = {}; D.prs.forEach(x => (D.pr[x.order_id] = D.pr[x.order_id] || []).push(x));
   CUR = D.settings.currency || "";
   const biz = D.settings.business_name || "إدارة كباتن التوصيل";
   $("hn").textContent = biz; document.title = biz;
   try{ detectAdmin() }catch(e){ console.warn(e) }
 }
+const mname = id => (D.marketers.find(m=>m.id===id)||{}).name || "—";
 const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن والمستودعات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن والمستودعات","users"],["marketers","المسوّقات","users"],["mbal","أرصدة المسوّقات","wallet"],["products","رأس مال المنتجات","tag"],["settings","الإعدادات","gear"]];
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
@@ -454,17 +460,18 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,products:vProducts})[tab]() }
+function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,products:vProducts,marketers:vMarketers,mbal:vMbal})[tab]() }
+const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
 /* ================= المنتجات ================= */
 function vProducts(){
   $("main").innerHTML = `
-  <div class="card"><h2>إضافة منتج</h2>
-    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="سعر البيع"></div>
+  <div class="card"><h2>إضافة منتج</h2><p class="mut" style="margin:0 0 8px">السعر هنا هو <b>رأس مال المسوّقة</b>. أي زيادة عليه عند تسجيل الطلب تُضاف لرصيدها.</p>
+    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="رأس المال"></div>
     <button class="b" onclick="addProduct()">إضافة</button></div>
-  <div class="card"><h2>المنتجات (${D.products.length})</h2><div class="tw"><table>
-   <tr><th>المنتج</th><th>سعر البيع</th><th></th></tr>
+  <div class="card"><h2>المنتجات ورأس المال (${D.products.length})</h2><div class="tw"><table>
+   <tr><th>المنتج</th><th>رأس المال</th><th></th></tr>
    ${D.products.map(p=>`<tr style="${p.active?"":"opacity:.45"}"><td>${esc(p.name)}</td><td>${money(p.price)}</td>
      <td><button class="b s o" onclick="editProduct('${p.id}')">تعديل</button>
      <button class="b s o" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"إيقاف":"تفعيل"}</button></td></tr>`).join("")}
@@ -477,11 +484,72 @@ async function addProduct(){
 }
 async function editProduct(id){
   const p=D.products.find(x=>x.id===id);
-  const f=await askf("تعديل المنتج",[{k:"name",l:"اسم المنتج",v:p.name},{k:"price",l:"سعر البيع",t:"number",v:p.price}]); if(!f) return;
+  const f=await askf("تعديل المنتج",[{k:"name",l:"اسم المنتج",v:p.name},{k:"price",l:"رأس المال",t:"number",v:p.price}]); if(!f) return;
   const price=parseFloat(f.price); if(!f.name.trim()||isNaN(price)||price<0) return toast("بيانات غير صحيحة","err");
   if(await run(sb.from("products").update({name:f.name.trim(),price}).eq("id",id),"تم الحفظ")) refresh();
 }
 async function toggleProduct(id,v){ if(await run(sb.from("products").update({active:v}).eq("id",id))) refresh() }
+
+
+/* ================= المسوّقات ================= */
+function vMarketers(){
+  $("main").innerHTML = `
+  <div class="card"><h2>إضافة مسوّقة</h2>
+    <div class="row"><input id="mn" placeholder="اسم المسوّقة"><input id="mg" placeholder="المحافظة"><input id="mph" placeholder="رقم الموبايل" dir="ltr" inputmode="tel"></div>
+    <button class="b" onclick="addMarketer()">إضافة</button></div>
+  <div class="card"><h2>المسوّقات (${D.marketers.length})</h2>${D.marketers.length?`<div class="tw"><table>
+   <tr><th>الاسم</th><th>المحافظة</th><th>الموبايل</th><th></th></tr>
+   ${D.marketers.map(m=>`<tr style="${m.active?"":"opacity:.45"}"><td>${esc(m.name)}</td><td>${esc(m.governorate)}</td><td dir="ltr">${esc(m.phone)}</td>
+    <td style="white-space:nowrap"><button class="b s o" onclick="editMarketer('${m.id}')">تعديل</button> <button class="b s o" onclick="toggleMarketer('${m.id}',${!m.active})">${m.active?"إيقاف":"تفعيل"}</button></td></tr>`).join("")}
+  </table></div>`:'<p class="mut">لا توجد مسوّقات بعد</p>'}</div>`;
+}
+async function addMarketer(){
+  const name=$("mn").value.trim(); if(!name) return toast("أدخل اسم المسوّقة");
+  if(await run(sb.from("marketers").insert({name,governorate:$("mg").value.trim()||null,phone:$("mph").value.trim()||null}),"تمت إضافة المسوّقة")) refresh();
+}
+async function editMarketer(id){
+  const m=D.marketers.find(x=>x.id===id);
+  const f=await askf("تعديل المسوّقة",[{k:"name",l:"الاسم",v:m.name},{k:"gov",l:"المحافظة",v:m.governorate||""},{k:"phone",l:"الموبايل",v:m.phone||"",dir:"ltr"}]); if(!f) return;
+  if(!f.name.trim()) return toast("الاسم مطلوب","err");
+  if(await run(sb.from("marketers").update({name:f.name.trim(),governorate:f.gov.trim()||null,phone:f.phone.trim()||null}).eq("id",id),"تم الحفظ")) refresh();
+}
+async function toggleMarketer(id,v){ if(await run(sb.from("marketers").update({active:v}).eq("id",id))) refresh() }
+
+function vMbal(){
+  const tot=D.mbal.reduce((a,b)=>({e:a.e+Number(b.earned),p:a.p+Number(b.paid),b:a.b+Number(b.balance)}),{e:0,p:0,b:0});
+  $("main").innerHTML = `<div class="card"><h2>أرصدة المسوّقات</h2>
+   <div class="mut" style="margin-bottom:8px">مستحقات الكل: <b>${money(tot.b)}</b> · إجمالي الأرباح: ${money(tot.e)} · المسدَّد: ${money(tot.p)}</div>
+   ${D.mbal.length?`<div class="tw"><table>
+   <tr><th>المسوّقة</th><th>طلبات مُسلَّمة</th><th>الأرباح المستحقة</th><th>المسدَّد</th><th>المتبقي لها</th><th>أرباح بانتظار التسليم</th><th></th></tr>
+   ${D.mbal.map(b=>`<tr><td>${esc(b.name)}</td><td>${b.delivered_count}</td><td>${money(b.earned)}</td><td>${money(b.paid)}</td>
+     <td class="big ${b.balance<0?"neg":""}">${money(b.balance)}</td><td class="mut">${money(b.pending)}</td>
+     <td style="white-space:nowrap"><button class="b s" onclick="payMarketer('${b.marketer_id}')">تسديد دفعة</button> <button class="b s o" onclick="mDetails('${b.marketer_id}')">التفاصيل</button></td></tr>`).join("")}
+   </table></div>`:'<p class="mut">أضف مسوّقات من تبويب «المسوّقات»</p>'}
+   <p class="mut">الربح = سعر البيع − رأس المال، يُحتسب فقط للطلبات <b>المُسلَّمة</b>. المتبقي = الأرباح − الدفعات المسدَّدة لها.</p></div>`;
+}
+async function payMarketer(id){
+  const m=D.marketers.find(x=>x.id===id), b=D.mbal.find(x=>x.marketer_id===id)||{};
+  const f=await askf("تسديد دفعة للمسوّقة "+m.name,[{k:"a",l:"المبلغ (المتبقي لها "+money(b.balance||0)+")",t:"number",ph:"0"},{k:"n",l:"ملاحظة (اختياري)"}],"تسجيل الدفعة"); if(!f) return;
+  const amount=parseFloat(f.a); if(isNaN(amount)||amount<=0) return toast("مبلغ غير صحيح","err");
+  if(amount>Number(b.balance||0)+0.001 && !await askc("المبلغ أكبر من المتبقي لها ("+money(b.balance||0)+"). هل تريد المتابعة؟",{title:"تأكيد الدفعة",ok:"نعم، سجّل"})) return;
+  if(await run(sb.from("marketer_payments").insert({marketer_id:id,amount,note:f.n.trim()||null}),"تم تسجيل الدفعة")) refresh();
+}
+function mDetails(id){
+  const m=D.marketers.find(x=>x.id===id), b=D.mbal.find(x=>x.marketer_id===id)||{};
+  const ords=D.orders.filter(o=>o.marketer_id===id).sort((x,y)=>new Date(y.created_at)-new Date(x.created_at));
+  const pays=D.mpay.filter(p=>p.marketer_id===id);
+  $("modal").innerHTML=`<div class="sheet" style="max-width:720px"><div class="sh-h"><b>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</b><button class="x" onclick="closeStatus()">${ic("x")}</button></div>
+   <div class="mut" style="margin-bottom:8px">الأرباح: <b>${money(b.earned||0)}</b> · المسدَّد: <b>${money(b.paid||0)}</b> · المتبقي: <b>${money(b.balance||0)}</b></div>
+   <h3 style="margin:8px 0 4px">طلباتها</h3>
+   ${ords.length?`<div class="tw"><table><tr><th>#</th><th>الزبون</th><th>الحالة</th><th>رأس المال</th><th>سعر البيع</th><th>الربح</th></tr>
+   ${ords.map(o=>{const p=D.prof[o.id]||{};return `<tr><td>${o.order_no}</td><td>${esc(o.customer_name)}</td><td>${ST[o.status]||o.status}</td><td>${money(p.capital||0)}</td><td>${money(o.items_total)}</td><td class="${o.status==="delivered"?"up":"mut"}">${money(p.profit||0)}</td></tr>`}).join("")}</table></div>`:'<p class="mut">لا توجد طلبات</p>'}
+   <h3 style="margin:12px 0 4px">الدفعات المسدَّدة (${pays.length})</h3>
+   ${pays.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr>${pays.map(p=>`<tr><td>${dt(p.created_at)}</td><td style="font-weight:700">${money(p.amount)}</td><td>${esc(p.note)}</td><td><button class="b s r" onclick="delMPay('${p.id}','${id}')">حذف</button></td></tr>`).join("")}</table>`:'<p class="mut">لا توجد دفعات</p>'}
+   <button class="b" style="width:100%;margin-top:12px" onclick="closeStatus();payMarketer('${id}')">＋ تسديد دفعة جديدة</button></div>`;
+  $("modal").style.display="flex";
+}
+async function delMPay(pid,mid){ if(!await askc("سيزيد المتبقي للمسوّقة بقيمتها.",{title:"حذف الدفعة؟",ok:"حذف",cls:"r"})) return;
+  if(await run(sb.from("marketer_payments").delete().eq("id",pid),"تم الحذف")){ await loadAll(); render(); mDetails(mid) } }
 
 /* ================= الكباتن والمستودعات ================= */
 function vCaptains(){
@@ -630,8 +698,8 @@ function vNew(){
     <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
     <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
-    <div class="row"><select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select></div>
-    <p class="mut" style="margin:4px 0">السعر يُملأ تلقائياً بسعر المنتج المثبت، وتستطيع تعديله لكل بند. الفرق عن المثبت يظهر بجانبه.</p>
+    <div class="row"><select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select><select id="omk" onchange="upd()">${mkOptions("","— بدون مسوّقة —")}</select></div>
+    <p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>
     ${itemRows("orows",true)}<br><br>
     <div id="otot" class="mut"></div><br>
     <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
@@ -648,13 +716,14 @@ function updFor(rid,tid,feeFn){
   });
   const fee=feeFn(), v=sub-lst;
   $(tid).innerHTML=`المنتجات: <b>${money(sub)}</b> + التوصيل: <b>${money(fee)}</b> = <span class="big">${money(sub+fee)}</span>`
-    +(v?`<div>بالسعر المثبت: ${money(lst)} — الفرق: <b class="${v>0?"up":"dn"}">${v>0?"+":""}${money(v)}</b></div>`:"");
+    +`<div>رأس المال: ${money(lst)} — ربح المسوّقة: <b class="${v>0?"up":v<0?"dn":""}">${v>0?"+":""}${money(v)}</b></div>`;
 }
 let EO=null;
 function openEdit(id){
   const o=D.orders.find(x=>x.id===id); EO=o;
   $("modal").innerHTML=`<div class="sheet" style="max-width:720px"><div class="sh-h"><b>تعديل الطلب #${o.order_no}</b><button class="x" onclick="closeEdit()">✕</button></div>
    <div class="row"><input id="en" placeholder="اسم الزبون" value="${esc(o.customer_name)}"><input id="ep" placeholder="رقم الموبايل" dir="ltr" value="${esc(o.customer_phone)}"></div>
+   <div class="row"><select id="emk">${mkOptions(o.marketer_id||"","— بدون مسوّقة —")}</select></div>
    <div class="row"><input id="ea" placeholder="عنوان الزبون" value="${esc(o.customer_address||"")}"><input id="em2" placeholder="رابط الخرائط (اختياري)" dir="ltr" value="${esc(o.map_url||"")}"></div>
    <h3 style="margin:10px 0 4px">بنود الطلب</h3>
    ${itemRows("erows",true)}<br><br><div id="etot" class="mut"></div>
@@ -673,14 +742,14 @@ async function saveEdit(id){
   if(!name||!phone) return toast("اسم الزبون ورقمه مطلوبان");
   if(!items.length) return toast("أضف منتجاً واحداً على الأقل");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
-  if(await run(sb.rpc("edit_order",{p_order:id,p_info:{name,phone,address:$("ea").value.trim(),map_url:$("em2").value.trim()},p_items:items}),"تم تعديل الطلب")){ closeEdit(); refresh() }
+  if(await run(sb.rpc("edit_order",{p_order:id,p_info:{name,phone,address:$("ea").value.trim(),map_url:$("em2").value.trim(),marketer_id:$("emk").value||""},p_items:items}),"تم تعديل الطلب")){ closeEdit(); refresh() }
 }
 async function saveOrder(){
   const name=$("on").value.trim(), phone=$("op").value.trim(), items=readRows("orows");
   if(!name||!phone) return toast("أدخل اسم الزبون ورقم الموبايل");
   if(!items.length) return toast("أضف منتجاً");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
-  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:$("oc").value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null}),"تم إنشاء الطلب")){ tab="orders"; renderNav(); refresh() }
+  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:$("oc").value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:$("omk").value||null}),"تم إنشاء الطلب")){ tab="orders"; renderNav(); refresh() }
 }
 
 /* ================= الطلبات ================= */
@@ -698,6 +767,7 @@ function orderCard(o){
     <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
     ${o.customer_address?`<div>📍 ${esc(o.customer_address)}</div>`:""}
+    ${o.marketer_id?`<div class="mut">🛍️ المسوّقة: <b>${esc(mname(o.marketer_id))}</b> · ربحها: <b class="up">${money((D.prof[o.id]||{}).profit||0)}</b>${o.status==="delivered"?"":" (بعد التسليم)"}</div>`:""}
     <div>${itemsLine(o)}</div>
     <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
     ${Number(o.items_total)!==Number(o.list_total)?`<div class="${o.items_total>o.list_total?"up":"dn"}" style="font-size:13px">فرق عن السعر المثبت (${money(o.list_total)}): <b>${o.items_total>o.list_total?"+":""}${money(o.items_total-o.list_total)}</b></div>`:""}
