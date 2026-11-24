@@ -30,7 +30,7 @@ table{width:100%;border-collapse:collapse}
 th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right}
 th{color:var(--mut);font-size:13px}
 .tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff}
-.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.no_answer{background:#ea580c}.closed{background:#475569}.other{background:#0891b2}.new{background:#64748b}
+.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.in_delivery{background:#2563eb}.no_answer{background:#ea580c}.closed{background:#475569}.other{background:#0891b2}.new{background:#64748b}
 .mut{color:var(--mut);font-size:14px}.neg{color:var(--red);font-weight:700}
 .big{font-size:30px;font-weight:700}
 a.call{color:var(--p);text-decoration:none;font-weight:600}
@@ -47,6 +47,18 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .note{margin-top:6px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:14px}
 .tl{margin-top:6px;font-size:13px;color:var(--mut)}.tl summary{cursor:pointer}
 .tl div{padding:3px 0;border-top:1px dashed var(--bd)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.tile{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:10px 4px;text-align:center;cursor:pointer;font:inherit}
+.tile .i{font-size:20px}.tile .c{font-size:22px;font-weight:700;line-height:1.2}.tile .l{font-size:12px;color:var(--mut)}
+.tile.z{opacity:.45}
+.tile.hot{border-color:var(--amb);background:#fffbeb}
+.grp{background:#fff;border:1px solid var(--bd);border-radius:12px;margin-bottom:12px;scroll-margin-top:60px}
+.grp>summary{padding:13px 14px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:8px;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .n{margin-inline-start:auto;background:#f1f5f9;border-radius:12px;padding:1px 11px;font-size:14px}
+.grp .hint{padding:0 14px 8px;color:var(--mut);font-size:13px}
+.grp .inner{padding:0 10px 4px}.grp .card{background:#fafbfc}
+a.callbtn{display:block;text-align:center;text-decoration:none;background:#fff;color:var(--p);border:1px solid var(--p);padding:11px 16px;border-radius:8px;flex:1 1 90px}
 </style>
 </head>
 <body>
@@ -72,12 +84,12 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 let CUR = "", BIZ = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
-const ST = {new:"جديد", assigned:"قيد التوصيل", no_answer:"لم يتم الرد", closed:"مغلق", other:"ملاحظة أخرى", delivered:"مُسلَّم", cancelled:"ملغي", returned:"مُرجَع"};
-const OPEN = ["assigned","no_answer","closed","other"];
+const ST = {new:"جديد", assigned:"جديد", in_delivery:"قيد التوصيل", no_answer:"لم يتم الرد", closed:"مغلق", other:"ملاحظة أخرى", delivered:"مُسلَّم", cancelled:"ملغي", returned:"مُرجَع"};
+const OPEN = ["assigned","in_delivery","no_answer","closed","other"];
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
 async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
 
-let me=null, D={orders:[],stock:[],payments:[],balance:null,ev:{}}, tab="orders", filter="open";
+let me=null, D={orders:[],stock:[],payments:[],balance:null,ev:{}}, tab="orders", q="";
 
 async function boot(){
   const {data:{session}} = await sb.auth.getSession();
@@ -115,27 +127,58 @@ function go(t){ tab=t; ["orders","stock","acc"].forEach(k=>$("t_"+k).classList.t
 async function refresh(){ await load(); render() }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
 
-function vOrders(){
-  const f=[["open","قيد التوصيل"],["delivered","مُسلَّمة"],["cancelled","ملغية"],["all","الكل"]];
-  const list=D.orders.filter(o=>filter==="all"||(filter==="open"?OPEN.includes(o.status):o.status===filter));
-  $("main").innerHTML = `<div style="display:flex;gap:6px;margin-bottom:10px">
-    <select style="margin:0" onchange="filter=this.value;vOrders()">${f.map(([k,l])=>`<option value="${k}" ${filter===k?"selected":""}>${l}</option>`).join("")}</select>
-    <button class="b o" onclick="refresh()">تحديث</button></div>
-  ${list.map(o=>{const evs=D.ev[o.id]||[];return `<div class="card">
+const GROUPS=[
+ ["assigned","🆕","طلبات جديدة","طلبات وصلتك ولم تستلمها بعد. اضغط «استلمت الطلب» ليصبح قيد التوصيل.",true],
+ ["in_delivery","🚚","قيد التوصيل","طلبات استلمتها وأنت في طريقك لتسليمها.",true],
+ ["no_answer","📵","لم يتم الرد","اتصل بالزبون مجدداً، ثم «إعادة المحاولة» أو سلّم الطلب.",true],
+ ["closed","🔒","مغلق","هاتف الزبون مغلق. أعد المحاولة لاحقاً.",true],
+ ["other","📝","ملاحظات أخرى","طلبات عليها ملاحظة خاصة.",true],
+ ["cancelled","❌","ملغية","يمكنك استرجاع أي طلب ملغي ليعود «جديداً».",false],
+ ["delivered","✅","مُسلَّمة","",false]];
+function oCard(o){
+  const evs=D.ev[o.id]||[], k=o.status;
+  const acts = k==="assigned" ? `<button class="b g" onclick="quick('${o.id}','in_delivery')">✔ استلمت الطلب</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
+   : k==="in_delivery" ? `<button class="b g" onclick="quick('${o.id}','delivered')">✅ تم التسليم</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
+   : (k==="no_answer"||k==="closed"||k==="other") ? `<button class="b" onclick="quick('${o.id}','in_delivery')">🔄 إعادة المحاولة</button><button class="b g" onclick="quick('${o.id}','delivered')">✅ تم التسليم</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
+   : k==="cancelled" ? `<button class="b" onclick="restore('${o.id}')">↩️ استرجاع الطلب</button>` : "";
+  return `<div class="card">
     <div style="display:flex;justify-content:space-between"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]||o.status}</span></div>
-    <div style="margin:6px 0"><a class="call" href="tel:${esc(o.customer_phone)}" dir="ltr">📞 ${esc(o.customer_phone)}</a></div>
     <div>${o.order_items.map(i=>`${esc(i.products?.name)} × ${i.qty}`).join("، ")}</div>
     <div style="margin-top:6px">المطلوب من الزبون: <b>${money(o.total)}</b> <span class="mut">(منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)})</span></div>
     ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
     ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}</div>`:""}
     ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><span class="tag ${e.status}">${ST[e.status]||e.status}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
-    ${OPEN.includes(o.status)?`<div class="acts"><button class="b" onclick="openStatus('${o.id}')">تحديث حالة الطلب</button></div>`:""}
-    ${o.status==="delivered"?`<div class="mut">سُلِّم ${dt(o.delivered_at)}</div>`:""}
-  </div>`}).join("")||'<p class="mut">لا توجد طلبات</p>'}`;
+    <div class="acts"><a class="callbtn" href="tel:${esc(o.customer_phone)}" dir="ltr">📞 ${esc(o.customer_phone)}</a>${acts}</div>
+    ${o.status==="delivered"?`<div class="mut" style="margin-top:6px">سُلِّم ${dt(o.delivered_at)}</div>`:""}
+  </div>`;
 }
+function matches(o){ const t=q.trim().toLowerCase(); return !t||[o.customer_name,o.customer_phone,String(o.order_no)].some(v=>String(v||"").toLowerCase().includes(t)) }
+function vOrders(){
+  const cnt=k=>D.orders.filter(o=>o.status===k).length;
+  $("main").innerHTML = `<div class="tiles">${GROUPS.filter(g=>g[0]!=="delivered").map(([k,ic,l])=>{const n=cnt(k);return `<button class="tile ${n?(k==="assigned"||k==="no_answer"?"hot":""):"z"}" onclick="jump('${k}')"><div class="i">${ic}</div><div class="c">${n}</div><div class="l">${l}</div></button>`}).join("")}</div>
+  <div style="display:flex;gap:6px;margin-bottom:10px"><input id="oq" style="margin:0" placeholder="🔍 بحث بالاسم أو الموبايل أو الرقم" value="${esc(q)}" oninput="q=this.value;drawGroups()"><button class="b o" onclick="refresh()">تحديث</button></div>
+  <div id="groups"></div>`;
+  drawGroups();
+}
+let GO={};
+function drawGroups(){
+  $("groups").innerHTML = GROUPS.map(([k,ic,l,hint,open])=>{
+    const all=D.orders.filter(o=>o.status===k), list=all.filter(matches), lim=k==="delivered"?20:100;
+    const isOpen = ("g_"+k) in GO ? GO["g_"+k] : (open&&all.length>0);
+    return `<details class="grp" id="g_${k}" ontoggle="GO[this.id]=this.open" ${isOpen||(q.trim()&&list.length)?"open":""}><summary><span>${ic}</span>${l}<span class="n">${all.length}</span></summary>
+      ${hint?`<div class="hint">${hint}</div>`:""}
+      <div class="inner">${list.length?list.slice(0,lim).map(oCard).join(""):'<p class="mut" style="padding:0 6px">لا توجد طلبات</p>'}${list.length>lim?`<p class="mut" style="padding:0 6px">يُعرض آخر ${lim} فقط.</p>`:""}</div></details>`}).join("");
+}
+function jump(k){ const d=$("g_"+k); if(!d) return; d.open=true; d.scrollIntoView({behavior:"smooth",block:"start"}) }
+async function quick(id,k){
+  if(k==="delivered"){ if(!confirm("تأكيد تسليم الطلب للزبون؟")) return; if(await run(sb.rpc("deliver_order",{p_order:id,p_note:null}),"تم التسليم")) refresh(); return }
+  if(await run(sb.rpc("set_order_status",{p_order:id,p_status:k,p_note:null}),k==="in_delivery"?"الطلب الآن قيد التوصيل":"تم")) refresh();
+}
+async function restore(id){ if(!confirm("استرجاع هذا الطلب ليعود «جديداً»؟")) return;
+  if(await run(sb.rpc("restore_order",{p_order:id,p_note:null}),"تم استرجاع الطلب")) refresh() }
 
 /* ===== نافذة تحديث الحالة ===== */
-const SOPTS=[{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
+const SOPTS=[{k:"in_delivery",l:"قيد التوصيل",i:"🚚"},{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
 let SM=null;
 function openStatus(id){ const o=D.orders.find(x=>x.id===id); SM={id,k:SOPTS.some(x=>x.k===o.status)?o.status:null,note:o.captain_note||""}; drawStatus() }
 function closeStatus(){ SM=null; $("modal").style.display="none"; $("modal").innerHTML="" }

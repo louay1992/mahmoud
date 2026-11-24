@@ -33,7 +33,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;vertica
 th{color:var(--mut);font-weight:600;font-size:13px}
 .tw{overflow-x:auto}
 .tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff;white-space:nowrap}
-.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.no_answer{background:#ea580c}.closed{background:#475569}.other{background:#0891b2}
+.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.in_delivery{background:#2563eb}.no_answer{background:#ea580c}.closed{background:#475569}.other{background:#0891b2}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .stat{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;cursor:pointer}
 .neg{color:var(--red);font-weight:700}
@@ -91,8 +91,8 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 let CUR = "", ME = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
-const ST = {new: "جديد", assigned: "قيد التوصيل", no_answer: "لم يتم الرد", closed: "مغلق", other: "ملاحظة أخرى", delivered: "مُسلَّم", cancelled: "ملغي", returned: "مُرجَع"};
-const OPEN = ["assigned","no_answer","closed","other"];
+const ST = {new: "جديد", assigned: "مُسند", in_delivery: "قيد التوصيل", no_answer: "لم يتم الرد", closed: "مغلق", other: "ملاحظة أخرى", delivered: "مُسلَّم", cancelled: "ملغي", returned: "مُرجَع"};
+const OPEN = ["assigned","in_delivery","no_answer","closed","other"];
 const MK = {invoice:"إدخال بضاعة", sale:"بيع", return:"مرتجع", adjust:"تسوية جرد", transfer_in:"نقل وارد", transfer_out:"نقل صادر"};
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
 async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
@@ -315,6 +315,7 @@ function orderCard(o){
       ${OPEN.includes(o.status)?`<button class="b s g" style="flex:0 0 auto" onclick="openStatus('${o.id}')">تحديث الحالة</button>`:""}
       ${o.status==="new"?`<button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button>`:""}</div>`:""}
     ${o.status==="delivered"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="returnO('${o.id}')">إرجاع الطلب</button></div>`:""}
+    ${o.status==="cancelled"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="restoreO('${o.id}')">استرجاع الطلب الملغي</button></div>`:""}
   </div>`;
 }
 function renderOrderList(){
@@ -322,6 +323,8 @@ function renderOrderList(){
   const list=D.orders.filter(o=>(orderFilter==="all"||o.status===orderFilter)&&(!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id)].some(v=>String(v||"").toLowerCase().includes(q))));
   $("olist").innerHTML = list.map(orderCard).join("")||'<p class="mut">لا توجد طلبات</p>';
 }
+async function restoreO(id){ if(!confirm("استرجاع هذا الطلب؟")) return;
+  if(await run(sb.rpc("restore_order",{p_order:id,p_note:null}),"تم استرجاع الطلب")) refresh() }
 async function returnO(id){
   if(!confirm("إرجاع هذا الطلب؟ ستُلغى قيمته من رصيد الكابتن.")) return;
   const restock=confirm("هل البضاعة سليمة وتعود لمستودع الكابتن؟\nموافق = تعود للجرد، إلغاء = لا تعود (تالفة)");
@@ -388,7 +391,7 @@ function statement(cid){
 }
 
 /* ================= الرئيسية ================= */
-const GROUPS=[["new","📥","طلبات بلا كابتن",true],["assigned","🚚","قيد التوصيل",true],["no_answer","📵","لم يتم الرد",true],["closed","🔒","مغلق",true],["other","📝","ملاحظة أخرى",true],["delivered","✅","مُسلَّمة",false],["cancelled","❌","ملغية",false],["returned","↩️","مرتجعة",false]];
+const GROUPS=[["new","📥","طلبات بلا كابتن",true],["assigned","🆕","مُسندة (بانتظار استلام الكابتن)",true],["in_delivery","🚚","قيد التوصيل",true],["no_answer","📵","لم يتم الرد",true],["closed","🔒","مغلق",true],["other","📝","ملاحظة أخرى",true],["delivered","✅","مُسلَّمة",false],["cancelled","❌","ملغية",false],["returned","↩️","مرتجعة",false]];
 function vHome(){
   const s=D.stats||{}, low=s.low_stock||[], bs=s.by_status||{};
   const cnt=k=>bs[k]??D.orders.filter(o=>o.status===k).length;
@@ -407,7 +410,7 @@ function vHome(){
 }
 
 /* ================= نافذة تحديث حالة الطلب ================= */
-const SOPTS=[{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
+const SOPTS=[{k:"in_delivery",l:"قيد التوصيل",i:"🚚"},{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
 let SM=null;
 function openStatus(id){ const o=D.orders.find(x=>x.id===id); SM={id,k:SOPTS.some(x=>x.k===o.status)?o.status:null,note:o.captain_note||""}; drawStatus() }
 function closeStatus(){ SM=null; $("modal").style.display="none"; $("modal").innerHTML="" }
