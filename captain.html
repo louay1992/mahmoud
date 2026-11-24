@@ -126,6 +126,15 @@ nav .bd{position:absolute;top:2px;inset-inline-end:calc(50% - 26px);min-width:19
 .oc2 .bar .btn{flex:1 1 0;min-width:0;min-height:50px;font-size:15px;white-space:nowrap;padding:0 8px}
 .oc2 .ib{flex:1;min-height:46px;border-radius:14px;display:grid;place-items:center;border:0;cursor:pointer;text-decoration:none}
 .oc2 .ib.c{background:#e3f8ea;color:#15803d}.oc2 .ib.w{background:#e3f8ea;color:#128c4a}.oc2 .ib.m{background:#e8f0ff;color:#1d4ed8}.oc2 .ib.d{background:#f1f5f9;color:#475569;font-weight:800;font-size:13px}
+.oc2 .r1{align-items:flex-start}.oc2 .nm b{font-size:18px}
+.oc2 .info{margin-top:10px;background:#f7f9fd;border-radius:14px;padding:10px 12px;display:grid;gap:8px}
+.oc2 .ph{display:flex;gap:8px;align-items:center;font-weight:800;font-size:17px;color:#15803d;text-decoration:none}
+.oc2 .ad{display:flex;gap:8px;align-items:flex-start;font-weight:600;line-height:1.55}.oc2 .ad svg{flex:0 0 auto;margin-top:4px;color:#ef4444}
+.oc2 .prods{margin-top:10px;border:1px solid var(--bd,#e5eaf3);border-radius:14px;padding:4px 12px}
+.oc2 .pi{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--bd,#e5eaf3)}
+.oc2 .pi .q{background:#eef3ff;color:var(--p);font-weight:800;border-radius:8px;padding:1px 8px;font-size:13px}.oc2 .pi .pn{flex:1;font-weight:600}.oc2 .pi .pv{font-weight:700;white-space:nowrap}
+.oc2 .sum{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:9px 0 6px;font-size:13px;color:var(--mut);flex-wrap:wrap}.oc2 .sum .tt{font-size:15px;color:#0f172a}.oc2 .sum .tt b{font-size:20px}
+.oc2 .ib.d{flex:1.4;font-size:14px}
 .dsec{background:#f7f9fd;border-radius:14px;padding:12px 14px;margin:10px 0}.dsec .dh{font-weight:800;color:var(--p);margin-bottom:6px}
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .tile{border:0;background:var(--card);border-radius:var(--r);padding:12px 4px;text-align:center;cursor:pointer;box-shadow:var(--sh);transition:transform .15s;position:relative;overflow:hidden}
@@ -513,15 +522,21 @@ function oActs(o){
    : k==="cancelled" ? `<button class="btn btn-p" onclick="restore('${o.id}')">${ic("undo")} استرجاع الطلب</button>` : "";
 }
 function oc2(o){
-  const k=o.status, pp=prPending(o), items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
+  const k=o.status, pp=prPending(o);
+  const items=o.order_items.map(i=>`<div class="pi"><span class="q">×${i.qty}</span><span class="pn">${esc(i.products?.name)}</span><span class="pv">${money(Number(i.unit_price)*i.qty)}</span></div>`).join("");
   return `<article class="oc2 s-${k}">
-    <div class="r1"><span class="no">#${o.order_no}</span><div class="nm"><b>${esc(o.customer_name)}</b><span>${ST[k]} · ${when(o.status_at||o.created_at)}</span></div><div class="amt">${money(o.total)}<small>المطلوب</small></div></div>
-    ${o.customer_address?`<div class="ln ad">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}
-    <div class="ln">${ic("box")}<span>${items}</span></div>
-    ${o.note?`<div class="flag a">${ic("msg")}<div><b>الإداري:</b> ${esc(o.note)}</div></div>`:""}
-    ${o.captain_note&&k!=="delivered"?`<div class="flag">${ic("note")}<div>${esc(o.captain_note)}</div></div>`:""}
-    ${pp?`<div class="flag">${ic("hourglass")}<div>بانتظار موافقة الإداري على تعديل السعر</div></div>`:""}
-    <div class="bar"><div class="ac">${oActs(o)}</div><div class="ic"><a class="ib c" href="tel:${esc(o.customer_phone)}" aria-label="اتصال">${ic("phone")}</a><a class="ib w" href="${waUrl(o)}" target="_blank" rel="noopener" aria-label="واتساب">${ic("wa")}</a>${mapUrl(o)?`<a class="ib m" href="${mapUrl(o)}" target="_blank" rel="noopener" aria-label="الخريطة">${ic("pin")}</a>`:""}<button class="ib d" onclick="openOrder('${o.id}')" aria-label="تفاصيل">⋯</button></div></div>
+    <div class="r1"><span class="no">#${o.order_no}</span><div class="nm"><b>${esc(o.customer_name)}</b><span>أُنشئ ${when(o.created_at)}</span></div>
+      <div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
+    <div class="info">
+      <a class="ph" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
+      ${o.customer_address?`<div class="ad">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:'<div class="ad mut">لا يوجد عنوان مسجّل</div>'}
+    </div>
+    <div class="prods">${items}
+      <div class="sum"><span>منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)}</span><span class="tt">المطلوب: <b>${money(o.total)}</b></span></div></div>
+    ${o.note?`<div class="flag a">${ic("msg")}<div><b>ملاحظة الإداري</b> <span class="mut">· ${when(admNoteAt(o))}</span><br>${esc(o.note)}</div></div>`:""}
+    ${o.captain_note&&k!=="delivered"?`<div class="flag">${ic("note")}<div><b>ملاحظتك</b> <span class="mut">· ${when(o.captain_note_at||o.status_at)}</span><br>${esc(o.captain_note)}</div></div>`:""}
+    ${pp?`<div class="flag">${ic("hourglass")}<div>بانتظار موافقة الإداري على تعديل السعر (${money(pp.old_total)} ← ${money(pp.new_total)})</div></div>`:""}
+    <div class="bar"><div class="ac">${oActs(o)}</div><div class="ic"><a class="ib w" href="${waUrl(o)}" target="_blank" rel="noopener" aria-label="واتساب">${ic("wa")}</a>${mapUrl(o)?`<a class="ib m" href="${mapUrl(o)}" target="_blank" rel="noopener" aria-label="الخريطة">${ic("pin")}</a>`:""}<button class="ib d" onclick="openOrder('${o.id}')" aria-label="تفاصيل">التفاصيل</button></div></div>
   </article>`;
 }
 function oDetail(o){
