@@ -1383,3 +1383,6 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 -- v20: warehouses.governorate + orders.governorate؛ create_order(p_governorate)، edit_order يحدّث المحافظة، staff_lookups يعيد warehouses.
 
 -- v21: customers archive by phone (norm_phone(), table customers, trigger trg_customer on orders insert; RLS select = is_admin()).
+
+-- v22: merchant cost. products.cost, order_item_capital.cost (snapshot via trg_item_capital; preserved by edit_order),
+-- admin_profit_items() (security definer, is_admin()) feeds the profitability tab.

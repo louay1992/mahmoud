@@ -229,6 +229,7 @@ tr:last-child td{border-bottom:0}
 .dlg2{flex:1;min-width:130px;display:flex;flex-direction:column;gap:5px;font-size:13px}.dlg2>div{display:flex;align-items:center;gap:6px}.dlg2 i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}.dlg2 b{margin-right:auto}.dlg2 small{color:#64748b;min-width:34px;text-align:left}
 .hb{margin-bottom:10px}.hl{display:flex;justify-content:space-between;font-size:13.5px;gap:8px}.ht{height:9px;background:#f1f5f9;border-radius:6px;overflow:hidden;margin:4px 0 2px}.ht>div{height:100%;border-radius:6px}
 @media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}.sgrid{grid-template-columns:1fr}}
+.pfl{flex:1;display:flex;flex-direction:column;gap:2px}.pfl small{color:#64748b;font-size:11px}.flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;justify-content:center}.flow>div{flex:1 1 90px;background:#fff;border-radius:12px;padding:8px 10px;text-align:center;min-width:0}.flow>div small{display:block;color:#64748b;font-size:11px}.flow>div b{font-size:14px;word-break:break-word}.flow>div.rem{background:#ccfbf1}.flow>i{align-self:center;font-style:normal;font-weight:800;color:#64748b}
 </style>
 </head>
 <body>
@@ -439,7 +440,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
 const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
@@ -578,7 +579,7 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,stats:vStats,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -587,25 +588,26 @@ let PSV="list";
 function vProducts(){
   if(PSV==="add"){
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="PSV='list';vProducts();scrollTo({top:0})">→ رجوع للمنتجات</button>
-  <div class="card"><h2>إضافة منتج</h2><p class="mut" style="margin:0 0 8px">السعر هنا هو <b>رأس مال المسوّقة</b>. أي زيادة عليه عند تسجيل الطلب تُضاف لرصيدها.</p>
-    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="رأس المال"></div>
+  <div class="card"><h2>إضافة منتج</h2><p class="mut" style="margin:0 0 8px"><b>رأس مال المسوّقة</b>: ما تدفعه المسوّقة للإدارة، وأي زيادة عليه عند البيع تُضاف لرصيدها.<br><b>رأس مال التاجر</b>: تكلفة المنتج الحقيقية عليك. الفرق بينهما هو ربح الإدارة.</p>
+    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="رأس مال المسوّقة"><input id="pc" type="number" min="0" step="0.01" placeholder="رأس مال التاجر (التكلفة)"></div>
     <button class="b" onclick="addProduct()">إضافة</button></div>`; return }
   $("main").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0">المنتجات (${D.products.length})</h2><button class="b s" onclick="PSV='add';vProducts();scrollTo({top:0})">＋ إضافة منتج</button></div>
   ${D.products.length?D.products.map(p=>`<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;${p.active?"":"opacity:.5"}">
-    <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="mut" style="font-size:13px">رأس المال: <b>${money(p.price)}</b>${p.active?"":" · موقوف"}</div></div>
+    <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="mut" style="font-size:13px">للمسوّقة: <b>${money(p.price)}</b> · للتاجر: <b>${money(p.cost||0)}</b> · هامش الإدارة: <b class="${Number(p.price)-Number(p.cost||0)>0?"up":"dn"}">${money(Number(p.price)-Number(p.cost||0))}</b>${Number(p.cost||0)===0?' <span style="color:#b45309">⚠ بلا رأس مال تاجر</span>':""}${p.active?"":" · موقوف"}</div></div>
     <button class="b s o" onclick="editProduct('${p.id}')">تعديل</button>
     <button class="b s o" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"إيقاف":"تفعيل"}</button></div>`).join(""):`<div class="card mut" style="text-align:center">لا توجد منتجات بعد. اضغط "إضافة منتج".</div>`}`;
 }
 async function addProduct(){
-  const name=$("pn").value.trim(), price=parseFloat($("pp").value);
-  if(!name||isNaN(price)) return toast("أدخل الاسم والسعر");
-  if(await run(sb.from("products").insert({name,price}),"تمت الإضافة")){ PSV="list"; refresh() }
+  const name=$("pn").value.trim(), price=parseFloat($("pp").value), cost=parseFloat($("pc").value||"0");
+  if(!name||isNaN(price)) return toast("أدخل الاسم ورأس مال المسوّقة");
+  if(isNaN(cost)||cost<0) return toast("رأس مال التاجر غير صحيح","err");
+  if(await run(sb.from("products").insert({name,price,cost}),"تمت الإضافة")){ PSV="list"; refresh() }
 }
 async function editProduct(id){
   const p=D.products.find(x=>x.id===id);
-  const f=await askf("تعديل المنتج",[{k:"name",l:"اسم المنتج",v:p.name},{k:"price",l:"رأس المال",t:"number",v:p.price}]); if(!f) return;
-  const price=parseFloat(f.price); if(!f.name.trim()||isNaN(price)||price<0) return toast("بيانات غير صحيحة","err");
-  if(await run(sb.from("products").update({name:f.name.trim(),price}).eq("id",id),"تم الحفظ")) refresh();
+  const f=await askf("تعديل المنتج",[{k:"name",l:"اسم المنتج",v:p.name},{k:"price",l:"رأس مال المسوّقة",t:"number",v:p.price},{k:"cost",l:"رأس مال التاجر (التكلفة عليك)",t:"number",v:p.cost||0}],"حفظ",{msg:"التعديل يسري على الطلبات الجديدة فقط، والطلبات السابقة تحتفظ بأسعارها."}); if(!f) return;
+  const price=parseFloat(f.price), cost=parseFloat(f.cost||"0"); if(!f.name.trim()||isNaN(price)||price<0||isNaN(cost)||cost<0) return toast("بيانات غير صحيحة","err");
+  if(await run(sb.from("products").update({name:f.name.trim(),price,cost}).eq("id",id),"تم الحفظ")) refresh();
 }
 async function toggleProduct(id,v){ if(await run(sb.from("products").update({active:v}).eq("id",id))) refresh() }
 
@@ -1100,6 +1102,92 @@ async function saveOrder(){
   if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:($("oc")||{}).value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null,p_governorate:($("og")||{}).value||null}),"تم إنشاء الطلب")){ if(ACC.role==="staff"){ await refresh(); go(can("view_orders")?"orders":"new") } else { tab="orders"; renderNav(); refresh() } }
 }
 
+/* ================= الربحية ================= */
+let PF={from:"",to:"",prod:"",mk:"",cap:"",gov:"",basis:"delivered",sort:"adm",preset:"30"}, PDATA=null, PLOAD=0;
+const PPRE=[["today","اليوم"],["7","7 أيام"],["30","30 يوماً"],["month","هذا الشهر"],["lmonth","الشهر الماضي"],["year","هذه السنة"],["all","الكل"]];
+const iso=d=>dayK(d);
+function setPre(k){ const n=new Date(), t=new Date(n.getFullYear(),n.getMonth(),n.getDate()); PF.preset=k; PF.to=iso(t);
+  if(k==="today") PF.from=iso(t); else if(k==="7") PF.from=iso(new Date(t-6*864e5)); else if(k==="30") PF.from=iso(new Date(t-29*864e5));
+  else if(k==="month") PF.from=iso(new Date(n.getFullYear(),n.getMonth(),1));
+  else if(k==="lmonth"){ PF.from=iso(new Date(n.getFullYear(),n.getMonth()-1,1)); PF.to=iso(new Date(n.getFullYear(),n.getMonth(),0)) }
+  else if(k==="year") PF.from=iso(new Date(n.getFullYear(),0,1)); else { PF.from=""; PF.to="" }
+  drawProfit() }
+async function vProfit(){
+  if(!PF.from&&PF.preset==="30") setPre("30");
+  $("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">الربحية</h2><div id="pfbar"></div></div><div id="pbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
+  const my=++PLOAD;
+  const {data,error}=await sb.rpc("admin_profit_items");
+  if(my!==PLOAD||tab!=="profit") return;
+  if(error){ $("pbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
+  PDATA=data.map(r=>({...r,qty:Number(r.qty),unit_price:Number(r.unit_price),capital:Number(r.capital),cost:Number(r.cost),delivery_fee:Number(r.delivery_fee)})); drawProfit();
+}
+function pfBar(){
+  const opt=(arr,sel,empty)=>`<option value="">${empty}</option>`+arr.map(([v,l])=>`<option value="${esc(v)}" ${sel===v?"selected":""}>${esc(l)}</option>`).join("");
+  const govs=[...new Set((PDATA||[]).map(r=>r.governorate).filter(Boolean))];
+  $("pfbar").innerHTML=`<div class="chips">${PPRE.map(([k,l])=>`<button class="chip ${PF.preset===k?"on":""}" onclick="setPre('${k}')">${l}</button>`).join("")}</div>
+   <div class="row" style="margin:8px 0 0"><label class="pfl"><small>من تاريخ</small><input type="date" value="${PF.from}" onchange="PF.from=this.value;PF.preset='custom';drawProfit()"></label><label class="pfl"><small>إلى تاريخ</small><input type="date" value="${PF.to}" onchange="PF.to=this.value;PF.preset='custom';drawProfit()"></label></div>
+   <div class="row" style="margin:6px 0 0"><select onchange="PF.prod=this.value;drawProfit()">${opt(D.products.map(p=>[p.id,p.name]),PF.prod,"كل المنتجات")}</select>
+    <select onchange="PF.mk=this.value;drawProfit()"><option value="">كل المسوّقات</option><option value="none" ${PF.mk==="none"?"selected":""}>بدون مسوّقة</option>${D.marketers.map(m=>`<option value="${m.id}" ${PF.mk===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
+   <div class="row" style="margin:6px 0 0"><select onchange="PF.cap=this.value;drawProfit()">${opt(D.captains.map(c=>[c.id,c.name]),PF.cap,"كل الكباتن")}</select>
+    <select onchange="PF.gov=this.value;drawProfit()">${opt(govs.map(g=>[g,g]),PF.gov,"كل المحافظات")}</select>
+    <select onchange="PF.basis=this.value;drawProfit()"><option value="delivered" ${PF.basis==="delivered"?"selected":""}>الأرباح المحقَّقة (المسلَّمة)</option><option value="all" ${PF.basis==="all"?"selected":""}>تقديري (يشمل الطلبات المفتوحة)</option></select></div>
+   <div style="margin-top:8px"><button class="chip" onclick="PF={from:'',to:'',prod:'',mk:'',cap:'',gov:'',basis:'delivered',sort:'adm',preset:'30'};setPre('30')">إعادة ضبط ✕</button> <button class="chip" onclick="pfCsv()">⬇ تصدير Excel/CSV</button></div>`;
+}
+function pfRows(){
+  const f=PF.from?new Date(PF.from+"T00:00:00").getTime():0, t=PF.to?new Date(PF.to+"T23:59:59").getTime():Infinity;
+  const open=["new","assigned","in_delivery","no_answer","closed","other"];
+  return (PDATA||[]).filter(r=>{
+    const isD=r.status==="delivered"; if(PF.basis==="delivered"&&!isD) return false; if(!isD&&!open.includes(r.status)) return false;
+    const ts=new Date(isD?(r.delivered_at||r.created_at):r.created_at).getTime(); if(ts<f||ts>t) return false;
+    return (!PF.prod||r.product_id===PF.prod)&&(!PF.mk||(PF.mk==="none"?!r.marketer_id:r.marketer_id===PF.mk))&&(!PF.cap||r.captain_id===PF.cap)&&(!PF.gov||r.governorate===PF.gov) });
+}
+const pv=r=>({rev:r.qty*r.unit_price,cst:r.qty*r.cost,adm:r.qty*(r.capital-r.cost),mkp:r.qty*(r.unit_price-r.capital)});
+function pfAgg(rows,keyF,labF){ const m={}; rows.forEach(r=>{ const k=keyF(r); const x=m[k]=m[k]||{k,l:labF(r),q:0,o:new Set(),rev:0,cst:0,adm:0,mkp:0}; const v=pv(r); x.q+=r.qty; x.o.add(r.order_id); x.rev+=v.rev; x.cst+=v.cst; x.adm+=v.adm; x.mkp+=v.mkp }); return Object.values(m).sort((a,b)=>b[PF.sort]-a[PF.sort]) }
+const sg2=v=>`<span class="${v>0?"up":v<0?"dn":""}">${v>0?"+":""}${money(v)}</span>`;
+function pfTable(title,rows,first){
+  if(!rows.length) return "";
+  return `<div class="card"><h3 style="margin:0 0 8px">${title}</h3><div class="tw"><table><tr><th>${first}</th><th>طلبات</th><th>قطع</th><th>المبيعات</th><th>التكلفة</th><th>ربح الإدارة</th><th>الهامش</th><th>ربح المسوّقات</th></tr>
+  ${rows.map(x=>`<tr><td><b>${x.l}</b></td><td>${x.o.size}</td><td>${x.q}</td><td>${money(x.rev)}</td><td>${money(x.cst)}</td><td><b>${sg2(x.adm)}</b></td><td>${pct(x.adm,x.rev)}%</td><td>${money(x.mkp)}</td></tr>`).join("")}</table></div></div>`;
+}
+function drawProfit(){
+  if(!PDATA||!$("pbody")) return; pfBar();
+  const rows=pfRows(), T=rows.reduce((a,r)=>{const v=pv(r);a.rev+=v.rev;a.cst+=v.cst;a.adm+=v.adm;a.mkp+=v.mkp;return a},{rev:0,cst:0,adm:0,mkp:0});
+  const ords=new Set(rows.map(r=>r.order_id)), fee=rows.filter(r=>r.first_item).reduce((a,r)=>a+r.delivery_fee,0);
+  const noCost=D.products.filter(p=>Number(p.cost||0)===0&&p.active);
+  const est=PF.basis==="all";
+  const kp=(ic2,l,v,c,sub)=>`<div class="kp"><div class="kpi" style="background:${c}">${ic2}</div><small>${l}</small><b>${v}</b>${sub?`<small>${sub}</small>`:""}</div>`;
+  // daily
+  const dayOf=r=>dayK(r.status==="delivered"?(r.delivered_at||r.created_at):r.created_at), dm={};
+  rows.forEach(r=>{const k=dayOf(r),v=pv(r),x=dm[k]=dm[k]||{a:0,m:0}; x.a+=v.adm; x.m+=v.mkp});
+  const ks=Object.keys(dm).sort(), mx=Math.max(1,...ks.map(k=>Math.max(dm[k].a,0)+Math.max(dm[k].m,0)));
+  const chart=ks.length?`<div class="bars">${ks.map((k,i)=>{const x=dm[k],a=Math.max(x.a,0),m=Math.max(x.m,0);return `<div class="bc" title="${k}\nربح الإدارة ${money(x.a)}\nربح المسوّقات ${money(x.m)}"><div class="bb"><div style="width:100%;height:${(a+m)/mx*100}%;display:flex;flex-direction:column;justify-content:flex-end;min-height:2px"><div style="height:${(a+m)?m/(a+m)*100:0}%;background:#f9a8d4;border-radius:4px 4px 0 0"></div><div style="height:${(a+m)?a/(a+m)*100:0}%;background:#0f766e"></div></div></div>${ks.length<=14||i%Math.ceil(ks.length/10)===0?`<span>${k.slice(8)}/${k.slice(5,7)}</span>`:"<span></span>"}</div>`}).join("")}</div><div class="lg"><span><i style="background:#0f766e"></i>ربح الإدارة</span><span><i style="background:#f9a8d4"></i>ربح المسوّقات</span></div>`:'<p class="mut">لا بيانات ضمن هذا الفلتر</p>';
+  // product aggs and orders
+  const byP=pfAgg(rows,r=>r.product_id,r=>esc(r.product_name)), byM=pfAgg(rows,r=>r.marketer_id||"-",r=>r.marketer_id?esc(mname(r.marketer_id)):"بدون مسوّقة"),
+    byC=pfAgg(rows,r=>r.captain_id||"-",r=>r.captain_id?esc(cname(r.captain_id)):"غير مُسنَد"), byG=pfAgg(rows,r=>r.governorate||"-",r=>esc(r.governorate||"غير محددة"));
+  const byMonth=pfAgg(rows,r=>dayOf(r).slice(0,7),r=>dayOf(r).slice(0,7)).sort((a,b)=>a.k<b.k?1:-1);
+  const byO={}; rows.forEach(r=>{const x=byO[r.order_id]=byO[r.order_id]||{n:r.order_no,adm:0,rev:0,mk:r.marketer_id,st:r.status}; const v=pv(r); x.adm+=v.adm; x.rev+=v.rev});
+  const oa=Object.values(byO).sort((a,b)=>b.adm-a.adm), top=oa.slice(0,5), worst=oa.filter(x=>x.adm<=0).slice(-5);
+  const sortBtn=`<div class="chips" style="margin:0 0 10px"><span class="mut">ترتيب الجداول حسب:</span>${[["adm","ربح الإدارة"],["rev","المبيعات"],["mkp","ربح المسوّقات"],["q","القطع"]].map(([k,l])=>`<button class="chip ${PF.sort===k?"on":""}" onclick="PF.sort='${k}';drawProfit()">${l}</button>`).join("")}</div>`;
+  $("pbody").innerHTML=`${noCost.length?`<div class="card" style="background:#fffbeb;border:1px solid #fcd34d"><b>⚠ ${noCost.length} منتج بلا «رأس مال التاجر»</b><div class="mut" style="font-size:13px">أدخل تكلفتها من تبويب «المنتجات» ليظهر ربحك بدقة؛ حالياً يُحسب ربحك عليها كامل رأس مال المسوّقة: ${noCost.slice(0,5).map(p=>esc(p.name)).join("، ")}${noCost.length>5?"…":""}</div></div>`:""}
+   <div class="kpis">
+    ${kp("💎",est?"ربح الإدارة المتوقع":"صافي ربح الإدارة",`<span class="${T.adm<0?"dn":"up"}">${money(T.adm)}</span>`,"#ccfbf1","هامش "+pct(T.adm,T.rev)+"% من المبيعات")}
+    ${kp("💰","إجمالي المبيعات",money(T.rev),"#e0f2fe",ords.size+" طلب")}
+    ${kp("🏭","تكلفة البضاعة (رأس مال التاجر)",money(T.cst),"#e0e7ff","")}
+    ${kp("🛍️","أرباح المسوّقات",money(T.mkp),"#fce7f3","من فروقات البيع")}
+    ${kp("🚚","أجور التوصيل (للكباتن)",money(fee),"#ffedd5","ليست من ربحك")}
+    ${kp("📊","متوسط ربح الطلب",money(ords.size?T.adm/ords.size:0),"#dcfce7","للإدارة")}</div>
+   <div class="card"><h3 style="margin:0 0 4px">📈 الربح اليومي</h3><div class="mut" style="font-size:12px;margin-bottom:8px">${est?"حسب تاريخ إنشاء الطلب":"حسب تاريخ التسليم"} · ربح الإدارة = رأس مال المسوّقة − رأس مال التاجر · ربح المسوّقة = سعر البيع − رأس مال المسوّقة</div>${chart}</div>
+   <div class="card" style="background:#f8fafc"><h3 style="margin:0 0 8px">🧮 كيف يُحسب الربح؟</h3><div class="flow"><div><small>سعر البيع للزبون</small><b>${money(T.rev)}</b></div><i>−</i><div><small>حصة المسوّقات</small><b>${money(T.mkp)}</b></div><i>−</i><div><small>تكلفة البضاعة</small><b>${money(T.cst)}</b></div><i>=</i><div class="rem"><small>صافي ربحك</small><b>${money(T.adm)}</b></div></div></div>
+   ${sortBtn}${pfTable("🏆 الربح حسب المنتج",byP,"المنتج")}${pfTable("🛍️ الربح حسب المسوّقة",byM,"المسوّقة")}${pfTable("🚚 الربح حسب الكابتن",byC,"الكابتن")}${pfTable("📍 الربح حسب المحافظة",byG,"المحافظة")}${pfTable("🗓️ الربح الشهري",byMonth,"الشهر")}
+   <div class="sgrid">${top.length?`<div class="card"><h3 style="margin:0 0 8px">⭐ أربح الطلبات</h3>${top.map(x=>`<div class="dr"><span class="dl">#${x.n}${x.mk?" · "+esc(mname(x.mk)):""}</span><span class="dv2">${sg2(x.adm)}</span></div>`).join("")}</div>`:""}${worst.length?`<div class="card"><h3 style="margin:0 0 8px">⚠ طلبات بلا ربح أو بخسارة</h3>${worst.map(x=>`<div class="dr"><span class="dl">#${x.n}</span><span class="dv2">${sg2(x.adm)}</span></div>`).join("")}</div>`:""}</div>`;
+}
+function pfCsv(){
+  const rows=pfRows(); if(!rows.length) return toast("لا بيانات للتصدير");
+  const h=["رقم الطلب","الحالة","التاريخ","المنتج","المسوّقة","الكابتن","المحافظة","الكمية","سعر البيع","رأس مال المسوّقة","رأس مال التاجر","المبيعات","التكلفة","ربح الإدارة","ربح المسوّقة"];
+  const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const lines=[h.map(q).join(",")].concat(rows.map(r=>{const v=pv(r);return [r.order_no,ST[r.status]||r.status,dayK(r.status==="delivered"?(r.delivered_at||r.created_at):r.created_at),r.product_name,r.marketer_id?mname(r.marketer_id):"",r.captain_id?cname(r.captain_id):"",r.governorate||"",r.qty,r.unit_price,r.capital,r.cost,v.rev,v.cst,v.adm,v.mkp].map(q).join(",")}));
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv;charset=utf-8"})); a.download="profit-"+dayK(new Date())+".csv"; document.body.appendChild(a); a.click(); a.remove(); toast("تم تنزيل الملف","ok");
+}
 /* ================= إحصائيات عامة ================= */
 let STP="30", SDATA=null, SLOAD=0;
 const SPER=[["today","اليوم"],["7","7 أيام"],["30","30 يوماً"],["month","هذا الشهر"],["all","الكل"]];
