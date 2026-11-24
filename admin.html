@@ -710,7 +710,17 @@ async function setCapPw(id){
   try{ const j=await run2(callSetPw(id,p)); toast(j.created?"تم إنشاء حساب الدخول وتعيين كلمة المرور":"تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
 const run2=async p=>{ document.body.classList.add("busy"); try{ return await p } finally{ document.body.classList.remove("busy") } };
+let EWID=null;
 function vWarehouses(){
+  if(CV==="editw"){
+    const w=D.warehouses.find(x=>x.id===EWID); if(!w){ CV="list"; return vWarehouses() }
+    $("main").innerHTML = backBtn("vWarehouses")+`<div class="card"><h2>تعديل المستودع</h2>
+    <div class="row"><input id="ewn" value="${esc(w.name)}" placeholder="اسم المستودع"><select id="ewg">${govOptions(w.governorate||"","— محافظة المستودع —")}</select></div>
+    <div class="row"><select id="ewc">${capOptions(w.captain_id||"","— بدون كابتن —")}</select></div>
+    ${w.is_main?'<p class="mut">المستودع الرئيسي: إذا ربطت به كابتناً تُخصم مبيعاته من هنا.</p>':""}
+    <button class="b" onclick="saveWarehouse('${w.id}')">حفظ التعديلات</button></div>`;
+    return;
+  }
   if(CV==="addw"){
     $("main").innerHTML = backBtn("vWarehouses")+`<div class="card"><h2>إضافة مستودع</h2>
     <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع حلب)"><select id="wg">${govOptions("","— محافظة المستودع —")}</select></div>
@@ -722,8 +732,8 @@ function vWarehouses(){
   <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">المستودعات (${D.warehouses.length})</h2>
     <button class="b s" style="flex:0 0 auto" onclick="CV='addw';vWarehouses();scrollTo({top:0})">+ إضافة مستودع</button></div>
   ${D.warehouses.length?`<div class="tw"><table>
-   <tr><th>المستودع</th><th>المحافظة</th><th>الكابتن المرتبط</th></tr>
-   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td><select onchange="setWhGov('${w.id}',this.value)">${govOptions(w.governorate||"","— بدون —")}</select></td><td><select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select></td></tr>`).join("")}
+   <tr><th>المستودع</th><th>المحافظة</th><th>الكابتن المرتبط</th><th></th></tr>
+   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td>${w.governorate?esc(w.governorate):'<span class="mut">—</span>'}</td><td>${w.captain_id?esc(cname(w.captain_id)):'<span class="mut">—</span>'}</td><td><button class="b s o" onclick="EWID='${w.id}';CV='editw';vWarehouses();scrollTo({top:0})">تعديل</button></td></tr>`).join("")}
   </table></div>`:'<p class="mut">لا توجد مستودعات بعد</p>'}</div>`;
 }
 async function addCaptain(){
@@ -747,7 +757,14 @@ async function addWarehouse(){
   const name=$("wn").value.trim(); if(!name) return toast("أدخل اسم المستودع");
   if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null,governorate:$("wg").value||null}),"تمت الإضافة")){ CV="list"; refresh() }
 }
-async function setWhGov(id,g){ if(await run(sb.from("warehouses").update({governorate:g||null}).eq("id",id),"تم حفظ المحافظة")) refresh() }
+async function saveWarehouse(id){
+  const w=D.warehouses.find(x=>x.id===id), name=$("ewn").value.trim(), gov=$("ewg").value||null, cap=$("ewc").value||null;
+  if(!name) return toast("أدخل اسم المستودع","err");
+  if(cap){ const other=D.warehouses.find(x=>x.captain_id===cap&&x.id!==id);
+    if(other){ if(!await askc("الكابتن <b>"+esc(cname(cap))+"</b> مرتبط حالياً بمستودع «"+esc(other.name)+"». سيُفصل عنه ويُربط بهذا المستودع، وبعدها تُخصم مبيعاته من هنا. متابعة؟",{title:"نقل ربط الكابتن",ok:"نعم، انقله"})) return;
+      if(!await run(sb.from("warehouses").update({captain_id:null}).eq("id",other.id))) return } }
+  if(await run(sb.from("warehouses").update({name,governorate:gov,captain_id:cap}).eq("id",id),"تم حفظ التعديلات")){ CV="list"; refresh() }
+}
 async function linkWarehouse(id,cap){
   if(cap){ const other=D.warehouses.find(w=>w.captain_id===cap&&w.id!==id);
     if(other){ if(!await askc("الكابتن <b>"+esc(cname(cap))+"</b> مرتبط حالياً بمستودع «"+esc(other.name)+"». سيُفصل عنه ويُربط بهذا المستودع، وبعدها تُخصم مبيعاته من هنا. متابعة؟",{title:"نقل ربط الكابتن",ok:"نعم، انقله"})){ refresh(); return }
