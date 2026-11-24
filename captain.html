@@ -114,12 +114,14 @@ async function load(){
     sb.from("captain_balances").select("*").limit(1),
     sb.from("settings").select("*"),
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(1000),
+    sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
   ]);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
   D.orders=r[0].data||[]; D.stock=(r[1].data||[]).sort((a,b)=>(a.products?.name||"").localeCompare(b.products?.name||"","ar"));
   D.payments=r[2].data||[]; D.balance=(r[3].data||[])[0]||null;
   const st=Object.fromEntries((r[4].data||[]).map(x=>[x.key,x.value])); CUR=st.currency||""; BIZ=st.business_name||""; D.settings=st;
   $("hname").textContent="🚚 "+me.name+(BIZ?" — "+BIZ:"");
+  D.pr={}; (r[6].data||[]).forEach(x=>{ (D.pr[x.order_id]=D.pr[x.order_id]||[]).push(x) });
   D.ev={}; (r[5].data||[]).forEach(e=>(D.ev[e.order_id]=D.ev[e.order_id]||[]).push(e));
   const n=D.orders.filter(o=>OPEN.includes(o.status)).length; $("t_orders").textContent="طلباتي"+(n?" ("+n+")":"");
 }
@@ -149,7 +151,8 @@ function oCard(o){
     ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
     ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}</div>`:""}
     ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><span class="tag ${e.status}">${ST[e.status]||e.status}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
-    <div class="acts"><a class="callbtn" href="tel:${esc(o.customer_phone)}" dir="ltr">📞 ${esc(o.customer_phone)}</a>${acts}${(D.settings.captain_can_edit_price==="true"&&OPEN.includes(k))?`<button class="b o" onclick="openPrices('${o.id}')">💲 تعديل السعر</button>`:""}</div>
+    <div class="acts"><a class="callbtn" href="tel:${esc(o.customer_phone)}" dir="ltr">📞 ${esc(o.customer_phone)}</a>${acts}${(D.settings.captain_can_edit_price==="true"&&OPEN.includes(k))?`<button class="b o" onclick="openPrices('${o.id}')">💲 تعديل السعر</button>`:""}${(OPEN.includes(k)&&!prPending(o))?`<button class="b o" onclick="openPriceReq('${o.id}')">📝 طلب تعديل سعر</button>`:""}</div>
+    ${prBox(o)}
     ${o.status==="delivered"?`<div class="mut" style="margin-top:6px">سُلِّم ${dt(o.delivered_at)}</div>`:""}
   </div>`;
 }
@@ -171,6 +174,32 @@ function drawGroups(){
       <div class="inner">${list.length?list.slice(0,lim).map(oCard).join(""):'<p class="mut" style="padding:0 6px">لا توجد طلبات</p>'}${list.length>lim?`<p class="mut" style="padding:0 6px">يُعرض آخر ${lim} فقط.</p>`:""}</div></details>`}).join("");
 }
 function jump(k){ const d=$("g_"+k); if(!d) return; d.open=true; d.scrollIntoView({behavior:"smooth",block:"start"}) }
+function prPending(o){ return (D.pr[o.id]||[]).find(x=>x.status==="pending") }
+function prBox(o){
+  const l=(D.pr[o.id]||[])[0]; if(!l) return "";
+  const lines=l.items.map(i=>`${esc(i.name)}: ${money(i.old)} ← <b>${money(i.new)}</b>`).join("<br>");
+  const st={pending:["⏳ طلب تعديل السعر بانتظار موافقة الإداري","#fff7e0"],approved:["✅ وافق الإداري على تعديل السعر","#e6f7ec"],rejected:["❌ رفض الإداري تعديل السعر","#fdeaea"]}[l.status];
+  if(l.status!=="pending"&&(Date.now()-new Date(l.decided_at))>3*864e5) return "";
+  return `<div style="background:${st[1]};border-radius:8px;padding:8px;margin-top:8px;font-size:13px"><b>${st[0]}</b><br>${lines}<div class="mut">السبب: ${esc(l.reason)}</div>${l.admin_note?`<div>ملاحظة الإداري: ${esc(l.admin_note)}</div>`:""}</div>`;
+}
+function openPriceReq(id){
+  const o=D.orders.find(x=>x.id===id);
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>طلب تعديل سعر — طلب #${o.order_no}</b><button class="x" onclick="closeStatus()">✕</button></div>
+   <p class="mut" style="margin:0 0 8px">اكتب السعر المطلوب لكل منتج وسبب الطلب، وسيصل للإداري للموافقة.</p>
+   ${o.order_items.map(i=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><div style="flex:1"><b>${esc(i.products?.name)}</b> × ${i.qty}<div class="mut">السعر الحالي: ${money(i.unit_price)}</div></div>
+     <input class="pp" style="max-width:120px;margin:0" data-id="${i.id}" data-old="${i.unit_price}" data-list="${i.list_price}" data-q="${i.qty}" type="number" min="0" step="0.01" value="${i.unit_price}" oninput="pricesTotal()"></div>`).join("")}
+   <div id="pm_t" class="mut" style="margin:6px 0"></div>
+   <textarea id="pm_note" rows="2" placeholder="سبب طلب التعديل (مطلوب)"></textarea>
+   <button class="b" style="width:100%" onclick="sendPriceReq('${id}')">إرسال الطلب للإداري</button></div>`;
+  $("modal").style.display="flex"; pricesTotal();
+}
+async function sendPriceReq(id){
+  const note=$("pm_note").value.trim(); if(!note) return toast("اكتب سبب طلب التعديل");
+  const all=[...document.querySelectorAll(".pp")].map(e=>({item_id:e.dataset.id,unit_price:parseFloat(e.value),old:parseFloat(e.dataset.old)}));
+  if(all.some(p=>isNaN(p.unit_price)||p.unit_price<0)) return toast("سعر غير صالح");
+  const ch=all.filter(p=>p.unit_price!==p.old); if(!ch.length) return toast("لم تغيّر أي سعر");
+  if(await run(sb.rpc("request_price_change",{p_order:id,p_prices:ch.map(({item_id,unit_price})=>({item_id,unit_price})),p_reason:note}),"تم إرسال الطلب للإداري")){ closeStatus(); refresh() }
+}
 function openPrices(id){
   const o=D.orders.find(x=>x.id===id);
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>تعديل سعر الطلب #${o.order_no}</b><button class="x" onclick="closeStatus()">✕</button></div>

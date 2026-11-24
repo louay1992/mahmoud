@@ -157,6 +157,7 @@ async function loadAll(){
     sb.from("settings").select("*"),
     sb.rpc("dashboard_stats"),
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(2000),
+    sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
   ];
   const r = await Promise.all(q);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
@@ -164,6 +165,7 @@ async function loadAll(){
   D.settings = Object.fromEntries((r[10].data || []).map(x => [x.key, x.value]));
   D.stats = r[11].data || null;
   D.ev = {}; (r[12].data || []).forEach(e => (D.ev[e.order_id] = D.ev[e.order_id] || []).push(e));
+  D.prs = r[13].data || []; D.pr = {}; D.prs.forEach(x => (D.pr[x.order_id] = D.pr[x.order_id] || []).push(x));
   CUR = D.settings.currency || "";
   const biz = D.settings.business_name || "إدارة كباتن التوصيل";
   $("hbiz").textContent = "📦 " + biz; document.title = biz;
@@ -173,9 +175,9 @@ const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
 const TABS = [["home","الرئيسية"],["orders","الطلبات"],["new","طلب جديد"],["stock","المخزون"],["accounts","المستحقات"],["captains","الكباتن والمستودعات"],["products","المنتجات"],["settings","الإعدادات"]];
-function renderNav(){ $("nav").innerHTML = TABS.map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${l}</button>`).join("") }
+function renderNav(){ $("nav").innerHTML = TABS.map(([k,l])=>{const n=k==="home"?(D.prs||[]).filter(x=>x.status==="pending").length:0;return `<button class="${tab===k?"on":""}" onclick="go('${k}')">${l}${n?` <span class="tag" style="background:#e53935;color:#fff">${n}</span>`:""}</button>`}).join("") }
 function go(k){ if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); render() }
-async function refresh(){ await loadAll(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
+async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,products:vProducts})[tab]() }
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -394,6 +396,7 @@ function orderCard(o){
     <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
     ${Number(o.items_total)!==Number(o.list_total)?`<div class="${o.items_total>o.list_total?"up":"dn"}" style="font-size:13px">فرق عن السعر المثبت (${money(o.list_total)}): <b>${o.items_total>o.list_total?"+":""}${money(o.items_total-o.list_total)}</b></div>`:""}
     ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
+    ${(D.pr[o.id]||[]).filter(x=>x.status==="pending").map(prItem).join("")}
     ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}</div>`:""}
     ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><span class="tag ${e.status}">${ST[e.status]||e.status}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
     ${o.status==="new"||OPEN.includes(o.status)?`<div class="row" style="margin:8px 0 0">
@@ -495,6 +498,7 @@ function vHome(){
     <div class="stat" style="cursor:default"><div class="mut">سُلِّم اليوم</div><div class="big">${s.delivered_today??0}</div><div class="mut">مبيعات: ${money(s.sales_today)}</div></div>
     <div class="stat" onclick="go('accounts')"><div class="mut">مستحق على الكباتن</div><div class="big">${money(s.owed_total)}</div></div>
     <div class="stat" onclick="go('new')"><div class="mut">＋ طلب جديد</div><div class="big">&nbsp;</div></div></div>
+  ${prCard()}
   <div class="card"><h2>كل الطلبات</h2>
     <div class="chips" id="hchips"></div>
     <div class="row"><input id="hq" placeholder="بحث: الزبون، الموبايل، رقم الطلب" value="${esc(HF.q)}" oninput="HF.q=this.value;drawHome()">
@@ -531,6 +535,28 @@ function drawHome(){
     +(body||`<tr><td colspan="${cols}" class="mut">لا توجد طلبات مطابقة</td></tr>`);
 }
 let OD=null;
+function prItem(x){
+  const o=D.orders.find(z=>z.id===x.order_id)||{};
+  return `<div style="background:#fff7e0;border:1px solid #f0d78a;border-radius:8px;padding:8px;margin:8px 0">
+    <b>📝 طلب تعديل سعر — #${o.order_no||""} ${esc(o.customer_name||"")}</b> <span class="mut">(${esc(cname(x.captain_id))} · ${dt(x.created_at)})</span>
+    <div style="margin-top:4px">${x.items.map(i=>`${esc(i.name)} × ${i.qty}: ${money(i.old)} ← <b>${money(i.new)}</b> <span class="${i.new>i.old?"up":"dn"}">(${i.new>i.old?"+":""}${money((i.new-i.old)*i.qty)})</span>`).join("<br>")}</div>
+    <div class="mut">السبب: ${esc(x.reason)}</div>
+    <div class="row" style="margin:8px 0 0"><button class="b s g" style="flex:0 0 auto" onclick="decidePR('${x.id}',true)">✔ موافقة</button><button class="b s r" style="flex:0 0 auto" onclick="decidePR('${x.id}',false)">✖ رفض</button></div></div>`;
+}
+function prCard(){
+  const l=(D.prs||[]).filter(x=>x.status==="pending");
+  return l.length?`<div class="card" style="border:2px solid #f0b429"><h2>🔔 طلبات تعديل الأسعار (${l.length})</h2>${l.map(prItem).join("")}</div>`:"";
+}
+function decidePR(id,ok){
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>${ok?"موافقة على تعديل السعر":"رفض طلب تعديل السعر"}</b><button class="x" onclick="closeStatus()">✕</button></div>
+   <textarea id="pr_note" rows="2" placeholder="${ok?"ملاحظة (اختياري)":"سبب الرفض (يظهر للكابتن)"}"></textarea>
+   <button class="b ${ok?"g":"r"}" style="width:100%" onclick="submitPR('${id}',${ok})">${ok?"تأكيد الموافقة":"تأكيد الرفض"}</button></div>`;
+  $("modal").style.display="flex"; OD=null;
+}
+async function submitPR(id,ok){
+  const note=$("pr_note").value.trim(); if(!ok&&!note) return toast("اكتب سبب الرفض");
+  if(await run(sb.rpc("decide_price_request",{p_id:id,p_approve:ok,p_note:note||null}),ok?"تمت الموافقة وتعديل الطلب":"تم رفض الطلب")){ closeStatus(); refresh() }
+}
 function openOrder(id){
   const o=D.orders.find(x=>x.id===id); if(!o) return closeStatus();
   OD=id;
