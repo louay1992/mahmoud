@@ -272,6 +272,10 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .stk-go{display:flex;align-items:center;gap:12px;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:10px;font:inherit;box-shadow:0 1px 3px #0001}
 .stk-gi{width:42px;height:42px;border-radius:12px;background:#2563eb;color:#fff;display:grid;place-items:center}.stk-gi svg{width:22px;height:22px}
 .stk-go b{display:block;font-size:15px}.stk-go small{color:#64748b;font-size:12px}
+.acr-card{padding:6px 14px}
+.acr{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #eef2f7}.acr:last-child{border:0}
+.acr-i{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;flex:none}.acr-i svg{width:20px;height:20px}
+.acr-l{flex:1;font-size:14px;color:#475569}.acr-v{font-size:17px;font-weight:800}
 </style>
 </head>
 <body>
@@ -722,12 +726,15 @@ function drawStock(){
 function vAcc(){
   const b=D.balance||{};
   const sq=(D.stock||[]).reduce((a,x)=>a+Math.max(0,Number(x.qty)||0),0);
-  $("main").innerHTML = `<button class="stk-go" onclick="go('stock')"><span class="stk-gi">${ic("store")}</span><span style="flex:1;text-align:start"><b>جرد المستودع</b><small>${(D.stock||[]).length} صنف · ${sq} قطعة</small></span><span>‹</span></button><div class="bal"><div style="opacity:.85">المتبقي عليّ تسليمه للإدارة</div><div class="big">${money(b.balance)}</div><div style="opacity:.85;font-size:14px">${b.delivered_count||0} طلب مُسلَّم</div></div>
-   <div class="stats">
-    <div class="stat"><div class="ico" style="background:#2563eb">${ic("box")}</div><div class="mut">قيمة المنتجات المُسلَّمة</div><div class="v">${money(b.delivered_total)}</div></div>
-    <div class="stat"><div class="ico" style="background:#16a34a">${ic("cash")}</div><div class="mut">ما سلّمتُه</div><div class="v">${money(b.paid_total)}</div></div>
-    <div class="stat" style="grid-column:span 2"><div class="ico" style="background:#f59e0b">${ic("truck")}</div><div class="mut">أجور التوصيل التي لي</div><div class="v">${money(b.fees_total)}</div></div></div>
-   <div class="card"><h2>${ic("wallet")} الدفعات التي سلّمتُها</h2>${D.payments.length?D.payments.map(p=>`<div class="row2"><div class="ri" style="background:#16a34a">${ic("check")}</div><div class="m"><b>${dt(p.created_at)}</b>${p.note?`<div class="mut">${esc(p.note)}</div>`:""}</div><b class="v">${money(p.amount)}</b></div>`).join(""):`<div class="empty" style="box-shadow:none"><b>لا توجد دفعات بعد</b></div>`}</div>`;
+  const row=(c,i,l,v)=>`<div class="acr"><div class="acr-i" style="background:${c}">${ic(i)}</div><div class="acr-l">${l}</div><div class="acr-v">${v}</div></div>`;
+  $("main").innerHTML = `<div class="bal"><div style="opacity:.85">المتبقي عليّ تسليمه للإدارة</div><div class="big">${money(b.balance)}</div><div style="opacity:.85;font-size:14px">${b.delivered_count||0} طلب مُسلَّم</div></div>
+   <div class="card acr-card">
+    ${row("#2563eb","box","مجموع المنتجات المسلّمة",money(b.delivered_total))}
+    ${row("#16a34a","cash","مجموع الدفعات المسددة",money(b.paid_total))}
+    ${row("#f59e0b","truck","مجموع أجور التوصيل",money(b.fees_total))}
+   </div>
+   <button class="stk-go" onclick="go('stock')"><span class="stk-gi">${ic("store")}</span><span style="flex:1;text-align:start"><b>جرد المستودع</b><small>${(D.stock||[]).length} صنف · ${sq} قطعة</small></span><span style="font-size:22px;color:#94a3b8">‹</span></button>
+   <div class="card"><h2>${ic("wallet")} الدفعات المسددة</h2>${D.payments.length?D.payments.map(p=>`<div class="row2"><div class="ri" style="background:#16a34a">${ic("check")}</div><div class="m"><b>${dt(p.created_at)}</b>${p.note?`<div class="mut">${esc(p.note)}</div>`:""}</div><b class="v">${money(p.amount)}</b></div>`).join(""):`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>لا توجد دفعات بعد</b></div>`}</div>`;
 }
 
 /* ===== سحب للتحديث ===== */
