@@ -112,6 +112,9 @@ async function populate(page, role, screen) {
         for (const page of [before, after]) await page.setViewportSize({ width: 1440, height: 1000 });
         await before.goto(origin + '/baseline/' + role + '.html'); await after.goto(origin + '/' + role + '.html');
         await populate(before, role, screen); await populate(after, role, screen);
+        // Avoid Chromium's full-page capture resizing only one sticky-header compositor layer.
+        const captureHeight = Math.max(1000, ...await Promise.all([before, after].map(page => page.evaluate(() => document.documentElement.scrollHeight))));
+        for (const page of [before, after]) await page.setViewportSize({ width: 1440, height: captureHeight });
         const a = await before.screenshot({ path: `test-results/${role}-desktop-${screen}-before.png`, fullPage: true });
         const b = await after.screenshot({ path: `test-results/${role}-desktop-${screen}-after.png`, fullPage: true });
         if(Buffer.compare(a,b)!==0){
