@@ -276,6 +276,7 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .acr{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #eef2f7}.acr:last-child{border:0}
 .acr-i{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;flex:none}.acr-i svg{width:20px;height:20px}
 .acr-l{flex:1;font-size:14px;color:#475569}.acr-v{font-size:17px;font-weight:800}
+.acr{cursor:pointer}.acr-ch{color:#94a3b8;font-size:20px}.dayh{display:flex;justify-content:space-between;align-items:center;margin:14px 4px 6px;font-size:13px;color:#475569}.dayh span{font-weight:800;color:#0f172a}
 </style>
 </head>
 <body>
@@ -459,7 +460,7 @@ function detect(prev){
 function render_if_idle(){ if($("modal").style.display==="flex"||document.querySelector(".dlg")) return; if(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; const y=scrollY; render(); scrollTo(0,y) }
 async function refresh(){ await load(); render_if_idle() }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await load(); render(); b.classList.remove("sp"); toast("تم التحديث","ok") }
-function go(t){ tab=t; ["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(t){ tab=t; if(t==="acc")ASUB="";["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
 
 /* ===== الإشعارات ===== */
@@ -723,15 +724,32 @@ function drawStock(){
      <div class="stk-r"><div class="stk-q2" style="color:${C[k]}">${s.qty}</div><span class="stk-b" style="background:${C[k]}1a;color:${C[k]}">${L[k]}</span></div></div>`}).join("")
    :`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>${(D.stock||[]).length?"لا نتائج مطابقة":"لا يوجد جرد مسجَّل"}</b><span>${(D.stock||[]).length?"جرّب تغيير البحث أو الفلتر":"سيضيف الإداري بضاعتك قريباً"}</span></div>`;
 }
+let ASUB="";
+function dayLbl(d){ return new Date(d).toLocaleDateString("ar",{weekday:"long",day:"numeric",month:"long",year:"numeric"}) }
+function dayKey(d){ const x=new Date(d); return x.getFullYear()+"-"+x.getMonth()+"-"+x.getDate() }
+function vAccSub(){
+  const T={orders:"الطلبات المسلّمة",pay:"الدفعات المسددة",fees:"أجور التوصيل"}[ASUB];
+  let items;
+  if(ASUB==="pay") items=(D.payments||[]).map(p=>({t:p.created_at,amt:Number(p.amount)||0,html:`<div class="row2"><div class="ri" style="background:#16a34a">${ic("check")}</div><div class="m"><b>دفعة مسددة</b><div class="mut">${new Date(p.created_at).toLocaleTimeString("ar",{hour:"numeric",minute:"2-digit"})}${p.note?" · "+esc(p.note):""}</div></div><b class="v">${money(p.amount)}</b></div>`}));
+  else items=(D.orders||[]).filter(o=>o.status==="delivered").map(o=>{const t=o.delivered_at||o.status_at||o.created_at,amt=Number(ASUB==="fees"?o.delivery_fee:o.items_total)||0;
+    return {t,amt,html:`<div class="row2" onclick="openOrder('${o.id}')" style="cursor:pointer"><div class="ri" style="background:${ASUB==="fees"?"#f59e0b":"#2563eb"}">${ic(ASUB==="fees"?"truck":"box")}</div><div class="m"><b>#${o.order_no} — ${esc(o.customer_name)}</b><div class="mut">${new Date(t).toLocaleTimeString("ar",{hour:"numeric",minute:"2-digit"})}${ASUB==="fees"?" · أجرة التوصيل":" · قيمة المنتجات"}</div></div><b class="v">${money(amt)}</b></div>`}});
+  items.sort((a,b)=>new Date(b.t)-new Date(a.t));
+  const g=[],idx={}; items.forEach(i=>{const k=dayKey(i.t); if(!(k in idx)){idx[k]=g.length;g.push({t:i.t,l:[],sum:0})} const e=g[idx[k]]; e.l.push(i.html); e.sum+=i.amt});
+  const tot=items.reduce((a,i)=>a+i.amt,0);
+  $("main").innerHTML=`<button class="stk-back" onclick="ASUB='';vAcc()">رجوع إلى حسابي</button>
+   <div class="stk-hero"><div><div class="stk-l">مجموع ${T}</div><div class="stk-n" style="font-size:30px">${money(tot)}</div></div><div class="stk-ic" style="font-size:18px;font-weight:800">${items.length}</div></div>
+   ${g.length?g.map(d=>`<div class="dayh"><b>${dayLbl(d.t)}</b><span>${money(d.sum)}</span></div><div class="card" style="padding:4px 12px">${d.l.join("")}</div>`).join(""):`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>لا توجد بيانات بعد</b></div>`}`;
+}
 function vAcc(){
+  if(ASUB) return vAccSub();
   const b=D.balance||{};
   const sq=(D.stock||[]).reduce((a,x)=>a+Math.max(0,Number(x.qty)||0),0);
-  const row=(c,i,l,v)=>`<div class="acr"><div class="acr-i" style="background:${c}">${ic(i)}</div><div class="acr-l">${l}</div><div class="acr-v">${v}</div></div>`;
+  const row=(c,i,l,v,k)=>`<div class="acr" onclick="ASUB='${k}';vAcc()"><div class="acr-i" style="background:${c}">${ic(i)}</div><div class="acr-l">${l}</div><div class="acr-v">${v}</div><span class="acr-ch">‹</span></div>`;
   $("main").innerHTML = `<div class="bal"><div style="opacity:.85">المتبقي عليّ تسليمه للإدارة</div><div class="big">${money(b.balance)}</div><div style="opacity:.85;font-size:14px">${b.delivered_count||0} طلب مُسلَّم</div></div>
    <div class="card acr-card">
-    ${row("#2563eb","box","مجموع المنتجات المسلّمة",money(b.delivered_total))}
-    ${row("#16a34a","cash","مجموع الدفعات المسددة",money(b.paid_total))}
-    ${row("#f59e0b","truck","مجموع أجور التوصيل",money(b.fees_total))}
+    ${row("#2563eb","box","مجموع الطلبات المسلّمة",money(b.delivered_total),"orders")}
+    ${row("#16a34a","cash","مجموع الدفعات المسددة",money(b.paid_total),"pay")}
+    ${row("#f59e0b","truck","مجموع أجور التوصيل",money(b.fees_total),"fees")}
    </div>
    <button class="stk-go" onclick="go('stock')"><span class="stk-gi">${ic("store")}</span><span style="flex:1;text-align:start"><b>جرد المستودع</b><small>${(D.stock||[]).length} صنف · ${sq} قطعة</small></span><span style="font-size:22px;color:#94a3b8">‹</span></button>
    <div class="card"><h2>${ic("wallet")} الدفعات المسددة</h2>${D.payments.length?D.payments.map(p=>`<div class="row2"><div class="ri" style="background:#16a34a">${ic("check")}</div><div class="m"><b>${dt(p.created_at)}</b>${p.note?`<div class="mut">${esc(p.note)}</div>`:""}</div><b class="v">${money(p.amount)}</b></div>`).join(""):`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>لا توجد دفعات بعد</b></div>`}</div>`;
