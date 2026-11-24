@@ -8,7 +8,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $toolsPath = [System.IO.Path]::GetFullPath($ToolsRoot)
-$env:JAVA_HOME = (Get-ChildItem -LiteralPath (Join-Path $toolsPath 'jdk') -Directory | Select-Object -First 1).FullName
+$jdkDirectory = Join-Path $toolsPath 'jdk'
+if (!(Test-Path -LiteralPath $jdkDirectory)) { Copy-Item -LiteralPath (Join-Path $projectRoot '.tools/jdk') -Destination $jdkDirectory -Recurse }
+$gradleDirectory = Join-Path $toolsPath 'gradle'
+if (!(Test-Path -LiteralPath $gradleDirectory)) { Copy-Item -LiteralPath (Join-Path $projectRoot '.tools/gradle') -Destination $gradleDirectory -Recurse }
+$gradleLauncher = Join-Path $gradleDirectory 'gradle-8.7/bin/gradle.bat'
+$env:JAVA_HOME = (Get-ChildItem -LiteralPath $jdkDirectory -Directory | Select-Object -First 1).FullName
 $env:PATH = "$env:JAVA_HOME/bin;$env:PATH"
 $env:ANDROID_HOME = Join-Path $toolsPath 'android-sdk'
 $env:ANDROID_USER_HOME = Join-Path $toolsPath 'android-user'
@@ -34,15 +39,18 @@ $buildRoot = if ($ExistingBuildRoot) { [System.IO.Path]::GetFullPath($ExistingBu
 if (!$buildRoot.StartsWith($toolsPath + [System.IO.Path]::DirectorySeparatorChar)) { throw 'Build output must be inside the tools directory' }
 $androidRoot = Join-Path $buildRoot 'android'
 if (!$ExistingBuildRoot) {
+& node (Join-Path $projectRoot 'scripts/build-web.cjs')
+if ($LASTEXITCODE -ne 0) { throw 'Unable to prepare bundled offline interface' }
 New-Item -ItemType Directory -Path (Join-Path $androidRoot 'app') -Force | Out-Null
 foreach ($name in @('build.gradle','settings.gradle','gradle.properties')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot "android/$name") -Destination (Join-Path $androidRoot $name)
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'admin.html') -Destination (Join-Path $buildRoot 'admin.html')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'dist') -Destination (Join-Path $buildRoot 'dist') -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot 'android/app/build.gradle') -Destination (Join-Path $androidRoot 'app/build.gradle')
 Copy-Item -LiteralPath $configFile -Destination (Join-Path $androidRoot 'app/google-services.json')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'android/app/src') -Destination (Join-Path $androidRoot 'app/src') -Recurse
-& (Join-Path $toolsPath 'gradle/gradle-8.7/bin/gradle.bat') -p $androidRoot --no-daemon testAdminDebugUnitTest testCaptainDebugUnitTest assembleAdminRelease assembleCaptainRelease
+& $gradleLauncher -p $androidRoot --no-daemon testAdminDebugUnitTest testCaptainDebugUnitTest assembleAdminRelease assembleCaptainRelease
 if ($LASTEXITCODE -ne 0) { throw "Android build failed. Build directory: $buildRoot" }
 }
 $buildTools = Join-Path $env:ANDROID_HOME 'build-tools/34.0.0'

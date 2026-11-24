@@ -63,9 +63,10 @@ async function populate(page, role, screen) {
   try {
     const context = await browser.newContext({ timezoneId: 'Asia/Amman', reducedMotion: 'reduce' });
     await context.route('**/*', route => {
-      if (route.request().url().startsWith(origin + '/')) return route.continue();
-      if (route.request().url().includes('cdn.jsdelivr.net')) return route.fulfill({ contentType: 'application/javascript', body:
+
+      if (route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)) return route.fulfill({ contentType: 'application/javascript', body:
         'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})};' });
+      if (route.request().url().startsWith(origin + '/')) return route.continue();
       return route.abort();
     });
     const errors = [];

@@ -33,7 +33,7 @@ async function populate(page,screen='home'){
   await fs.mkdir('test-results',{recursive:true});browser=await chromium.launch({headless:true});
   const origin='http://127.0.0.1:'+server.address().port,context=await browser.newContext({timezoneId:'Asia/Amman',reducedMotion:'reduce',serviceWorkers:'block'}),errors=[];
   context.on('page',page=>page.on('pageerror',e=>errors.push(e.message)));
-  await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.abort());
+  await context.route('**/*',route=>route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.request().url().startsWith(origin+'/')?route.continue():route.abort());
   for(const width of [320,360,390,430]){
    const page=await context.newPage();await page.setViewportSize({width,height:844});await page.goto(origin+'/admin.html');await populate(page);
    assert.equal(await page.locator('.am-home').count(),1);

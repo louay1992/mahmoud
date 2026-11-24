@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
+import android.net.ConnectivityManager;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
@@ -20,6 +21,7 @@ import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -43,6 +45,8 @@ public class MainActivity extends Activity {
     private LinearLayout errorPanel;
     private NativePushBridge bridge;
     private boolean pageFailed;
+    private volatile boolean useOfflineShell;
+    private OfflineShell offlineShell;
     private Uri launchUrl;
     private final ArrayList<Dialog> previews = new ArrayList<>();
     private String exportText;
@@ -54,6 +58,10 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.WHITE);
         if (Build.VERSION.SDK_INT >= 26) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         bridge = new NativePushBridge(this);
+        offlineShell = new OfflineShell(this, BuildConfig.APP_SCOPE);
+        ConnectivityManager connectivity=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        android.net.NetworkInfo network=connectivity==null?null:connectivity.getActiveNetworkInfo();
+        useOfflineShell=network==null||!network.isConnected();
         launchUrl = appUrl(getIntent().getDataString());
         createScreen();
         if (web == null) return;
@@ -87,6 +95,11 @@ public class MainActivity extends Activity {
                     if (NativeHostPolicy.bridgeAllowed(sourceOrigin, mainFrame, view.getUrl(), BuildConfig.APP_SCOPE)) bridge.message(message.getData(), reply::postMessage);
                 });
         web.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if(request.isForMainFrame() && NativeHostPolicy.appPage(request.getUrl(),BuildConfig.APP_SCOPE)
+                        && "1".equals(request.getUrl().getQueryParameter("__delivery_online"))) useOfflineShell=false;
+                return useOfflineShell && "GET".equals(request.getMethod()) ? offlineShell.response(request.getUrl()) : null;
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return !NativeHostPolicy.ownOrigin(request.getUrl());
                 return navigate(request.getUrl(), request.hasGesture());
@@ -99,7 +112,13 @@ public class MainActivity extends Activity {
                 if (!NativeHostPolicy.appPage(Uri.parse(url), BuildConfig.APP_SCOPE)) { view.stopLoading(); showError("تعذّر فتح هذا الرابط داخل التطبيق"); }
             }
             @Override public void onPageFinished(WebView view, String url) { progress.setVisibility(View.GONE); if (!pageFailed) errorPanel.setVisibility(View.GONE); }
-            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) { if (request.isForMainFrame()) showError("تعذّر الاتصال. تحقق من الإنترنت ثم أعد المحاولة."); }
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if(!request.isForMainFrame())return;
+                if(!useOfflineShell && NativeHostPolicy.appPage(request.getUrl(),BuildConfig.APP_SCOPE)
+                        && offlineShell.assetPath(launchUrl)!=null && error.getErrorCode()!=WebViewClient.ERROR_FAILED_SSL_HANDSHAKE) {
+                    useOfflineShell=true;view.loadUrl(launchUrl.toString());
+                }else showError("تعذّر فتح التطبيق. أعد المحاولة عند توفر اتصال.");
+            }
             @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); showError("تعذّر التحقق من اتصال الموقع الآمن."); }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 root.removeView(view); view.destroy(); web = null; showError("توقف عرض الصفحة. اضغط إعادة المحاولة."); return true;

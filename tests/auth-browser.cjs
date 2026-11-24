@@ -27,7 +27,7 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
   const origin='http://127.0.0.1:'+server.address().port;
   for(const role of ['admin','captain']){
    const context=await browser.newContext();
-   await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:sdk}):route.abort());
+   await context.route('**/*',route=>route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?route.fulfill({contentType:'application/javascript',body:sdk}):route.request().url().startsWith(origin+'/')?route.continue():route.abort());
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(origin+'/'+role+'.html?native=1');
    await page.locator('#em').fill(role==='admin'?'first@example.test':'0944000000');await page.locator('#pw').fill('correct-password');await page.locator('#lbtn').click();

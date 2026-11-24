@@ -4,7 +4,7 @@ test('build IDs are deterministic, embedded in HTML, and detect a stylesheet-onl
  try{
   for(const name of fs.readdirSync('.'))if(/\.(html|js|css)$/.test(name))fs.copyFileSync(name,path.join(root,name));
   for(const name of ['manifest-admin.json','manifest-captain.json'])fs.copyFileSync(name,path.join(root,name));
-  for(const name of ['icons','.well-known'])fs.cpSync(name,path.join(root,name),{recursive:true});
+  for(const name of ['icons','.well-known','vendor'])fs.cpSync(name,path.join(root,name),{recursive:true});
   fs.mkdirSync(path.join(root,'scripts'));fs.copyFileSync('scripts/build-web.cjs',path.join(root,'scripts/build-web.cjs'));
   const build=()=>{execFileSync(process.execPath,[path.join(root,'scripts/build-web.cjs')],{stdio:'pipe'});return JSON.parse(fs.readFileSync(path.join(root,'dist/app-version.json'),'utf8'))};
   const first=build();assert.deepEqual(build(),first);assert.match(first.admin,/^[a-f0-9]{64}$/);

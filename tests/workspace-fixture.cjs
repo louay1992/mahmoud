@@ -2,7 +2,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),http=require('node:http'),{execFileSync}=require('node:child_process');
 const baseline=execFileSync('git',['show','21c4fb8176febdf26e69cd88321ab12457c62854:admin.html'],{encoding:'utf8'});
 async function serve(){const root=process.cwd(),server=http.createServer(async(req,res)=>{try{const name=new URL(req.url,'http://localhost').pathname;if(name==='/before.html'){res.setHeader('content-type','text/html');return res.end(baseline);}const file=path.resolve(root,'.'+name);if(!file.startsWith(root+path.sep))throw Error();res.setHeader('content-type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(await fs.readFile(file));}catch(_){res.writeHead(404);res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));return {server,origin:'http://127.0.0.1:'+server.address().port};}
-async function route(context,origin){await context.route('**/*',r=>r.request().url().startsWith(origin+'/')?r.continue():r.request().url().includes('cdn.jsdelivr.net')?r.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})};'}):r.abort());}
+async function route(context,origin){await context.route('**/*',r=>r.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?r.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})};'}):r.request().url().startsWith(origin+'/')?r.continue():r.abort());}
 async function populate(page,screen='stock'){
  await page.evaluate(screen=>{
   const id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0'),today=dayK(new Date())+'T09:00:00Z';

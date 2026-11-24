@@ -12,7 +12,7 @@ const {chromium}=require('playwright');
   browser=await chromium.launch({headless:true});const origin='http://127.0.0.1:'+server.address().port;
   for(const role of ['admin','captain']){
    const context=await browser.newContext({viewport:{width:390,height:844}});
-   await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.abort());
+   await context.route('**/*',route=>route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.request().url().startsWith(origin+'/')?route.continue():route.abort());
    await context.addInitScript(role=>{
     window.hostCalls=[];window.workerCalls=0;window.browserPermissionCalls=0;let saved=false;
     navigator.serviceWorker.register=async()=>{window.workerCalls++;throw Error('Native apps must not register browser push')};
