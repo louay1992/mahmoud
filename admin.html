@@ -823,10 +823,11 @@ async function addProductsDlg(id){
     const draw=()=>{ const q=nrm(d.querySelector("#pks").value);
       d.querySelector("#pkl").innerHTML=prods.filter(p=>!q||nrm(p.name).includes(q)).map(p=>{const x=st[p.id]||{};
         return `<div class="pkr ${x.on?"on":""}" data-id="${p.id}"><label><input type="checkbox" class="ck" ${x.on?"checked":""}> <span>${esc(p.name)}</span><span class="sb">${staff||p.price===undefined?"":"رأس المال: "+money(p.price)}</span></label>
-        <div class="pkd" style="display:${x.on?"flex":"none"}"><div><small>العدد المطلوب</small><input type="number" class="dq" min="1" step="1" value="${x.q||1}"></div><div><small>سعر البيع</small><input type="number" class="dp" min="0" step="0.01" value="${x.p!==undefined?x.p:(staff||p.price===undefined?"":p.price)}" placeholder="السعر"></div></div></div>`}).join("")||'<p class="mut" style="text-align:center">لا نتائج</p>';
+        <div class="pkd" style="display:flex"><div><small>العدد المطلوب</small><input type="number" class="dq" min="1" step="1" value="${x.q||1}"></div><div><small>سعر البيع</small><input type="number" class="dp" min="0" step="0.01" value="${x.p!==undefined?x.p:(staff||p.price===undefined?"":p.price)}" placeholder="السعر"></div></div></div>`}).join("")||'<p class="mut" style="text-align:center">لا نتائج</p>';
       d.querySelectorAll(".pkr").forEach(row=>{ const pid=row.dataset.id, g=()=>st[pid]=st[pid]||{};
-        row.querySelector(".ck").onchange=e=>{ g().on=e.target.checked; row.classList.toggle("on",e.target.checked); row.querySelector(".pkd").style.display=e.target.checked?"flex":"none" };
-        row.querySelector(".dq").oninput=e=>g().q=e.target.value; row.querySelector(".dp").oninput=e=>g().p=e.target.value }) };
+        const mark=on=>{ g().on=on; row.querySelector(".ck").checked=on; row.classList.toggle("on",on) };
+        row.querySelector(".ck").onchange=e=>mark(e.target.checked);
+        row.querySelector(".dq").oninput=e=>{ g().q=e.target.value; mark(true) }; row.querySelector(".dp").oninput=e=>{ g().p=e.target.value; mark(true) } }) };
     d.querySelector("#pks").oninput=draw; draw();
     d.querySelector("#pkok").onclick=()=>{
       const sel=prods.filter(p=>st[p.id]&&st[p.id].on).map(p=>({id:p.id,q:parseInt(st[p.id].q)||1,p:st[p.id].p}));
