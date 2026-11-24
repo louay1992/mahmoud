@@ -35,7 +35,7 @@ function openDeliveryPushDiagnostics({ client, role, initialLog = '', enable, re
       ${state.error ? `<div style="color:#b91c1c;margin-bottom:10px">${esc(state.error)}</div>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="b btn" id="pdg-ask">1) طلب الإذن</button><button class="b btn" id="pdg-sub">2) تفعيل الاشتراك</button><button class="b btn" id="pdg-local">3) إشعار تجريبي</button>${native ? '<button class="b btn" id="pdg-server">4) اختبار FCM من الخادم</button>' : ''}<button class="b btn" id="pdg-refresh">تحديث الفحص</button><button class="b btn" id="pdg-close">إغلاق</button></div>
       <div style="background:#f1f5f9;border-radius:10px;padding:8px 10px;white-space:pre-wrap;direction:ltr;text-align:left;font-size:12px;min-height:40px">${esc(log.join('\n') || '...')}</div>
-      <div style="margin-top:8px;font-size:11px;direction:ltr;text-align:left;overflow-wrap:anywhere">${esc(state.userAgent)}</div></div>`;
+      <div style="margin-top:8px;font-size:11px;direction:ltr;text-align:left;overflow-wrap:anywhere">${esc(client.native?.embedded ? (state.app_name || 'تطبيق Android') + ' · ' + (state.app_version || 'جارٍ قراءة الإصدار') + ' · Android / FCM' : state.userAgent)}</div></div>`;
     box.querySelector('#pdg-close').onclick = close;
     box.querySelector('#pdg-refresh').onclick = refresh;
     box.querySelector('#pdg-ask').onclick = () => act(async () => {

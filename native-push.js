@@ -1,17 +1,30 @@
-/* The port is supplied by Chrome only after Digital Asset Links validation. */
+/* Native Android host; verified TWA ports remain supported for older installations. */
 class NativeDeliveryPush {
   constructor({ role, session }) {
     this.role = role;
     this.session = session;
+    this.embedded = new URLSearchParams(location.search).get('host') === 'android' || !!globalThis.DeliveryAndroidHost?.postMessage;
     this.expected = new URLSearchParams(location.search).get("native") === "1" ||
-      (typeof document !== "undefined" && document.referrer.startsWith("android-app://app.hhyyw." + role));
+      this.embedded || (typeof document !== "undefined" && document.referrer.startsWith("android-app://app.hhyyw." + role));
     this.state = { permission: "default", configured: false, saved: false };
     this.unbindKey = 'delivery-native-unbind-' + role;
     try { this.unbindPending = globalThis.localStorage?.getItem(this.unbindKey) === '1'; } catch (_) { this.unbindPending = false; }
     this.pending = new Map();
     this.candidates = new Map();
     this.serial = 0;
+    if (this.embedded && globalThis.DeliveryAndroidHost?.postMessage) {
+      const host = globalThis.DeliveryAndroidHost;
+      const adapter = { postMessage: raw => host.postMessage(raw), start() {}, close() { host.onmessage = null; } };
+      host.onmessage = event => {
+        let data; try { data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch (_) { return; }
+        if (data?.type === 'delivery.native.ready') {
+          if (this.validHello(data) && data.host === 'android') this.activate(adapter, data);
+        } else if (this.port === adapter) this.receive(event.data);
+      };
+      Promise.resolve().then(() => host.postMessage(JSON.stringify({type:'hello',version:1,role:this.role}))).catch(error => { this.state.error = error.message; });
+    }
     globalThis.addEventListener("message", event => {
+      if (this.embedded) return;
       if (event.origin !== location.origin || !event.ports?.[0]) return;
       if (event.source && event.source !== globalThis) return;
       let data;
@@ -64,7 +77,7 @@ class NativeDeliveryPush {
   get permission() { return this.state.permission; }
   get enabled() { return this.permission === "granted" && this.state.saved === true; }
   update(data) {
-    for (const key of ["permission", "configured", "saved", "account_id", "error"]) {
+    for (const key of ["permission", "configured", "saved", "account_id", "error", "host", "app_version", "app_name"]) {
       if (Object.hasOwn(data, key)) this.state[key] = data[key];
     }
     if (this.unbindPending) { this.state.saved = false; this.state.account_id = ''; }
@@ -85,13 +98,13 @@ class NativeDeliveryPush {
   async ready() {
     if (this.port) return;
     if (!this.readyPromise) this.readyPromise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.readyPromise = null; reject(new Error("تعذّر الاتصال بتطبيق Android. أعد فتح التطبيق وتحقق من ربط الموقع بشهادة التطبيق.")); }, 15000);
+      const timer = setTimeout(() => { this.readyPromise = null; reject(new Error(this.channelError())); }, 15000);
       this.readyResolve = () => { clearTimeout(timer); resolve(); };
     });
     await this.readyPromise;
   }
   async request(type, payload = {}, { timeout = 35000, waitForChannel = true } = {}) {
-    if (!waitForChannel && !this.port) throw new Error('قناة Android غير متصلة. افتح التطبيق من أيقونته وتحقق من تثبيت نسخة FCM وتحديث Chrome.');
+    if (!waitForChannel && !this.port) throw new Error(this.channelError());
     if (waitForChannel) await this.ready();
     if (type === 'bind' && this.unbindPending) throw new Error('جارٍ فصل الحساب السابق؛ أعد المحاولة');
     const id = String(++this.serial);
@@ -138,7 +151,7 @@ class NativeDeliveryPush {
     return { ...this.state, transport: "Firebase FCM", requestResult: this.permission,
       push: this.port ? this.state.configured : null, active: !!this.port, scope: "/" + this.role,
       subscription: this.state.saved, userAgent: navigator.userAgent,
-      error: this.port ? this.state.error : this.state.error || 'قناة Android غير متصلة. تحقق من تثبيت نسخة APK الداعمة لـ FCM وتحديث Chrome، ثم افتح التطبيق من أيقونته.' };
+      error: this.port ? this.state.error : this.state.error || this.channelError() };
   }
   async inspect() {
     if (!this.port) return this.snapshot();
@@ -147,6 +160,12 @@ class NativeDeliveryPush {
     return this.snapshot();
   }
   async showTest() { return this.request("test", {}, { waitForChannel: false }); }
+  channelError() { return this.embedded ? 'الاتصال الداخلي بإشعارات التطبيق غير جاهز. أغلق التطبيق وأعد فتحه، وتحقق من تثبيت إصدار 1.2.0 أو أحدث.' : 'قناة Android غير متصلة. تحقق من تثبيت نسخة APK الداعمة لـ FCM وتحديث Chrome، ثم افتح التطبيق من أيقونته.'; }
+  async copyText(text) { return this.request('copy', {text}, {timeout:5000,waitForChannel:false}); }
+  async saveCsv(filename, text) {
+    if (text.length > 1000000) throw new Error('حجم التصدير كبير جدًّا؛ اختر فترة أقصر');
+    return this.request('save-csv', {filename,text}, {timeout:180000,waitForChannel:false});
+  }
   async serverTest() {
     const { data: { session } } = await this.session();
     if (!session?.access_token) throw new Error("سجّل الدخول أولاً");

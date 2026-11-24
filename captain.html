@@ -599,7 +599,7 @@ async function ensurePush({strict=false}={}){
   try{
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(!(!!me)) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
-    if(strict && pushClient.native?.expected && !pushClient.native.port) throw new Error("قناة Android غير متصلة. تحقق من نسخة التطبيق وChrome ثم أعد فتحه من أيقونته.");
+    if(strict && pushClient.native?.expected && !pushClient.native.port) throw new Error(pushClient.native.channelError());
     if(pushClient.native?.expected) await pushClient.native.ready();
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(notifState()!=="granted" && !strict) return false;
@@ -881,7 +881,7 @@ $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"passw
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });
 $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
 $("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"; $("t_stock").innerHTML=ic("store")+"<span>جرد المستودع</span>"; $("t_acc").innerHTML=ic("wallet")+"<span>حسابي</span>";
-pushClient.registration().catch(e=>console.warn("push registration",e));
+if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
 boot();
 </script>
 </body>
