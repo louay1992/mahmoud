@@ -381,7 +381,7 @@ function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="captains") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 /* ===== الإشعارات ===== */
@@ -559,33 +559,45 @@ async function delMPay(pid,mid){ if(!await askc("سيزيد المتبقي لل�
   if(await run(sb.from("marketer_payments").delete().eq("id",pid),"تم الحذف")){ await loadAll(); render(); mDetails(mid) } }
 
 /* ================= الكباتن والمستودعات ================= */
+let CV="list";
+const backBtn=`<button class="b s o" style="margin-bottom:10px" onclick="CV='list';vCaptains();scrollTo({top:0})">→ رجوع للكباتن والمستودعات</button>`;
 function vCaptains(){
-  $("main").innerHTML = `
-  <div class="card"><h2>إضافة كابتن توصيل</h2>
+  if(CV==="addc"){
+    $("main").innerHTML = backBtn+`<div class="card"><h2>إضافة كابتن توصيل</h2>
     <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="الموبايل" dir="ltr">
       <input id="cem" type="email" placeholder="بريد دخوله (اختياري الآن)" dir="ltr"><input id="cf" type="number" min="0" step="0.01" placeholder="أجور التوصيل"></div>
-    <button class="b" onclick="addCaptain()">إضافة</button>
-    <p class="mut">لتمكين الكابتن من الدخول لاحقاً: أنشئ له مستخدماً بنفس البريد من Supabase > Authentication > Users.</p></div>
-  <div class="card"><h2>الكباتن</h2><div class="tw"><table>
+    <button class="b" onclick="addCaptain()">حفظ</button>
+    <p class="mut">لتمكين الكابتن من الدخول لاحقاً: أنشئ له مستخدماً بنفس البريد من Supabase > Authentication > Users.</p></div>`;
+    return;
+  }
+  if(CV==="addw"){
+    $("main").innerHTML = backBtn+`<div class="card"><h2>إضافة مستودع</h2>
+    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع إربد)"><select id="wc">${capOptions("","— بدون كابتن —")}</select></div>
+    <button class="b" onclick="addWarehouse()">حفظ</button></div>`;
+    return;
+  }
+  $("main").innerHTML = `
+  <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">الكباتن (${D.captains.length})</h2>
+    <button class="b s" style="flex:0 0 auto" onclick="CV='addc';vCaptains();scrollTo({top:0})">+ إضافة كابتن</button></div>
+  ${D.captains.length?`<div class="tw"><table>
    <tr><th>الاسم</th><th>الموبايل</th><th>البريد</th><th>أجور التوصيل</th><th>المستودع</th><th></th></tr>
    ${D.captains.map(c=>{const w=D.warehouses.find(w=>w.captain_id===c.id);return `<tr style="${c.active?"":"opacity:.45"}">
      <td>${esc(c.name)}</td><td dir="ltr">${esc(c.phone)}</td><td dir="ltr">${esc(c.email)}</td><td>${money(c.delivery_fee)}</td>
      <td>${w?esc(w.name):'<span class="neg">غير مرتبط</span>'}</td>
-     <td><button class="b s o" onclick="editCaptain('${c.id}')">تعديل</button>
+     <td style="white-space:nowrap"><button class="b s o" onclick="editCaptain('${c.id}')">تعديل</button>
      <button class="b s o" onclick="toggleCaptain('${c.id}',${!c.active})">${c.active?"إيقاف":"تفعيل"}</button></td></tr>`}).join("")}
-  </table></div></div>
-  <div class="card"><h2>إضافة مستودع</h2>
-    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع إربد)"><select id="wc">${capOptions("","— بدون كابتن —")}</select></div>
-    <button class="b" onclick="addWarehouse()">إضافة</button></div>
-  <div class="card"><h2>المستودعات</h2><div class="tw"><table>
+  </table></div>`:'<p class="mut">لا يوجد كباتن بعد</p>'}</div>
+  <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">المستودعات (${D.warehouses.length})</h2>
+    <button class="b s" style="flex:0 0 auto" onclick="CV='addw';vCaptains();scrollTo({top:0})">+ إضافة مستودع</button></div>
+  ${D.warehouses.length?`<div class="tw"><table>
    <tr><th>المستودع</th><th>الكابتن المرتبط</th></tr>
    ${D.warehouses.map(w=>`<tr><td>${esc(w.name)}</td><td><select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select></td></tr>`).join("")}
-  </table></div></div>`;
+  </table></div>`:'<p class="mut">لا توجد مستودعات بعد</p>'}</div>`;
 }
 async function addCaptain(){
   const name=$("cn").value.trim(); if(!name) return toast("أدخل الاسم");
   const rec={name, phone:$("cph").value.trim()||null, email:$("cem").value.trim().toLowerCase()||null, delivery_fee:parseFloat($("cf").value)||0};
-  if(await run(sb.from("captains").insert(rec),"تمت الإضافة")) refresh();
+  if(await run(sb.from("captains").insert(rec),"تمت الإضافة")){ CV="list"; refresh() }
 }
 async function editCaptain(id){
   const c=D.captains.find(x=>x.id===id);
@@ -596,7 +608,7 @@ async function editCaptain(id){
 async function toggleCaptain(id,v){ if(await run(sb.from("captains").update({active:v}).eq("id",id))) refresh() }
 async function addWarehouse(){
   const name=$("wn").value.trim(); if(!name) return toast("أدخل اسم المستودع");
-  if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null}),"تمت الإضافة")) refresh();
+  if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null}),"تمت الإضافة")){ CV="list"; refresh() }
 }
 async function linkWarehouse(id,cap){
   if(cap){ const other=D.warehouses.find(w=>w.captain_id===cap&&w.id!==id);
