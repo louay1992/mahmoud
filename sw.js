@@ -21,7 +21,7 @@ self.addEventListener("push", e => {
   let d = {};
   try { d = e.data.json(); } catch (_) { d = { title: "كابتن التوصيل", body: e.data ? e.data.text() : "" }; }
   e.waitUntil(self.registration.showNotification(d.title || "كابتن التوصيل", {
-    body: d.body || "", tag: d.tag || undefined, icon: "/icons/captain-192.png", badge: "/icons/captain-192.png",
+    body: d.body || "", tag: d.tag || undefined, icon: d.icon || "/icons/captain-192.png", badge: d.icon || "/icons/captain-192.png",
     dir: "rtl", lang: "ar", renotify: true, vibrate: [200, 100, 200], data: { url: d.url || "/captain.html" }
   }));
 });

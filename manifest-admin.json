@@ -7,11 +7,40 @@
   "start_url": "/admin.html",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f4f6f8",
+  "background_color": "#0f766e",
   "theme_color": "#0f766e",
   "icons": [
-    {"src": "/icons/admin-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "/icons/admin-512.png", "sizes": "512x512", "type": "image/png"},
-    {"src": "/icons/admin-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "/icons/admin-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/admin-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/admin-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "orientation": "portrait",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "description": "لوحة إدارة كباتن التوصيل: الطلبات والمخزون والحسابات",
+  "shortcuts": [
+    {
+      "name": "طلب جديد",
+      "url": "/admin.html"
+    },
+    {
+      "name": "الطلبات",
+      "url": "/admin.html"
+    }
   ]
 }

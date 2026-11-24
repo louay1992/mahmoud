@@ -35,15 +35,16 @@ Deno.serve(async (req) => {
   const c = await cfg();
   if (req.method === "GET") return json({ key: c.vapid_public });
   if (!c.push_secret || req.headers.get("x-push-secret") !== c.push_secret) return json({ error: "forbidden" }, 403);
-  const { captain_id, title, body, tag } = await req.json();
+  const { captain_id, admins, title, body, tag, url, icon } = await req.json();
   webpush.setVapidDetails("mailto:admin@example.com", c.vapid_public, c.vapid_private);
-  const { data: subs } = await db.from("push_subscriptions").select("*").eq("captain_id", captain_id);
+  const q = db.from("push_subscriptions").select("*");
+  const { data: subs } = admins ? await q.not("admin_email", "is", null) : await q.eq("captain_id", captain_id);
   let sent = 0, removed = 0;
   await Promise.all((subs || []).map(async (s: any) => {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        JSON.stringify({ title, body, tag, url: "/captain.html" }),
+        JSON.stringify({ title, body, tag, url: url || "/captain.html", icon: icon || "/icons/captain-192.png" }),
         { TTL: 86400, urgency: "high" },
       );
       sent++;
