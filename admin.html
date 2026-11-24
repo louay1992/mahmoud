@@ -18,6 +18,8 @@
 <script src="/push-client.js"></script>
 <script src="/app-refresh.js"></script>
 <script src="/admin-mobile.js"></script>
+<script src="/admin-motion.js"></script>
+<script src="/admin-workspace.js"></script>
 <script src="/mobile-ui.js" defer></script>
 <style>
 :root{
@@ -249,6 +251,7 @@ tr:last-child td{border-bottom:0}
 <link rel="stylesheet" href="/mobile.css">
 <link rel="stylesheet" href="/admin-mobile.css">
 <link rel="stylesheet" href="/app-refresh.css">
+<link rel="stylesheet" href="/admin-workspace.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><b>إدارة كباتن التوصيل</b><div class="spin"></div></div>
@@ -292,7 +295,7 @@ const authGate = new DeliverySession("sb-admin-auth");
 let _lc=0,_le=null;
 document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b) return;
   const now=Date.now();
-  if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800)){ e.stopPropagation(); e.preventDefault(); return }
+  if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800&&!b.hasAttribute('data-aw')&&!b.hasAttribute('data-am'))){ e.stopPropagation(); e.preventDefault(); return }
   _le=b; _lc=now },true);
 
 const $ = id => document.getElementById(id);
@@ -339,30 +342,33 @@ let toastT;
 function toast(m, kind){ const t=$("toast"); if(!kind&&/^(خطأ|فشل|غير|اكتب|أدخل|اختر|سعر غير|كمية غير|مبلغ غير|كلمة المرور قصيرة|لم تغيّر|أضف)/.test(m)) kind="err";
   t.className=kind||""; t.innerHTML=(kind==="err"?ic("xc"):kind==="ok"?ic("checkc"):kind==="bell"?ic("bell"):"")+`<span>${esc(m)}</span>`; requestAnimationFrame(()=>t.classList.add("on")); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),3400) }
 let busy=0, lastSelf=0;
+async function timedRead(query,ms=15000){const controller=new AbortController();let timer;try{if(query?.abortSignal)query=query.abortSignal(controller.signal);return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('انتهت مهلة قراءة البيانات'));},ms);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
 async function run(p, ok){ busy++; $("bar").classList.add("on"); lastSelf=Date.now();
   try{ const {error}=await p; if(error){toast("خطأ: "+error.message,"err");return false} if(ok)toast(ok,"ok"); return true }
+  catch(e){toast("تعذّر تأكيد العملية. تحقق من الاتصال والبيانات قبل إعادة المحاولة.","err");return false}
   finally{ if(--busy<=0){ busy=0; $("bar").classList.remove("on") } } }
 
 /* ===== نوافذ الحوار (بديل confirm/prompt) ===== */
 function dlgShell(inner){ const d=document.createElement("div"); d.className="dlg"; d.innerHTML=`<div>${inner}</div>`; document.body.appendChild(d); return d }
+function dismissDialog(d){ globalThis.AdminMotion?.retire(d); d.remove(); globalThis.AdminMotion?.sync(); }
 function askc(msg,o={}){
   return new Promise(res=>{
     const col=o.cls==="r"?"#ef4444":"#16a34a";
     const d=dlgShell(`<div class="di" style="--dc:${col}">${ic(o.cls==="r"?"alert":"checkc")}</div><h3>${o.title||"تأكيد"}</h3><div class="bd2">${msg}</div><div class="btns"><button class="b ${o.cls||"g"}" id="dk">${o.ok||"تأكيد"}</button><button class="b o" id="dc">${o.cancel||"إلغاء"}</button></div>`);
-    const done=v=>{d.remove();res(v)}; d.querySelector("#dk").onclick=()=>done(true); d.querySelector("#dc").onclick=()=>done(false); d.onclick=e=>{if(e.target===d)done(false)};
+    const done=v=>{if(!d.isConnected)return;dismissDialog(d);res(v)}; d.querySelector("#dk").onclick=()=>done(true); d.querySelector("#dc").onclick=()=>done(false); d.onclick=e=>{if(e.target===d)done(false)};
   });
 }
 function ask3(msg,o){ // true / false / null
   return new Promise(res=>{
     const d=dlgShell(`<div class="di" style="--dc:#0f766e">${ic("box")}</div><h3>${o.title}</h3><div class="bd2">${msg}</div><div class="btns"><button class="b g" id="d1">${o.yes}</button><button class="b r" id="d2">${o.no}</button><button class="b o" id="d3">إلغاء</button></div>`);
-    const done=v=>{d.remove();res(v)}; d.querySelector("#d1").onclick=()=>done(true); d.querySelector("#d2").onclick=()=>done(false); d.querySelector("#d3").onclick=()=>done(null);
+    const done=v=>{if(!d.isConnected)return;dismissDialog(d);res(v)}; d.querySelector("#d1").onclick=()=>done(true); d.querySelector("#d2").onclick=()=>done(false); d.querySelector("#d3").onclick=()=>done(null);
   });
 }
 function askf(title,fields,ok="حفظ",o={}){
   return new Promise(res=>{
     const d=dlgShell(`<h3>${title}</h3>${o.msg?`<div class="bd2">${o.msg}</div>`:""}<div class="frm">${fields.map((f,i)=>`<div class="f"><label>${f.l}</label>${f.area?`<textarea id="ff${i}" rows="3" placeholder="${esc(f.ph||"")}">${esc(f.v??"")}</textarea>`:`<input id="ff${i}" type="${f.t||"text"}" ${f.t==="number"?'step="0.01" inputmode="decimal"':""} ${f.dir?`dir="${f.dir}"`:""} placeholder="${esc(f.ph||"")}" value="${esc(f.v??"")}">`}</div>`).join("")}</div>
       <div class="btns"><button class="b ${o.cls||""}" id="dk">${ok}</button><button class="b o" id="dc">إلغاء</button></div>`);
-    const done=v=>{d.remove();res(v)};
+    const done=v=>{if(!d.isConnected)return;dismissDialog(d);res(v)};
     d.querySelector("#dk").onclick=()=>done(Object.fromEntries(fields.map((f,i)=>[f.k,d.querySelector("#ff"+i).value])));
     d.querySelector("#dc").onclick=()=>done(null); d.onclick=e=>{if(e.target===d)done(null)};
     const first=d.querySelector("input,textarea"); first&&setTimeout(()=>first.focus(),50);
@@ -414,13 +420,14 @@ async function logout(){
   if(authGate.exiting || !await askc("هل تريد الخروج من حسابك؟",{title:"تسجيل الخروج",ok:"نعم، خروج",cls:"r"})) return;
   await authGate.logout({auth:sb.auth,detach:()=>dropPush(),reload:()=>location.reload(),lock:()=>{
     ME=""; ACC={role:"none",perms:[]}; showLogin(); $("main").innerHTML="";
+    globalThis.AdminWorkspace?.reset(); D={products:[],captains:[],warehouses:[],stock:[],orders:[],balances:[],payments:[],invoices:[],movements:[],admins:[],settings:{},stats:null,ev:{},marketers:[],mbal:[],mpay:[],prof:{},notifs:[],carriers:[],prs:[],pr:{}}; PDATA=null;SDATA=null;CUS={rows:null,q:""};SHIPS=null;CPAYS=[];
     $("modal").style.display="none"; document.querySelectorAll(".dlg").forEach(d=>d.remove());
     $("em").value=""; $("pw").value=""; $("lbtn").disabled=true;
     Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});
   }});
 }
 
-let firstLoad=true, ALOAD=0;
+let firstLoad=true, ALOAD=0, INITIAL_LOAD_FAILED=false;
 async function loadStaff(initial,{signal}={}){
   const seq=++ALOAD,who=ME;
   const [lk,od,st]=await Promise.all([ can("create_orders")?sb.rpc("staff_lookups"):Promise.resolve({data:null}),
@@ -460,8 +467,9 @@ async function loadAll(initial,{signal}={}){
   ];
   const r = await Promise.all(q.map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
   if(signal?.aborted||seq!==ALOAD||who!==ME||authGate.blocked)return false;
-  if(r.some(x=>x.error)){if(!initial)throw new Error('تعذّر تحميل البيانات');toast('تعذّر تحميل البيانات. حاول مجددًا.','err');return false;}
+  if(r.some(x=>x.error)){if(initial)INITIAL_LOAD_FAILED=true;if(!initial)throw new Error('تعذّر تحميل البيانات');toast('تعذّر تحميل البيانات. حاول مجددًا.','err');return false;}
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
+  INITIAL_LOAD_FAILED=false; globalThis.AdminWorkspace?.observeOrders(D.orders,r[4].data||[]);
   [D.products,D.captains,D.warehouses,D.stock,D.orders,D.balances,D.payments,D.invoices,D.movements,D.admins] = r.slice(0,10).map(x => x.data || []);
   D.warehouses.sort((a,b)=>(b.is_main?1:0)-(a.is_main?1:0)||a.name.localeCompare(b.name,"ar"));
   D.settings = Object.fromEntries((r[10].data || []).map(x => [x.key, x.value]));
@@ -493,11 +501,12 @@ function renderNav(){
   globalThis.AdminMobile?.navigation();
 }
 function openMore(){
+  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.more();
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${visTabs().filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
   globalThis.AdminMobile?.more();
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); const result=render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700); return result }
+function go(k){ if(globalThis.AdminWorkspace?.needsGuard()) return AdminWorkspace.confirmLeave(()=>go(k)); if(!visTabs().some(t=>t[0]===k)&&!(k==='notifs'&&ACC.role==='full'))return; if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); if(!globalThis.AdminWorkspace?.mobile())document.body.classList.add("anim"); const result=render(); globalThis.AdminWorkspace?.afterNavigation(k); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700); return result }
 async function refresh(){ return appRefresh.refresh({force:true,reason:'mutation'}); }
 async function manualRefresh(){ return appRefresh.manual(); }
 /* ===== الإشعارات ===== */
@@ -524,14 +533,16 @@ function nDay(s){ const d=new Date(s), t=new Date(), y=new Date(t.getFullYear(),
   if(d.toDateString()===t.toDateString()) return "اليوم"; if(d.toDateString()===y.toDateString()) return "أمس";
   return d.toLocaleDateString("ar-EG",{weekday:"long",day:"numeric",month:"long"}) }
 function nBadge(){ const c=(D.notifs||[]).filter(nUnread).length; return c?`<i class="nbd">${c>99?"99+":c}</i>`:"" }
-function markRead(){
+let markReadFlight=null;
+async function markRead(){
+  if(markReadFlight)return markReadFlight;
   const ids=(D.notifs||[]).filter(nUnread).map(n=>n.id); if(!ids.length) return;
-  ids.forEach(i=>NU.add(i)); const m=NME();
-  D.notifs.forEach(n=>{ if(ids.includes(n.id)) n.read_by=[...(n.read_by||[]),m] }); initNotifUI();
-  sb.rpc("mark_notifications_read",{p_ids:ids}).then(()=>{},()=>{});
+  const m=NME();
+  markReadFlight=(async()=>{try{const {error}=await sb.rpc("mark_notifications_read",{p_ids:ids});if(error)throw error;if(m!==NME()||authGate.blocked)return;D.notifs.forEach(n=>{if(ids.includes(n.id))n.read_by=[...new Set([...(n.read_by||[]),m])];});initNotifUI();return true;}catch(e){if(m===NME())toast("تعذّر تعليم الإشعارات كمقروءة. حاول مجددًا.","err");return false;}finally{markReadFlight=null;}})();return markReadFlight;
 }
-function markAllRead(){ markRead(); vNotifs() }
+async function markAllRead(){ await markRead(); vNotifs() }
 function vNotifs(){
+  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.notifications();
   const all=D.notifs||[]; (all.filter(nUnread)).forEach(n=>NU.add(n.id));
   const cnt=k=>k==="all"?all.length:k==="unread"?all.filter(n=>NU.has(n.id)).length:all.filter(n=>nCat(n)===k).length;
   const list=all.filter(n=>NF==="all"||(NF==="unread"?NU.has(n.id):nCat(n)===NF));
@@ -560,6 +571,10 @@ async function openPushTarget(){
 function detectNotifs(){
   const key="nseen_"+NME(); let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
   const ids=(D.notifs||[]).map(n=>n.id);
+  if(globalThis.AdminWorkspace?.full()){
+    if(S&&tab!=="notifs")AdminWorkspace.announce(D.notifs.filter(n=>!S.includes(n.id)&&nUnread(n)));
+    try{localStorage.setItem(key,JSON.stringify(ids.slice(0,150)))}catch(e){} initNotifUI();return;
+  }
   if(S&&tab!=="notifs"){ const fresh=D.notifs.filter(n=>!S.includes(n.id)&&nUnread(n)).slice(0,4).reverse();
     fresh.forEach((n,i)=>setTimeout(()=>notify(n.title,n.body.split("\n").slice(0,2).join(" · "),"n"+n.id),i*900)) }
   try{ localStorage.setItem(key,JSON.stringify(ids.slice(0,150))) }catch(e){}
@@ -598,6 +613,7 @@ async function ensurePush({strict=false}={}){
 async function dropPush(){ await pushClient.unsubscribe() }
 /* كشف التغييرات: طلبات تعديل السعر، حالات الطلبات من الكباتن، ملاحظات الكباتن */
 function detectAdmin(){
+  if(globalThis.AdminWorkspace?.full())return;
   const key="adm_seen_"+ME; let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
   const cur={o:{},r:D.prs.map(x=>x.id)}; D.orders.forEach(o=>cur.o[o.id]={s:o.status,n:o.captain_note||""});
   if(S){
@@ -618,19 +634,20 @@ function startLive(){
   const kick=()=>{ clearTimeout(deb); deb=setTimeout(autoRefresh,600) };
   try{ rt=sb.channel("adm-live").on("postgres_changes",{event:"*",schema:"public",table:"orders"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"captain_payments"},kick)
-      .on("postgres_changes",{event:"*",schema:"public",table:"price_requests"},kick).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},kick).subscribe() }catch(e){}
+      .on("postgres_changes",{event:"*",schema:"public",table:"price_requests"},kick).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},payload=>{globalThis.AdminWorkspace?.realtimeNotification(payload.new);kick();}).subscribe() }catch(e){}
 }
 function checkUpdate(){ return appRefresh.checkUpdate(); }
 function applyUpdate(){ return appRefresh.applyUpdate(true); }
 
 
-function render(){ if(tab==="notifs"&&ACC.role!=="staff") return vNotifs(); if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew})[tab](); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+function render(){ if(globalThis.AdminWorkspace?.dispatch())return; if(tab==="notifs"&&ACC.role!=="staff") return vNotifs(); if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew})[tab]?.(); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]?.() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
 /* ================= المنتجات ================= */
 let PSV="list";
 function vProducts(){
+  if(globalThis.AdminWorkspace?.full()&&PSV==='list')return AdminWorkspace.products();
   if(PSV==="add"){
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="PSV='list';vProducts();scrollTo({top:0})">→ رجوع للمنتجات</button>
   <div class="card"><h2>إضافة منتج</h2><p class="mut" style="margin:0 0 8px"><b>رأس مال المسوّقة</b>: ما تدفعه المسوّقة للإدارة، وأي زيادة عليه عند البيع تُضاف لرصيدها.<br><b>رأس مال التاجر</b>: تكلفة المنتج الحقيقية عليك. الفرق بينهما هو ربح الإدارة.</p>
@@ -660,6 +677,7 @@ async function toggleProduct(id,v){ if(await run(sb.from("products").update({act
 /* ================= المسوّقات ================= */
 let MSV="list";
 function vMarketers(){
+  if(globalThis.AdminWorkspace?.full()&&MSV==='list')return AdminWorkspace.people('marketers');
   if(MSV==="add"){
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="MSV='list';vMarketers();scrollTo({top:0})">→ رجوع للمسوّقات</button>
     <div class="card"><h2>إضافة مسوّقة</h2>
@@ -728,6 +746,7 @@ async function payMarketer(id){
   if(await run(sb.from("marketer_payments").insert({marketer_id:id,amount,note:f.n.trim()||null}),"تم تسجيل الدفعة")) refresh();
 }
 function mDetails(id){
+  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.person('marketers',id,'payments');
   const m=D.marketers.find(x=>x.id===id), b=D.mbal.find(x=>x.marketer_id===id)||{};
   const ords=D.orders.filter(o=>o.marketer_id===id).sort((x,y)=>new Date(y.created_at)-new Date(x.created_at));
   const pays=D.mpay.filter(p=>p.marketer_id===id);
@@ -748,6 +767,7 @@ async function delMPay(pid,mid){ if(!await askc("سيزيد المتبقي لل�
 let CV="list";
 const backBtn=(w)=>`<button class="b s o" style="margin-bottom:10px" onclick="CV='list';${w}();scrollTo({top:0})">→ رجوع</button>`;
 function vCaptains(){
+  if(globalThis.AdminWorkspace?.full()&&CV==='list')return AdminWorkspace.people('captains');
   if(CV==="addc"){
     $("main").innerHTML = backBtn("vCaptains")+`<div class="card"><h2>إضافة كابتن توصيل</h2>
     <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="رقم الموبايل (هو اسم المستخدم للدخول)" dir="ltr" inputmode="tel">
@@ -795,6 +815,7 @@ async function setCapPw(id){
 const run2=async p=>{ document.body.classList.add("busy"); try{ return await p } finally{ document.body.classList.remove("busy") } };
 let EWID=null;
 function vWarehouses(){
+  if(globalThis.AdminWorkspace?.full()&&CV==='list')return AdminWorkspace.warehouses();
   if(CV==="editw"){
     const w=D.warehouses.find(x=>x.id===EWID); if(!w){ CV="list"; return vWarehouses() }
     $("main").innerHTML = backBtn("vWarehouses")+`<div class="card"><h2>تعديل المستودع</h2>
@@ -944,7 +965,7 @@ function whStats(w){
 }
 let SV={v:"list",wh:null};
 function sv(v,wh){ SV={v,wh:wh||null}; render(); window.scrollTo(0,0) }
-function vStock(){ ({list:vStockList,wh:vWarehouse,invoice:vInvoice,transfer:vTransfer})[SV.v]() }
+function vStock(){ if(globalThis.AdminWorkspace?.full()&&SV.v==='list')return AdminWorkspace.stock(); if(globalThis.AdminWorkspace?.full()&&SV.v==='wh')return AdminWorkspace.warehouse(); ({list:vStockList,wh:vWarehouse,invoice:vInvoice,transfer:vTransfer})[SV.v]() }
 
 function vStockList(){
   $("main").innerHTML = `<div class="row" style="margin-bottom:12px"><button class="b" onclick="sv('invoice')">＋ فاتورة إدخال بضاعة</button><button class="b o" onclick="sv('transfer')">⇄ نقل بين مستودعين</button></div>
@@ -1075,6 +1096,7 @@ function autoCap(){
   upd();
 }
 function vNew(){
+  if(globalThis.AdminWorkspace?.newOrder())return;
   NOM="delivery";
   $("main").innerHTML = `<div class="card"><h2>تعبئة من رسالة واتساب</h2>
     <p class="mut" style="margin:0 0 8px">الصق رسالة الطلب بالصيغة المحددة وسيُعبَّأ النموذج تلقائياً.</p>
@@ -1095,7 +1117,7 @@ function vNew(){
     <div id="otot" class="mut"></div><br>
     <button class="b mobile-submit" onclick="saveOrder()">إنشاء الطلب</button></div>`;
 }
-function upd(){ updFor("orows","otot",()=>{ if(NOM==="shipping"&&$("ofee")) return parseFloat($("ofee").value)||0; const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)) }
+function upd(){ updFor("orows","otot",()=>{ if(NOM==="shipping"&&$("ofee")) return parseFloat($("ofee").value)||0; const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)); globalThis.AdminWorkspace?.decorateNew(); }
 function updFor(rid,tid,feeFn){
   if(!$(tid)||!$(rid)) return;
   let sub=0,lst=0;
@@ -1144,6 +1166,7 @@ async function saveEdit(id){
   if(await run(sb.rpc("edit_order",{p_order:id,p_info:{name,phone,address:$("ea").value.trim(),map_url:$("em2").value.trim(),marketer_id:$("emk").value||"",governorate:$("eg").value||""},p_items:items}),"تم تعديل الطلب")){ closeEdit(); refresh() }
 }
 async function saveOrder(){
+  if(globalThis.AdminWorkspace?.mobile()&&$('aw-order-form'))return AdminWorkspace.saveNewOrder();
   const name=$("on").value.trim(), phone=$("op").value.trim(), items=readRows("orows");
   if(!name||!phone) return toast("أدخل اسم الزبون ورقم الموبايل");
   if(!items.length) return toast("أضف منتجاً");
@@ -1270,6 +1293,7 @@ const shFilt=()=>{ const isOpen=o=>!["delivered","returned","cancelled"].include
   return (SHIPS||[]).filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):NS(o.ship_status)===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!SHF.mk||(SHF.mk==="none"?!o.marketer_id:o.marketer_id===SHF.mk))&&(!SHF.gov||o.governorate===SHF.gov)&&(!from||new Date(o.created_at).getTime()>=from)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate,mname(o.marketer_id)].some(v=>nrm(v).includes(q)))) };
 function drawCarriers(){
   if(!$("shbody")||!SHIPS) return;
+  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.carriers();
   const rows=D.carriers.map(c=>({c,b:carBal(c.id)})), T=rows.reduce((a,x)=>{a.owed+=x.b.owed;a.pend+=x.b.pend;a.col+=x.b.col;a.fees+=x.b.fees;a.paid+=x.b.paid;return a},{owed:0,pend:0,col:0,fees:0,paid:0});
   $("shbody").innerHTML=`<div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 10px"><h2 style="margin:0">🏢 شركات الشحن</h2><button class="b s" style="flex:0 0 auto" onclick="carEdit()">+ شركة</button></div>
     <div class="capsum"><div class="rem"><small>إجمالي ما لك عند الشركات</small><b class="${T.owed<0?"neg":""}">${money(T.owed)}</b></div><div><small>تحصيل معلّق (شحنات جارية)</small><b>${money(T.pend)}</b></div><div><small>حوّلته الشركات لك</small><b>${money(T.paid)}</b></div></div>
@@ -1358,10 +1382,11 @@ function setPre(k){ const n=new Date(), t=new Date(n.getFullYear(),n.getMonth(),
 async function vProfit(){
   if(!PF.from&&PF.preset==="30") setPre("30");
   $("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">الربحية</h2><div id="pfbar"></div></div><div id="pbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
-  const my=++PLOAD;
-  const {data,error}=await sb.rpc("admin_profit_items");
-  if(my!==PLOAD||tab!=="profit") return;
-  if(error){ $("pbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
+  globalThis.AdminWorkspace?.prepare('الربحية','pbody');
+  const my=++PLOAD,who=ME;
+  const {data,error}=await timedRead(sb.rpc("admin_profit_items"));
+  if(my!==PLOAD||who!==ME||tab!=="profit"||authGate.blocked||!ME) return;
+  if(error){ if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('الربحية','profit'); $("pbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
   PDATA=data.map(r=>({...r,qty:Number(r.qty),unit_price:Number(r.unit_price),capital:Number(r.capital),cost:Number(r.cost),delivery_fee:Number(r.delivery_fee)})); drawProfit();
 }
 function pfBar(){
@@ -1394,11 +1419,12 @@ function pfTable(title,rows,first){
   ${rows.map(x=>`<tr><td><b>${x.l}</b></td><td>${x.o.size}</td><td>${x.q}</td><td>${money(x.rev)}</td><td>${money(x.cst)}</td><td><b>${sg2(x.adm)}</b></td><td>${pct(x.adm,x.rev)}%</td><td>${money(x.mkp)}</td></tr>`).join("")}</table></div></div>`;
 }
 function drawProfit(){
+  if(globalThis.AdminWorkspace?.full()&&PDATA&&$('pbody'))return AdminWorkspace.profit();
   if(!PDATA||!$("pbody")) return; pfBar();
   const rows=pfRows(), T=rows.reduce((a,r)=>{const v=pv(r);a.rev+=v.rev;a.cst+=v.cst;a.adm+=v.adm;a.mkp+=v.mkp;return a},{rev:0,cst:0,adm:0,mkp:0});
   const ords=new Set(rows.map(r=>r.order_id)), fee=rows.filter(r=>r.first_item&&r.fulfillment!=="shipping").reduce((a,r)=>a+r.delivery_fee,0), shipRows=rows.filter(r=>r.first_item&&r.fulfillment==="shipping"), shipCost=shipRows.reduce((a,r)=>a+r.shipping_cost,0);
   const ff=PF.from?new Date(PF.from+"T00:00:00").getTime():0, tt=PF.to?new Date(PF.to+"T23:59:59").getTime():Infinity;
-  const retRows=(PDATA||[]).filter(r=>r.first_item&&r.fulfillment==="shipping"&&r.status==="returned"&&(!PF.ful||PF.ful==="shipping")&&(!PF.mk||(PF.mk==="none"?!r.marketer_id:r.marketer_id===PF.mk))&&(!PF.gov||r.governorate===PF.gov)&&new Date(r.created_at).getTime()>=ff&&new Date(r.created_at).getTime()<=tt), retLoss=PF.basis==="delivered"?retRows.reduce((a,r)=>a+r.shipping_cost,0):0; T.adm-=retLoss;
+  const retRows=(PDATA||[]).filter(r=>r.first_item&&r.fulfillment==="shipping"&&r.status==="returned"&&(!PF.ful||PF.ful==="shipping")&&(!PF.prod||r.product_id===PF.prod)&&(!PF.cap||r.captain_id===PF.cap)&&(!PF.mk||(PF.mk==="none"?!r.marketer_id:r.marketer_id===PF.mk))&&(!PF.gov||r.governorate===PF.gov)&&new Date(r.created_at).getTime()>=ff&&new Date(r.created_at).getTime()<=tt), retLoss=PF.basis==="delivered"?retRows.reduce((a,r)=>a+r.shipping_cost,0):0; T.adm-=retLoss;
   const noCost=D.products.filter(p=>Number(p.cost||0)===0&&p.active);
   const est=PF.basis==="all";
   const kp=(ic2,l,v,c,sub)=>`<div class="kp"><div class="kpi" style="background:${c}">${ic2}</div><small>${l}</small><b>${v}</b>${sub?`<small>${sub}</small>`:""}</div>`;
@@ -1443,17 +1469,19 @@ const pct=(a,b)=>b?Math.round(a/b*100):0;
 const dayK=d=>{const x=new Date(d);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
 async function vStats(){
   $("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">إحصائيات عامة</h2><div class="chips" id="spc"></div><div class="mut" id="sinfo" style="font-size:12px"></div></div><div id="sbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
-  const my=++SLOAD;
+  globalThis.AdminWorkspace?.prepare('إحصائيات عامة','sbody');
+  const my=++SLOAD,who=ME;
   const [o,p,st]=await Promise.all([
     sb.from("orders").select("id,order_no,status,created_at,delivered_at,total,items_total,list_total,delivery_fee,governorate,marketer_id,captain_id,customer_name,customer_phone,order_items(qty,unit_price,list_price,products(name))").order("created_at",{ascending:false}).limit(5000),
     sb.from("order_profits").select("order_id,marketer_id,capital,profit").limit(5000),
-    sb.from("stock").select("qty,warehouse_id,product_id,products(name)")]);
-  if(my!==SLOAD||tab!=="stats") return;
-  if(o.error){ $("sbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
+    sb.from("stock").select("qty,warehouse_id,product_id,products(name)")].map(q=>timedRead(q)));
+  if(my!==SLOAD||who!==ME||tab!=="stats"||authGate.blocked||!ME) return;
+  if(o.error){if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('إحصائيات عامة','stats'); $("sbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
   const pf={}; (p.data||[]).forEach(x=>pf[x.order_id]=x);
-  SDATA={orders:o.data,pf,stock:st.data||[]}; drawStats();
+  SDATA={orders:o.data,pf,stock:st.data||[],pfAvailable:!p.error,stockAvailable:!st.error}; drawStats();
 }
 function drawStats(){
+  if(globalThis.AdminWorkspace?.full()&&SDATA&&$('sbody'))return AdminWorkspace.stats();
   if(!SDATA||!$("sbody")) return;
   $("spc").innerHTML=SPER.map(([k,l])=>`<button class="chip ${STP===k?"on":""}" onclick="STP='${k}';drawStats()">${l}</button>`).join("");
   const now=new Date(), d0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
@@ -1527,9 +1555,9 @@ const normPh=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨�
 let CUS={rows:null,q:""}, CLOAD=0;
 async function vCustomers(){
   $("main").innerHTML=`<div class="card"><h2>العملاء</h2><input id="cq" placeholder="بحث: الاسم أو رقم الموبايل أو المسوّقة" value="${esc(CUS.q)}" oninput="CUS.q=this.value;drawCustomers()"><div id="csum" class="mut" style="margin:8px 0"></div></div><div id="clist"><p class="mut" style="text-align:center">جارٍ التحميل…</p></div>`;
-  const my=++CLOAD;
-  const {data,error}=await sb.from("orders").select("id,order_no,customer_name,customer_phone,marketer_id,status,total,created_at,governorate,order_items(qty,products(name))").order("created_at",{ascending:false}).limit(5000);
-  if(my!==CLOAD||tab!=="customers") return;
+  const my=++CLOAD,who=ME;
+  const {data,error}=await timedRead(sb.from("orders").select("id,order_no,customer_name,customer_phone,marketer_id,status,total,created_at,governorate,order_items(qty,products(name))").order("created_at",{ascending:false}).limit(5000));
+  if(my!==CLOAD||who!==ME||tab!=="customers"||authGate.blocked||!ME) return;
   if(error){ $("clist").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
   const g={};
   data.forEach(o=>{ const k=normPh(o.customer_phone); if(!k) return; (g[k]=g[k]||{phone:k,name:o.customer_name,orders:[]}).orders.push(o) });
@@ -1539,6 +1567,7 @@ async function vCustomers(){
   drawCustomers();
 }
 function drawCustomers(){
+  if(globalThis.AdminWorkspace?.full()&&CUS.rows&&$('clist'))return AdminWorkspace.customers();
   if(!$("clist")||!CUS.rows) return;
   const q=nrm(CUS.q), qd=normPh(CUS.q);
   const rows=CUS.rows.filter(c=>!q||nrm(c.name).includes(q)||(qd&&c.phone.includes(qd))||Object.keys(c.mk).some(id=>nrm(mname(id)).includes(q)));
@@ -1893,7 +1922,7 @@ async function savePrices(id){
 const SOPTS=[{k:"in_delivery",l:"قيد التوصيل",i:"🚚"},{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
 let SM=null;
 function openStatus(id){ const o=D.orders.find(x=>x.id===id); SM={id,k:SOPTS.some(x=>x.k===o.status)?o.status:null,note:o.captain_note||""}; drawStatus() }
-function closeStatus(){ SM=null; OD=null; $("modal").style.display="none"; $("modal").innerHTML="" }
+function closeStatus(){ if($("modal").style.display==='flex')globalThis.AdminMotion?.retire($("modal")); SM=null; OD=null; EO=null; $("modal").style.display="none"; $("modal").innerHTML=""; globalThis.AdminMotion?.sync(); }
 function pickStatus(k){ SM.note=$("sm_note").value; SM.k=k; drawStatus() }
 function drawStatus(){
   const o=D.orders.find(x=>x.id===SM.id);
@@ -1918,6 +1947,7 @@ async function submitStatus(){
 /* ================= الإعدادات ================= */
 let SSEC=null;
 function vSettings(){
+  if(globalThis.AdminWorkspace?.full()&&!SSEC)return AdminWorkspace.settings();
   const st=D.settings;
   const secs={
     biz:`<div class="card"><h2>🏪 بيانات النشاط</h2>
@@ -2011,7 +2041,7 @@ if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn
 const appRefresh=new DeliveryRefresh({
   role:'admin',interval:25000,
   active:()=>!!ME&&!authGate.blocked&&$('app').style.display!=='none'&&$('splash').classList.contains('off'),
-  safe:()=>busy===0&&!(pushClient.native?.pending?.size)&&idle()&&tab!=='new'&&!(tab==='settings'&&SSEC),
+  safe:()=>busy===0&&!(pushClient.native?.pending?.size)&&!globalThis.AdminWorkspace?.hasDraft()&&idle()&&tab!=='new'&&!(tab==='settings'&&SSEC),
   toast,
   fetchData:async({signal,force})=>{
     const screen=tab,result=await loadAll(false,{signal});
@@ -2020,13 +2050,13 @@ const appRefresh=new DeliveryRefresh({
     if(tab!==screen)return false;
     renderNav();
     if(tab==='ship'||tab==='carriers'){const result=await vShip(tab,{quiet:true,signal});return result!==false;}
-    const y=scrollY;
-    if(force||appRefresh.foreground||['home','orders','captains','notifs'].includes(tab)||(tab==='stock'&&SV.v==='list')){
+    const y=scrollY,anchor=globalThis.AdminWorkspace?.captureAnchor();
+    if(force||appRefresh.foreground||['home','orders','captains','marketers','products','notifs'].includes(tab)||(tab==='stock'&&['list','wh'].includes(SV.v))){
       await render();if(force&&OD&&$('modal').style.display==='flex')openOrder(OD);
     }
-    scrollTo({top:y,behavior:'instant'});return true;
+    if(globalThis.AdminWorkspace?.full())AdminWorkspace.restoreAnchor(anchor,y);else scrollTo({top:y,behavior:'instant'});return true;
   },
-  captureView:()=>({owner:ME,tab,orderFilter,orderQuery,orderCap,orderMk,orderPer,orderGrp,shipping:{...SHF},home:{...HF},phone:globalThis.AdminMobile?.viewState(),y:scrollY}),
+  captureView:()=>({owner:ME,tab,orderFilter,orderQuery,orderCap,orderMk,orderPer,orderGrp,shipping:{...SHF},home:{...HF},phone:globalThis.AdminMobile?.viewState(),workspace:globalThis.AdminWorkspace?.viewState(),y:scrollY}),
   restoreView:v=>{
     if(v.owner!==ME)return;
     if(v.orderFilter==='all'||Object.hasOwn(ST,v.orderFilter))orderFilter=v.orderFilter;
@@ -2036,7 +2066,7 @@ const appRefresh=new DeliveryRefresh({
     if(v.shipping&&typeof v.shipping==='object')for(const k of ['st','q','car','mk','gov','per'])if(typeof v.shipping[k]==='string')SHF[k]=v.shipping[k].slice(0,200);
     if(v.home&&typeof v.home==='object')for(const k of ['status','cap','q'])if(typeof v.home[k]==='string')HF[k]=v.home[k].slice(0,200);
     globalThis.AdminMobile?.restoreView(v.phone);
-    if(visTabs().some(t=>t[0]===v.tab)||(v.tab==='notifs'&&ACC.role==='full'))Promise.resolve(go(v.tab)).then(()=>{if(ME===v.owner&&tab===v.tab)requestAnimationFrame(()=>scrollTo({top:Math.max(0,Number(v.y)||0),behavior:'instant'}));}).catch(()=>{});
+    if(visTabs().some(t=>t[0]===v.tab)||(v.tab==='notifs'&&ACC.role==='full'))Promise.resolve(go(v.tab)).then(async()=>{if(ME!==v.owner||tab!==v.tab)return;globalThis.AdminWorkspace?.restoreView(v.workspace);if(globalThis.AdminWorkspace?.full()){await render();if(tab==='stock'&&SV.v==='wh'&&v.workspace?.wh?.tab!=='stock')await AdminWorkspace.loadWarehouse();}if(ME===v.owner&&tab===v.tab)requestAnimationFrame(()=>scrollTo({top:Math.max(0,Number(v.y)||0),behavior:'instant'}));}).catch(()=>{});
   }
 });
 boot();

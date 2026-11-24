@@ -11,6 +11,7 @@
     const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   globalThis.handleNativeBack = () => {
+    if(globalThis.AdminWorkspace?.back())return true;
     const diagnostic=document.getElementById('pdg');if(diagnostic?.closeDiagnostics){diagnostic.closeDiagnostics();return true;}
     const dialog=document.querySelector('.dlg');if(dialog){const cancel=dialog.querySelector('#d3,#dc');if(cancel)cancel.click();else dialog.click();return true;}
     if(document.getElementById('modal')?.style.display==='flex'){closeStatus();return true;}

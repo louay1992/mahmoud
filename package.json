@@ -13,6 +13,8 @@
     "test:diagnostics": "node tests/diagnostics-browser.cjs",
     "test:native-host": "node tests/native-host-browser.cjs",
     "test:admin-mobile": "node tests/admin-mobile-browser.cjs",
+    "test:workspace": "node tests/admin-workspace-browser.cjs",
+    "test:motion": "node tests/admin-motion-browser.cjs",
     "test:refresh": "node tests/refresh-browser.cjs"
   },
   "devDependencies": {
