@@ -130,8 +130,8 @@ async function refresh(){ await load(); render() }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
 
 const GROUPS=[
- ["assigned","🆕","طلبات جديدة","طلبات وصلتك ولم تستلمها بعد. اضغط «استلمت الطلب» ليصبح قيد التوصيل.",true],
- ["in_delivery","🚚","قيد التوصيل","طلبات استلمتها وأنت في طريقك لتسليمها.",true],
+ ["assigned","🆕","طلبات جديدة","طلبات وصلتك حديثاً. اضغط «🚚 قيد التوصيل» عندما تبدأ بتوصيل الطلب.",true],
+ ["in_delivery","🚚","قيد التوصيل","طلبات بدأت توصيلها وأنت في طريقك لتسليمها.",true],
  ["no_answer","📵","لم يتم الرد","اتصل بالزبون مجدداً، ثم «إعادة المحاولة» أو سلّم الطلب.",true],
  ["closed","🔒","مغلق","هاتف الزبون مغلق. أعد المحاولة لاحقاً.",true],
  ["other","📝","ملاحظات أخرى","طلبات عليها ملاحظة خاصة.",true],
@@ -140,7 +140,7 @@ const GROUPS=[
 const itemsLine=o=>o.order_items.map(i=>{const d=Number(i.unit_price)-Number(i.list_price);return `${esc(i.products?.name)} × ${i.qty} @ ${money(i.unit_price)}${d?` <span style="color:${d>0?"#16a34a":"#dc2626"};font-size:12px">(سعر المنتج ${money(i.list_price)})</span>`:""}`}).join("<br>");
 function oCard(o){
   const evs=D.ev[o.id]||[], k=o.status;
-  const acts = k==="assigned" ? `<button class="b g" onclick="quick('${o.id}','in_delivery')">✔ استلمت الطلب</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
+  const acts = k==="assigned" ? `<button class="b g" onclick="quick('${o.id}','in_delivery')">🚚 قيد التوصيل</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
    : k==="in_delivery" ? `<button class="b g" onclick="quick('${o.id}','delivered')">✅ تم التسليم</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
    : (k==="no_answer"||k==="closed"||k==="other") ? `<button class="b" onclick="quick('${o.id}','in_delivery')">🔄 إعادة المحاولة</button><button class="b g" onclick="quick('${o.id}','delivered')">✅ تم التسليم</button><button class="b o" onclick="openStatus('${o.id}')">الحالة</button>`
    : k==="cancelled" ? `<button class="b" onclick="restore('${o.id}')">↩️ استرجاع الطلب</button>` : "";
