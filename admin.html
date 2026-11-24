@@ -238,6 +238,11 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let CUR = "", ME = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
+const when = s => { if(!s) return ""; const d=new Date(s), n=new Date(), t=d.toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"});
+  const day=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime(), diff=Math.round((day(n)-day(d))/864e5);
+  return (diff===0?"اليوم":diff===1?"أمس":d.toLocaleDateString("ar-EG",{day:"numeric",month:"numeric",year:d.getFullYear()===n.getFullYear()?undefined:"numeric"}))+" "+t };
+const stLine = o => `<div class="mut" style="margin:2px 0">🕒 ${ST[o.status]} بتاريخ <b>${when(o.status_at||o.created_at)}</b></div>`;
+const noteAt = o => { const e=(D.ev[o.id]||[]).filter(x=>(x.note||"").startsWith("ملاحظة من الإداري")).pop(); return e?e.created_at:o.created_at };
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
 const ST = {new: "جديد", assigned: "مُسند", in_delivery: "قيد التوصيل", no_answer: "لم يتم الرد", closed: "مغلق", other: "ملاحظة أخرى", delivered: "مُسلَّم", cancelled: "ملغي", returned: "مُرجَع"};
 const OPEN = ["assigned","in_delivery","no_answer","closed","other"];
@@ -830,12 +835,12 @@ function oc2(o){
   const items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
   return `<div class="card oc s-${o.status}" style="padding:12px 14px;margin-bottom:10px;cursor:pointer" onclick="openOrder('${o.id}')">
     <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
-    <div class="mut" style="margin-bottom:4px">${items}</div>
+    ${stLine(o)}<div class="mut" style="margin-bottom:4px">${items}</div>
     <div class="row" style="justify-content:space-between;align-items:center;margin:0;gap:6px">
       <span class="mut">🚚 ${o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد</b>'}${o.marketer_id?" · 🛍️ "+esc(mname(o.marketer_id)):""} · ${dt(o.created_at)}</span>
       <b>${money(o.total)}</b></div>
     ${prq?`<div style="color:#b45309;font-weight:700;margin-top:6px">📝 بانتظار قرارك: طلب تعديل سعر</div>`:""}
-    ${o.captain_note?`<div class="note" style="margin-top:6px">🗒️ ${esc(o.captain_note)}</div>`:""}
+    ${o.captain_note?`<div class="note" style="margin-top:6px">🗒️ ${esc(o.captain_note)}<div class="mut" style="font-size:12px">كُتبت بتاريخ ${when(o.captain_note_at||o.status_at)}</div></div>`:""}
   </div>`;
 }
 const itemsLine=o=>o.order_items.map(i=>{const d=Number(i.unit_price)-Number(i.list_price);return `${esc(i.products?.name)} × ${i.qty} @ ${money(i.unit_price)}${d?` <span class="${d>0?"up":"dn"}">(${d>0?"+":""}${money(d)} عن المثبت)</span>`:""}`}).join("<br>");
@@ -843,15 +848,16 @@ function orderCard(o){
   const evs=D.ev[o.id]||[];
   return `<div class="card oc s-${o.status}">
     <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
+    ${stLine(o)}
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
     ${o.customer_address?`<div>📍 ${esc(o.customer_address)}</div>`:""}
     ${o.marketer_id?`<div class="mut">🛍️ المسوّقة: <b>${esc(mname(o.marketer_id))}</b> · ربحها: <b class="up">${money((D.prof[o.id]||{}).profit||0)}</b>${o.status==="delivered"?"":" (بعد التسليم)"}</div>`:""}
     <div>${itemsLine(o)}</div>
     <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
     ${Number(o.items_total)!==Number(o.list_total)?`<div class="${o.items_total>o.list_total?"up":"dn"}" style="font-size:13px">فرق عن السعر المثبت (${money(o.list_total)}): <b>${o.items_total>o.list_total?"+":""}${money(o.items_total-o.list_total)}</b></div>`:""}
-    ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
+    ${o.note?`<div class="mut">📝 ${esc(o.note)} <span style="font-size:12px">— بتاريخ ${when(noteAt(o))}</span></div>`:""}
     ${(D.pr[o.id]||[]).filter(x=>x.status==="pending").map(prItem).join("")}
-    ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}</div>`:""}
+    ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}<div class="mut" style="font-size:12px">كُتبت بتاريخ ${when(o.captain_note_at||o.status_at)}</div></div>`:""}
     ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><span class="tag ${e.status}">${ST[e.status]||e.status}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
     ${o.status==="new"||OPEN.includes(o.status)?`<div class="row" style="margin:8px 0 0">
       <select id="as_${o.id}">${capOptions(o.captain_id,"— اختر كابتن —")}</select>

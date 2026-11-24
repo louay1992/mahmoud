@@ -278,6 +278,10 @@ const money = n => Number(n || 0).toLocaleString("en-US", {maximumFractionDigits
 const waNum=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/\D/g,""); const cc=(D.settings.phone_country||"").replace(/\D/g,""); if(d.startsWith("00")) d=d.slice(2); else if(d.startsWith("0")&&cc) d=cc+d.slice(1); return d };
 const waUrl=o=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURIComponent(`السلام عليكم ${o.customer_name}، أنا ${me?me.name:"كابتن التوصيل"}${BIZ?" من "+BIZ:""}، كابتن توصيل طلبك رقم #${o.order_no}. المبلغ المطلوب: ${money(o.total)}.`);
 const mapUrl=o=>o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):"");
+const when = s => { if(!s) return ""; const d=new Date(s), n=new Date(), t=d.toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"});
+  const day=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime(), diff=Math.round((day(n)-day(d))/864e5);
+  return (diff===0?"اليوم":diff===1?"أمس":d.toLocaleDateString("ar-EG",{day:"numeric",month:"numeric",year:d.getFullYear()===n.getFullYear()?undefined:"numeric"}))+" "+t };
+const admNoteAt = o => { const e=(D.ev&&D.ev[o.id]||[]).filter(x=>(x.note||"").startsWith("ملاحظة من الإداري")).pop(); return e?e.created_at:o.created_at };
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
 
 /* ===== الأيقونات ===== */
@@ -488,14 +492,14 @@ function oCard(o){
    : k==="cancelled" ? `<button class="btn btn-p" onclick="restore('${o.id}')">${ic("undo")} استرجاع الطلب</button>` : "";
   const priceBtns=OPEN.includes(k)?`<div class="acts2">${!prPending(o)?`<button class="btn btn-t btn-sm" onclick="openPriceReq('${o.id}')">${ic("tag")} طلب تعديل السعر</button>`:""}${D.settings.captain_can_edit_price==="true"?`<button class="btn btn-t btn-sm" onclick="openPrices('${o.id}')">${ic("cash")} تعديل مباشر</button>`:""}</div>`:"";
   return `<article class="card oc s-${k}">
-    <div class="oc-h"><span class="no">#${o.order_no}</span><div class="who"><b>${esc(o.customer_name)}</b><span class="mut">${dt(o.created_at)}</span></div><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span></div>
+    <div class="oc-h"><span class="no">#${o.order_no}</span><div class="who"><b>${esc(o.customer_name)}</b><span class="mut">${ST[k]||k} بتاريخ ${when(o.status_at||o.created_at)}</span></div><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span></div>
     <a class="call" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
     <div class="qa"><a class="qb wa" href="${waUrl(o)}" target="_blank" rel="noopener">${ic("wa")} واتساب</a>${mapUrl(o)?`<a class="qb mp" href="${mapUrl(o)}" target="_blank" rel="noopener">${ic("pin")} الخريطة</a>`:""}</div>
     ${o.customer_address?`<div class="addr">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}
     ${itemsLine(o)}
     <div class="tot"><div><div class="mut">المطلوب من الزبون</div><div class="amt">${money(o.total)}</div></div><div class="mut" style="text-align:end">منتجات ${money(o.items_total)}<br>توصيل ${money(o.delivery_fee)}</div></div>
-    ${o.note?`<div class="note adm">${ic("msg")}<div><b>من الإداري:</b> ${esc(o.note)}</div></div>`:""}
-    ${o.captain_note?`<div class="note">${ic("note")}<div>${esc(o.captain_note)}</div></div>`:""}
+    ${o.note?`<div class="note adm">${ic("msg")}<div><b>من الإداري:</b> ${esc(o.note)}<div class="mut" style="font-size:12px">بتاريخ ${when(admNoteAt(o))}</div></div></div>`:""}
+    ${o.captain_note?`<div class="note">${ic("note")}<div>${esc(o.captain_note)}<div class="mut" style="font-size:12px">كتبتها بتاريخ ${when(o.captain_note_at||o.status_at)}</div></div></div>`:""}
     ${prBox(o)}
     ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><b style="color:${SCOL[e.status]||"#64748b"}">${ST[e.status]||e.status}</b> · ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
     ${acts?`<div class="acts">${acts}</div>`:""}${priceBtns}
