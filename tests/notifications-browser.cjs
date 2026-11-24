@@ -51,6 +51,8 @@ const { chromium } = require('playwright');
 
       // Reproduce the screenshot: granted callback, unchanged default permission.
       await page.evaluate(() => {
+        window.nativeNotificationPermission = Object.getOwnPropertyDescriptor(Notification, 'permission');
+        window.nativeNotificationRequest = Notification.requestPermission;
         Object.defineProperty(Notification, 'permission', { configurable: true, get: () => 'default' });
         Notification.requestPermission = async () => 'granted';
       });
@@ -62,8 +64,13 @@ const { chromium } = require('playwright');
       assert.equal(await page.evaluate(() => pushClient.enabled), false);
       await page.locator('#pdg-close').click();
 
-      await page.evaluate(role => {
-        Object.defineProperty(Notification, 'permission', { configurable: true, get: () => 'granted' });
+      await page.evaluate(async role => {
+        Object.defineProperty(Notification, 'permission', window.nativeNotificationPermission);
+        Notification.requestPermission = window.nativeNotificationRequest;
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted' || Notification.permission !== 'granted') {
+          throw new Error('Real browser permission was not granted: ' + permission + '/' + Notification.permission);
+        }
         if (role === 'captain') me = { id: 'test-captain' };
         else { ME = 'admin@example.test'; ACC = { role: 'full' }; }
         PushManager.prototype.getSubscription = async () => ({
