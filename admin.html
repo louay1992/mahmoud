@@ -237,6 +237,7 @@ tr:last-child td{border-bottom:0}
 .shc-g{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;background:#f8fafc;border-radius:10px;padding:8px 10px}.shc-g small,.shc-m small{display:block;color:#64748b;font-size:11.5px}.shc-g b{font-size:13.5px;word-break:break-word}
 .shc-p{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}.shc-p span{background:#ecfeff;color:#0f766e;border-radius:999px;padding:2px 9px;font-size:12.5px}
 .shc-m{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;border-top:1px dashed #e2e8f0;padding-top:8px}.shc-m b{font-size:14.5px}
+.setf{margin:0 0 14px}.setf label{display:block;font-weight:700;margin-bottom:4px}.setf input{width:100%}.setf small{display:block;color:#64748b;font-size:12px;margin-top:3px}
 </style>
 </head>
 <body>
@@ -1872,9 +1873,13 @@ let SSEC=null;
 function vSettings(){
   const st=D.settings;
   const secs={
-    biz:`<div class="card"><h2>بيانات النشاط</h2>
-    <div class="row"><input id="sb" placeholder="اسم النشاط" value="${esc(st.business_name)}"><input id="sc" placeholder="رمز العملة (د.أ)" value="${esc(st.currency)}"><input id="sl" type="number" min="0" placeholder="حد تنبيه المخزون المنخفض" value="${esc(st.low_stock)}"><input id="spc" placeholder="رمز الدولة للواتساب (مثال 963)" dir="ltr" value="${esc(st.phone_country||"963")}"></div>
-    <button class="b" onclick="saveSettings()">حفظ</button></div>`,
+    biz:`<div class="card"><h2>🏪 بيانات النشاط</h2>
+    <p class="mut" style="margin:0 0 10px">هذه المعلومات تظهر في التطبيق والفواتير والرسائل. عدّلها ثم اضغط «حفظ».</p>
+    <div class="setf"><label for="sb">اسم النشاط</label><input id="sb" placeholder="مثال: عمرة بلس" value="${esc(st.business_name)}"><small>يظهر في أعلى التطبيق وعلى ملصقات الشحن.</small></div>
+    <div class="setf"><label for="sc">رمز العملة</label><input id="sc" placeholder="مثال: ر.س" value="${esc(st.currency)}"><small>يُكتب بعد كل مبلغ في كل الأقسام.</small></div>
+    <div class="setf"><label for="sl">حد تنبيه المخزون المنخفض</label><input id="sl" type="number" min="0" placeholder="3" value="${esc(st.low_stock)}"><small>إذا نزلت كمية منتج في مستودع إلى هذا الرقم أو أقل يظهر تنبيه «مخزون منخفض».</small></div>
+    <div class="setf"><label for="spc">رمز الدولة للواتساب</label><input id="spc" placeholder="963" dir="ltr" value="${esc(st.phone_country||"963")}"><small>يُضاف تلقائياً لأرقام الزبائن عند فتح واتساب. سوريا 963، الأردن 962، السعودية 966.</small></div>
+    <button class="b" onclick="saveSettings()">💾 حفظ</button></div>`,
     price:`<div class="card"><h2>حساب فروقات الأسعار</h2>
     <div class="row"><select id="spm"><option value="actual" ${st.price_mode!=="list"?"selected":""}>الفعلي: الكابتن يسلّمني ما قبضه فعلياً</option><option value="list" ${st.price_mode==="list"?"selected":""}>المثبت: الكابتن يسلّمني سعر المنتج المثبت (الزيادة له والنقص عليه)</option></select>
     <select id="sce"><option value="false" ${st.captain_can_edit_price!=="true"?"selected":""}>الإداري فقط يعدّل أسعار الطلبات</option><option value="true" ${st.captain_can_edit_price==="true"?"selected":""}>يُسمح للكابتن بتعديل السعر (بسبب إلزامي)</option></select></div>
@@ -1898,7 +1903,7 @@ function vSettings(){
     <p class="mut">يمسح كل الطلبات والجرد والدفعات وسجل الحركة. يبقى المنتجات والكباتن والمستودعات. استخدمه بعد انتهاء التجربة فقط.</p>
     <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`,
   };
-  const meta=[["biz", "بيانات النشاط", "اسم النشاط والعملة وتنبيه المخزون", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"], ["danger", "منطقة الخطر", "مسح البيانات التجريبية", "x"]];
+  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"], ["danger", "منطقة الخطر", "مسح البيانات التجريبية", "x"]];
   if(SSEC&&secs[SSEC]){
     const m=meta.find(x=>x[0]===SSEC);
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
