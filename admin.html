@@ -330,6 +330,8 @@ function askf(title,fields,ok="حفظ",o={}){
   });
 }
 
+const GOVS=["دمشق","ريف دمشق","حلب","حمص","حماة","اللاذقية","طرطوس","إدلب","درعا","السويداء","القنيطرة","دير الزور","الرقة","الحسكة"];
+const govOptions=(sel,empty)=>`<option value="">${empty}</option>`+GOVS.map(g=>`<option ${g===sel?"selected":""}>${g}</option>`).join("");
 let ACC={role:"none",perms:[]};
 const can=p=>ACC.role==="full"||(ACC.perms||[]).includes(p);
 let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[], movements:[], admins:[], settings:{}, stats:null, ev:{}};
@@ -367,7 +369,7 @@ async function loadStaff(){
     can("view_orders")?sb.from("orders").select("*, order_items(id, qty, unit_price, products(name))").order("created_at",{ascending:false}).limit(200):Promise.resolve({data:[]}),
     sb.from("settings").select("*") ]);
   [lk,od].forEach(x=>x.error&&toast("خطأ تحميل: "+x.error.message));
-  const L=lk.data||{}; D.products=L.products||[]; D.captains=L.captains||[]; D.marketers=L.marketers||[]; D.orders=od.data||[];
+  const L=lk.data||{}; D.products=L.products||[]; D.captains=L.captains||[]; D.marketers=L.marketers||[]; D.warehouses=L.warehouses||[]; D.orders=od.data||[];
   D.settings=Object.fromEntries((st.data||[]).map(x=>[x.key,x.value])); CUR=D.settings.currency||"";
   const biz=D.settings.business_name||"إدارة كباتن التوصيل"; $("hn").textContent=biz; document.title=biz;
 }
@@ -711,7 +713,8 @@ const run2=async p=>{ document.body.classList.add("busy"); try{ return await p }
 function vWarehouses(){
   if(CV==="addw"){
     $("main").innerHTML = backBtn("vWarehouses")+`<div class="card"><h2>إضافة مستودع</h2>
-    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع إربد)"><select id="wc">${capOptions("","— بدون كابتن —")}</select></div>
+    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع حلب)"><select id="wg">${govOptions("","— محافظة المستودع —")}</select></div>
+    <div class="row"><select id="wc">${capOptions("","— بدون كابتن —")}</select></div>
     <button class="b" onclick="addWarehouse()">حفظ</button></div>`;
     return;
   }
@@ -719,8 +722,8 @@ function vWarehouses(){
   <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">المستودعات (${D.warehouses.length})</h2>
     <button class="b s" style="flex:0 0 auto" onclick="CV='addw';vWarehouses();scrollTo({top:0})">+ إضافة مستودع</button></div>
   ${D.warehouses.length?`<div class="tw"><table>
-   <tr><th>المستودع</th><th>الكابتن المرتبط</th></tr>
-   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td><select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select></td></tr>`).join("")}
+   <tr><th>المستودع</th><th>المحافظة</th><th>الكابتن المرتبط</th></tr>
+   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td><select onchange="setWhGov('${w.id}',this.value)">${govOptions(w.governorate||"","— بدون —")}</select></td><td><select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select></td></tr>`).join("")}
   </table></div>`:'<p class="mut">لا توجد مستودعات بعد</p>'}</div>`;
 }
 async function addCaptain(){
@@ -742,8 +745,9 @@ async function editCaptain(id){
 async function toggleCaptain(id,v){ if(await run(sb.from("captains").update({active:v}).eq("id",id))) refresh() }
 async function addWarehouse(){
   const name=$("wn").value.trim(); if(!name) return toast("أدخل اسم المستودع");
-  if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null}),"تمت الإضافة")){ CV="list"; refresh() }
+  if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null,governorate:$("wg").value||null}),"تمت الإضافة")){ CV="list"; refresh() }
 }
+async function setWhGov(id,g){ if(await run(sb.from("warehouses").update({governorate:g||null}).eq("id",id),"تم حفظ المحافظة")) refresh() }
 async function linkWarehouse(id,cap){
   if(cap){ const other=D.warehouses.find(w=>w.captain_id===cap&&w.id!==id);
     if(other){ if(!await askc("الكابتن <b>"+esc(cname(cap))+"</b> مرتبط حالياً بمستودع «"+esc(other.name)+"». سيُفصل عنه ويُربط بهذا المستودع، وبعدها تُخصم مبيعاته من هنا. متابعة؟",{title:"نقل ربط الكابتن",ok:"نعم، انقله"})){ refresh(); return }
@@ -855,14 +859,14 @@ async function transferStock(){
 }
 
 /* ================= طلب جديد ================= */
-const WA_TPL="الاسم: \nالهاتف: \nالعنوان: \nالموقع: \nالمسوقة: \nملاحظة: ";
+const WA_TPL="الاسم: \nالهاتف: \nالمحافظة: \nالعنوان: \nالموقع: \nالمسوقة: \nملاحظة: ";
 const nrm=t=>String(t||"").replace(/[\u064B-\u0652\u0640\u200e\u200f]/g,"").replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g,d=>"۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/\*/g,"").replace(/\s+/g," ").trim().toLowerCase();
 function pickBy(list,name,key="name"){ const n=nrm(name); if(!n) return null;
   let m=list.filter(x=>nrm(x[key])===n); if(m.length===1) return m[0];
   m=list.filter(x=>{const k=nrm(x[key]); return k&&(k.includes(n)||n.includes(k))}); return m.length===1?m[0]:null }
 function parseWa(text){
-  const F={name:["الاسم","اسم الزبون","الزبون","اسم"],phone:["الهاتف","الموبايل","رقم الموبايل","رقم الهاتف","الرقم","رقم","موبايل","هاتف"],addr:["العنوان","عنوان"],map:["الموقع","رابط الموقع","الخريطه","الخريطة","لوكيشن"],mk:["المسوقه","المسوقة","المسوق","مسوقه","مسوق"],cap:["الكابتن","كابتن","المندوب"],note:["ملاحظه","ملاحظة","ملاحظات"],prods:["المنتجات","المنتج","الطلب","الطلبيه","الطلبية"]};
-  const out={name:"",phone:"",addr:"",map:"",mk:"",cap:"",note:"",items:[]}; let mode="";
+  const F={name:["الاسم","اسم الزبون","الزبون","اسم"],phone:["الهاتف","الموبايل","رقم الموبايل","رقم الهاتف","الرقم","رقم","موبايل","هاتف"],addr:["العنوان","عنوان"],gov:["المحافظة","محافظة","محافظه"],map:["الموقع","رابط الموقع","الخريطه","الخريطة","لوكيشن"],mk:["المسوقه","المسوقة","المسوق","مسوقه","مسوق"],cap:["الكابتن","كابتن","المندوب"],note:["ملاحظه","ملاحظة","ملاحظات"],prods:["المنتجات","المنتج","الطلب","الطلبيه","الطلبية"]};
+  const out={name:"",phone:"",gov:"",addr:"",map:"",mk:"",cap:"",note:"",items:[]}; let mode="";
   String(text||"").split(/\r?\n/).forEach(raw=>{
     const line=raw.replace(/[\u200e\u200f*]/g,"").trim(); if(!line) return;
     const m=line.match(/^([^:：]{1,25})[:：]\s*(.*)$/); let key=null;
@@ -881,10 +885,12 @@ function parseWa(text){
 function fillFromWa(){
   const t=$("wapaste").value; if(!t.trim()) return toast("الصق رسالة الواتساب أولاً");
   const r=parseWa(t), warn=[];
-  $("on").value=r.name; $("op").value=r.phone; $("oa").value=r.addr; $("om").value=r.map; $("onote").value=r.note;
+  $("on").value=r.name; $("op").value=r.phone;
+  if(r.gov){ const g=GOVS.find(x=>nrm(x)===nrm(r.gov))||GOVS.find(x=>nrm(r.gov).includes(nrm(x))); if(g){ $("og").value=g } else warn.push("محافظة غير معروفة: "+r.gov) } $("oa").value=r.addr; $("om").value=r.map; $("onote").value=r.note;
   if(!r.name) warn.push("لم أجد الاسم"); if(!r.phone) warn.push("لم أجد رقم الهاتف");
   if(r.mk&&$("omk")){ const m=pickBy(D.marketers.filter(x=>x.active!==false),r.mk); if(m) $("omk").value=m.id; else warn.push("المسوقة غير معروفة: "+r.mk) }
   if(r.cap&&$("oc")){ const c=pickBy(D.captains.filter(x=>x.active!==false),r.cap); if(c) $("oc").value=c.id; else warn.push("الكابتن غير معروف: "+r.cap) }
+  if($("og").value) autoCap();
   let n=0;
   if(r.items.length){ $("orows").innerHTML=""; const act=D.products.filter(p=>p.active);
     r.items.forEach(i=>{ const p=pickBy(act,i.name); if(!p||!(i.qty>0)){ warn.push("منتج غير معروف: "+i.name); return }
@@ -895,6 +901,13 @@ function fillFromWa(){
   $("wares").innerHTML=warn.length?`<div style="color:#b45309;margin-top:8px">⚠ راجع قبل الإنشاء:<br>${warn.map(esc).join("<br>")}</div>`:`<div style="color:#16a34a;margin-top:8px">✓ تمت تعبئة بيانات الزبون. اختر الكابتن والمنتجات ثم اضغط إنشاء الطلب.</div>`;
 }
 function copyWaTpl(){ (navigator.clipboard?navigator.clipboard.writeText(WA_TPL):Promise.reject()).then(()=>toast("تم نسخ الكلاشة","ok")).catch(()=>{ $("watpl").select(); toast("انسخها يدوياً") }) }
+function autoCap(){
+  const g=$("og").value, h=$("ohint"); if(!$("oc")||!g){ if(h) h.textContent=""; upd(); return }
+  const w=D.warehouses.find(w=>w.governorate===g&&w.captain_id&&(D.captains.find(c=>c.id===w.captain_id)||{}).active!==false);
+  if(w){ $("oc").value=w.captain_id; if(h) h.innerHTML=`✓ تم اختيار الكابتن تلقائياً: <b>${esc(cname(w.captain_id))}</b> (${esc(w.name)})` }
+  else { $("oc").value=""; if(h) h.textContent="لا يوجد كابتن مرتبط بمستودع في "+g+" — اختر الكابتن يدوياً أو اتركه للإسناد لاحقاً" }
+  upd();
+}
 function vNew(){
   $("main").innerHTML = `<div class="card"><h2>تعبئة من رسالة واتساب</h2>
     <p class="mut" style="margin:0 0 8px">الصق رسالة الطلب بالصيغة المحددة وسيُعبَّأ النموذج تلقائياً.</p>
@@ -906,7 +919,8 @@ function vNew(){
     <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
     <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
-    ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<select id="omk" onchange="upd()">${mkOptions("","— بدون مسوّقة —")}</select>`:""}</div>`:""}
+    <div class="row"><select id="og" onchange="autoCap()">${govOptions("","— محافظة الطلب —")}</select></div>
+    ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<select id="omk" onchange="upd()">${mkOptions("","— بدون مسوّقة —")}</select>`:""}</div><div id="ohint" class="mut" style="margin:2px 0 6px;font-size:13px"></div>`:""}
     ${ACC.role==="staff"?`<p class="mut" style="margin:4px 0">اكتب <b>سعر البيع</b> لكل منتج.</p>`:`<p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>`}
     ${itemRows("orows",true)}<br><br>
     <div id="otot" class="mut"></div><br>
@@ -940,7 +954,7 @@ function openEdit(id){
   const o=D.orders.find(x=>x.id===id); EO=o;
   $("modal").innerHTML=`<div class="sheet" style="max-width:720px"><div class="sh-h"><b>تعديل الطلب #${o.order_no}</b><button class="x" onclick="closeEdit()">✕</button></div>
    <div class="row"><input id="en" placeholder="اسم الزبون" value="${esc(o.customer_name)}"><input id="ep" placeholder="رقم الموبايل" dir="ltr" value="${esc(o.customer_phone)}"></div>
-   <div class="row"><select id="emk">${mkOptions(o.marketer_id||"","— بدون مسوّقة —")}</select></div>
+   <div class="row"><select id="emk">${mkOptions(o.marketer_id||"","— بدون مسوّقة —")}</select><select id="eg">${govOptions(o.governorate||"","— محافظة الطلب —")}</select></div>
    <div class="row"><input id="ea" placeholder="عنوان الزبون" value="${esc(o.customer_address||"")}"><input id="em2" placeholder="رابط الخرائط (اختياري)" dir="ltr" value="${esc(o.map_url||"")}"></div>
    <h3 style="margin:10px 0 4px">بنود الطلب</h3>
    ${itemRows("erows",true)}<br><br><div id="etot" class="mut"></div>
@@ -959,7 +973,7 @@ async function saveEdit(id){
   if(!name||!phone) return toast("اسم الزبون ورقمه مطلوبان");
   if(!items.length) return toast("أضف منتجاً واحداً على الأقل");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
-  if(await run(sb.rpc("edit_order",{p_order:id,p_info:{name,phone,address:$("ea").value.trim(),map_url:$("em2").value.trim(),marketer_id:$("emk").value||""},p_items:items}),"تم تعديل الطلب")){ closeEdit(); refresh() }
+  if(await run(sb.rpc("edit_order",{p_order:id,p_info:{name,phone,address:$("ea").value.trim(),map_url:$("em2").value.trim(),marketer_id:$("emk").value||"",governorate:$("eg").value||""},p_items:items}),"تم تعديل الطلب")){ closeEdit(); refresh() }
 }
 async function saveOrder(){
   const name=$("on").value.trim(), phone=$("op").value.trim(), items=readRows("orows");
@@ -967,7 +981,7 @@ async function saveOrder(){
   if(!items.length) return toast("أضف منتجاً");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
   if(ACC.role==="staff"&&items.some(i=>i.unit_price===undefined)) return toast("اكتب سعر البيع لكل منتج");
-  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:($("oc")||{}).value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null}),"تم إنشاء الطلب")){ if(ACC.role==="staff"){ await refresh(); go(can("view_orders")?"orders":"new") } else { tab="orders"; renderNav(); refresh() } }
+  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:($("oc")||{}).value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null,p_governorate:($("og")||{}).value||null}),"تم إنشاء الطلب")){ if(ACC.role==="staff"){ await refresh(); go(can("view_orders")?"orders":"new") } else { tab="orders"; renderNav(); refresh() } }
 }
 
 /* ================= الطلبات ================= */
@@ -1018,7 +1032,7 @@ function orderCard(o){
     <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><div style="text-align:end;flex:0 0 auto"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
     
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
-    ${o.customer_address?`<div>📍 ${esc(o.customer_address)}</div>`:""}
+    ${o.customer_address||o.governorate?`<div>📍 ${o.governorate?esc(o.governorate)+(o.customer_address?" — ":""):""}${esc(o.customer_address||"")}</div>`:""}
     ${o.marketer_id?`<div class="mut">🛍️ المسوّقة: <b>${esc(mname(o.marketer_id))}</b> · ربحها: <b class="up">${money((D.prof[o.id]||{}).profit||0)}</b>${o.status==="delivered"?"":" (بعد التسليم)"}</div>`:""}
     <div>${itemsLine(o)}</div>
     <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
@@ -1059,7 +1073,7 @@ function orderDetail(o){
     +(o.captain_note?`<div class="dnote cap"><b>ملاحظة الكابتن</b><div>${esc(o.captain_note)}</div><small>بتاريخ ${when(o.captain_note_at||o.status_at)}</small></div>`:"");
   return `<div class="dhead"><div><div class="dno">طلب #${o.order_no}</div><div class="mut">أُنشئ ${when(o.created_at)}</div></div>
       <div style="text-align:end"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>`
-  +dsec("👤 الزبون",drow("الاسم",`<b>${esc(o.customer_name)}</b>`)+drow("الموبايل",`<a dir="ltr" href="tel:${esc(o.customer_phone)}">${esc(o.customer_phone)}</a>`)+drow("العنوان",esc(o.customer_address||""))
+  +dsec("👤 الزبون",drow("الاسم",`<b>${esc(o.customer_name)}</b>`)+drow("الموبايل",`<a dir="ltr" href="tel:${esc(o.customer_phone)}">${esc(o.customer_phone)}</a>`)+drow("المحافظة",esc(o.governorate||""))+drow("العنوان",esc(o.customer_address||""))
     +`<div class="row" style="margin:8px 0 0"><a class="b s g" style="flex:0 0 auto;text-decoration:none" target="_blank" rel="noopener" href="${waUrl(o,waText(o))}">واتساب الزبون</a>${mapUrl(o)?`<a class="b s o" style="flex:0 0 auto;text-decoration:none" target="_blank" rel="noopener" href="${mapUrl(o)}">🗺 الخريطة</a>`:""}</div>`)
   +dsec("🚚 التوصيل",drow("الكابتن",o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد بعد</b>')+drow("أجور التوصيل",money(o.delivery_fee)))
   +(o.marketer_id?dsec("🛍️ المسوّقة",drow("الاسم",`<b>${esc(mname(o.marketer_id))}</b>`)+drow("رأس المال",money(pf.capital||0))+drow("ربحها",`<b class="up">${money(pf.profit||0)}</b>${o.status==="delivered"?"":' <small class="mut">(تُستحق بعد التسليم)</small>'}`)):"")

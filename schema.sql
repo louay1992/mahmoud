@@ -1379,3 +1379,5 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 -- المشغّلات trg_orders_push / trg_orders_push_admin / trg_pay_push / trg_pr_push / trg_pr_push_admin أعيدت كتابتها لنصوص وافية.
 
 -- v19: حذف قيد main_no_captain؛ يمكن ربط كابتن بالمستودع الرئيسي فتُخصم مبيعاته منه (deliver_order يستخدم مستودع الكابتن).
+
+-- v20: warehouses.governorate + orders.governorate؛ create_order(p_governorate)، edit_order يحدّث المحافظة، staff_lookups يعيد warehouses.
