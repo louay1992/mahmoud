@@ -538,17 +538,17 @@ let OD=null;
 function prItem(x){
   const o=D.orders.find(z=>z.id===x.order_id)||{};
   return `<div style="background:#fff7e0;border:1px solid #f0d78a;border-radius:8px;padding:8px;margin:8px 0">
-    <b>📝 طلب تعديل سعر — #${o.order_no||""} ${esc(o.customer_name||"")}</b> <span class="mut">(${esc(cname(x.captain_id))} · ${dt(x.created_at)})</span>
-    <div style="margin-top:4px">${x.items.map(i=>`${esc(i.name)} × ${i.qty}: ${money(i.old)} ← <b>${money(i.new)}</b> <span class="${i.new>i.old?"up":"dn"}">(${i.new>i.old?"+":""}${money((i.new-i.old)*i.qty)})</span>`).join("<br>")}</div>
+    <b>📝 طلب تعديل الإجمالي — #${o.order_no||""} ${esc(o.customer_name||"")}</b> <span class="mut">(${esc(cname(x.captain_id))} · ${dt(x.created_at)})</span>
+    <div style="margin-top:4px">إجمالي الفاتورة: ${money(x.old_total)} ← <b>${money(x.new_total)}</b> <span class="${x.new_total>x.old_total?"up":"dn"}">(${x.new_total>x.old_total?"+":""}${money(x.new_total-x.old_total)})</span></div>
     <div class="mut">السبب: ${esc(x.reason)}</div>
     <div class="row" style="margin:8px 0 0"><button class="b s g" style="flex:0 0 auto" onclick="decidePR('${x.id}',true)">✔ موافقة</button><button class="b s r" style="flex:0 0 auto" onclick="decidePR('${x.id}',false)">✖ رفض</button></div></div>`;
 }
 function prCard(){
   const l=(D.prs||[]).filter(x=>x.status==="pending");
-  return l.length?`<div class="card" style="border:2px solid #f0b429"><h2>🔔 طلبات تعديل الأسعار (${l.length})</h2>${l.map(prItem).join("")}</div>`:"";
+  return l.length?`<div class="card" style="border:2px solid #f0b429"><h2>🔔 طلبات تعديل الإجمالي (${l.length})</h2>${l.map(prItem).join("")}</div>`:"";
 }
 function decidePR(id,ok){
-  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>${ok?"موافقة على تعديل السعر":"رفض طلب تعديل السعر"}</b><button class="x" onclick="closeStatus()">✕</button></div>
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>${ok?"موافقة على تعديل الإجمالي":"رفض طلب تعديل الإجمالي"}</b><button class="x" onclick="closeStatus()">✕</button></div>
    <textarea id="pr_note" rows="2" placeholder="${ok?"ملاحظة (اختياري)":"سبب الرفض (يظهر للكابتن)"}"></textarea>
    <button class="b ${ok?"g":"r"}" style="width:100%" onclick="submitPR('${id}',${ok})">${ok?"تأكيد الموافقة":"تأكيد الرفض"}</button></div>`;
   $("modal").style.display="flex"; OD=null;
