@@ -117,10 +117,10 @@ async function populate(page, role, screen) {
         if(Buffer.compare(a,b)!==0){
           const diff=await after.evaluate(async ({a,b})=>{
             const load=async raw=>{const image=new Image(); image.src='data:image/png;base64,'+raw; await image.decode(); const canvas=document.createElement('canvas'); canvas.width=image.width; canvas.height=image.height; const c=canvas.getContext('2d');c.drawImage(image,0,0);return {w:image.width,h:image.height,p:c.getImageData(0,0,image.width,image.height).data} };
-            const x=await load(a),y=await load(b);let count=0,left=x.w,top=x.h,right=0,bottom=0;
+            const x=await load(a),y=await load(b);let count=0,maxDelta=0,left=x.w,top=x.h,right=0,bottom=0;
             if(x.w!==y.w||x.h!==y.h)return {size:[x.w,x.h,y.w,y.h]};
-            for(let i=0;i<x.p.length;i+=4)if(x.p[i]!==y.p[i]||x.p[i+1]!==y.p[i+1]||x.p[i+2]!==y.p[i+2]){count++;const px=(i/4)%x.w,py=Math.floor(i/4/x.w);left=Math.min(left,px);right=Math.max(right,px);top=Math.min(top,py);bottom=Math.max(bottom,py)}
-            return {count,left,top,right,bottom};
+            for(let i=0;i<x.p.length;i+=4)if(x.p[i]!==y.p[i]||x.p[i+1]!==y.p[i+1]||x.p[i+2]!==y.p[i+2]){count++;maxDelta=Math.max(maxDelta,Math.abs(x.p[i]-y.p[i]),Math.abs(x.p[i+1]-y.p[i+1]),Math.abs(x.p[i+2]-y.p[i+2]));const px=(i/4)%x.w,py=Math.floor(i/4/x.w);left=Math.min(left,px);right=Math.max(right,px);top=Math.min(top,py);bottom=Math.max(bottom,py)}
+            return {count,maxDelta,left,top,right,bottom};
           },{a:a.toString('base64'),b:b.toString('base64')});
           assert.equal(diff.count,0,role+'/'+screen+': desktop pixels changed '+JSON.stringify(diff));
         }
