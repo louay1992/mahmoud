@@ -32,13 +32,18 @@ const {chromium}=require('playwright');
     await pushClient.requestPermission();await pushClient.subscribe();
    });
    assert.equal(await page.evaluate(()=>pushClient.enabled),true);
+   if(role==='captain'){
    await page.evaluate(()=>{void pushDiag()});
    await page.waitForFunction(()=>document.querySelector('#pdg-status').textContent==='اكتمل الفحص');
    const text=await page.locator('#pdg').innerText();assert.match(text,/1\.2\.0/);assert.doesNotMatch(text,/Chrome|Firefox|Mozilla|قناة Android غير متصلة/);
    await page.locator('#pdg-local').click();await page.waitForFunction(()=>!document.querySelector('#pdg-local').disabled);
    await page.locator('#pdg-server').click();await page.waitForFunction(()=>document.querySelector('#pdg').textContent.includes('FCM accepted'));
-   await page.evaluate(async()=>{await copyText("test ' \" بوليصة");await saveCsv('profit.csv','\ufeffa,b\n1,2');});
    await page.locator('#pdg-close').click();
+   }else{
+    assert.equal(await page.evaluate(()=>typeof pushDiag),'undefined');
+    await page.evaluate(async()=>{await pushClient.showTest('اختبار',{body:'FCM'});await pushClient.native.serverTest()});
+   }
+   await page.evaluate(async()=>{await copyText("test ' \" بوليصة");await saveCsv('profit.csv','\ufeffa,b\n1,2');});
    await page.evaluate(role=>{if(role==='admin')void ask3('اختبار',{title:'رجوع',yes:'نعم',no:'لا'});else void ask('رجوع','اختبار','نعم','g');},role);
    assert.equal(await page.evaluate(()=>handleNativeBack()),true);assert.equal(await page.locator('.dlg').count(),0);
    const result=await page.evaluate(()=>({calls:hostCalls.map(r=>r.type),workers:workerCalls,browserPermission:browserPermissionCalls}));

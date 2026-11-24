@@ -15,6 +15,12 @@ const {chromium}=require('playwright');
    await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.abort());
    const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
    await page.goto(origin+'/'+role+'.html?native=1');
+   if(role==='admin'){
+    await page.evaluate(()=>{ACC={role:'full'};SSEC=null;vSettings()});
+    assert.equal(await page.locator('[data-push-diagnostic]').count(),0);
+    assert.equal(await page.evaluate(()=>typeof pushDiag),'undefined');
+    await context.close();console.log('admin: settings contain no diagnostic entry or diagnostic handler');continue;
+   }
    await page.evaluate(()=>{void pushDiag()});
    await page.locator('#pdg-close').waitFor({state:'visible',timeout:500});
    await page.waitForFunction(()=>document.querySelector('#pdg-status').textContent==='اكتمل الفحص');

@@ -15,7 +15,6 @@
 <script src="/auth-session.js"></script>
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
-<script src="/push-diagnostics.js"></script>
 <script src="/mobile-ui.js" defer></script>
 <style>
 :root{
@@ -286,7 +285,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"
 const authGate = new DeliverySession("sb-admin-auth");
 /* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
 let _lc=0,_le=null;
-document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b || b.closest("#pdg") || b.hasAttribute("data-push-diagnostic")) return;
+document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b) return;
   const now=Date.now();
   if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800)){ e.stopPropagation(); e.preventDefault(); return }
   _le=b; _lc=now },true);
@@ -565,16 +564,12 @@ async function bellClick(){
   if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");
   if(s==="denied"&&!pushClient.native?.expected) return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
   try{
-    if(s!=="granted" && await pushClient.requestPermission()!=="granted") return pushDiag();
+    if(s!=="granted" && await pushClient.requestPermission()!=="granted"){ initNotifUI(); return toast("لم يُمنح إذن الإشعارات. فعّله من إعدادات التطبيق ثم حاول مجددًا.","err") }
     await ensurePush({strict:true});
     beep(); toast("الإشعارات مفعّلة — ستصلك تحديثات الكباتن وطلبات تعديل الأسعار","ok"); render();
-  }catch(e){ initNotifUI(); toast("تعذّر تفعيل الإشعارات. راجع نتيجة الفحص.","err"); await pushDiag(e.name+": "+e.message) }
+  }catch(e){ initNotifUI(); toast("تعذّر تفعيل الإشعارات. تحقّق من الاتصال وإذن الإشعارات ثم حاول مجددًا.","err") }
 }
 
-/* تعرض الأداة الإذن الفعلي ونتيجة الطلب والحفظ كلّاً على حدة. */
-async function pushDiag(initialLog=""){
-  return openDeliveryPushDiagnostics({client:pushClient,role:"admin",initialLog,enable:()=>ensurePush({strict:true}),refreshUI:initNotifUI,escape:esc});
-}
 async function ensurePush({strict=false}={}){
   try{
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
@@ -1954,7 +1949,7 @@ function vSettings(){
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
     return;
   }
-  $("main").innerHTML=`<div class="card"><h2>الإعدادات</h2><div class="more" style="grid-template-columns:1fr">${meta.map(([k,t,d,i])=>`<button onclick="SSEC='${k}';vSettings();scrollTo({top:0})" style="flex-direction:row;justify-content:flex-start;gap:12px;text-align:right"><span>${ic(i)}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>${t}</b><small class="mut">${d}</small></span></button>`).join("")}<button data-push-diagnostic onclick="pushDiag()" style="display:flex;align-items:center;gap:12px;text-align:right"><span>${ic("bell")}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>فحص الإشعارات</b><small class="mut">تشخيص إذن الإشعارات واشتراك الجهاز</small></span></button></div></div>`;
+  $("main").innerHTML=`<div class="card"><h2>الإعدادات</h2><div class="more" style="grid-template-columns:1fr">${meta.map(([k,t,d,i])=>`<button onclick="SSEC='${k}';vSettings();scrollTo({top:0})" style="flex-direction:row;justify-content:flex-start;gap:12px;text-align:right"><span>${ic(i)}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>${t}</b><small class="mut">${d}</small></span></button>`).join("")}</div></div>`;
 }
 async function savePriceSettings(){
   if(await run(sb.from("settings").upsert([{key:"price_mode",value:$("spm").value},{key:"captain_can_edit_price",value:$("sce").value}]),"تم الحفظ")) refresh();

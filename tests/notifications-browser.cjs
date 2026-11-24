@@ -58,6 +58,7 @@ const { chromium } = require('playwright');
         Object.defineProperty(Notification, 'permission', { configurable: true, get: () => 'default' });
         Notification.requestPermission = async () => 'granted';
       });
+      if(role==='captain'){
       await page.evaluate(() => pushDiag());
       await page.locator('#pdg-ask').click();
       await page.waitForFunction(() => document.getElementById('pdg').textContent.includes('بقي default'));
@@ -65,6 +66,13 @@ const { chromium } = require('playwright');
       assert.match(mismatch, /requestPermission → granted; Notification.permission → default/);
       assert.equal(await page.evaluate(() => pushClient.enabled), false);
       await page.locator('#pdg-close').click();
+      }else{
+        await page.evaluate(()=>bellClick());
+        assert.match(await page.locator('#toast').innerText(),/تعذّر تفعيل الإشعارات/);
+        assert.equal(await page.locator('#pdg').count(),0);
+        assert.equal(await page.evaluate(()=>typeof pushDiag),'undefined');
+        assert.equal(await page.evaluate(()=>pushClient.enabled),false);
+      }
 
       await page.evaluate(async role => {
         Object.defineProperty(Notification, 'permission', window.nativeNotificationPermission);
@@ -74,7 +82,7 @@ const { chromium } = require('playwright');
           throw new Error('Real browser permission was not granted: ' + permission + '/' + Notification.permission);
         }
         if (role === 'captain') me = { id: 'test-captain' };
-        else { ME = 'admin@example.test'; ACC = { role: 'full' }; }
+        else { ME = 'admin@example.test'; ACC = { role: 'full' }; render=()=>{}; }
         PushManager.prototype.getSubscription = async () => ({
           endpoint: 'https://push.example/' + role,
           toJSON() { return { endpoint: this.endpoint, keys: { p256dh: 'public', auth: 'auth' } }; }
@@ -82,6 +90,7 @@ const { chromium } = require('playwright');
         sb.rpc = async name => name.startsWith('save_') ?
           { error: { message: '<img src=x onerror="window.injected=true">database failed' } } : { error: null };
       }, role);
+      if(role==='captain'){
       await page.evaluate(() => pushDiag());
       await page.locator('#pdg-sub').click();
       await page.waitForFunction(() => document.getElementById('pdg').textContent.includes('database failed'));
@@ -89,8 +98,16 @@ const { chromium } = require('playwright');
       assert.equal(await page.evaluate(() => !!window.injected), false);
       assert.equal(await page.evaluate(() => pushClient.enabled), false);
       assert.doesNotMatch(await page.locator('#pdg').innerText(), /OK: اشتراك/);
+      }else{
+        await page.evaluate(()=>bellClick());
+        assert.match(await page.locator('#toast').innerText(),/تعذّر تفعيل الإشعارات/);
+        assert.equal(await page.locator('#pdg').count(),0);
+        assert.equal(await page.evaluate(()=>!!window.injected),false);
+        assert.equal(await page.evaluate(()=>pushClient.enabled),false);
+      }
 
       await page.evaluate(() => { sb.rpc = async () => ({ error: null }); });
+      if(role==='captain'){
       await page.locator('#pdg-sub').click();
       await page.waitForFunction(() => pushClient.enabled && document.getElementById('pdg').textContent.includes('OK: اشتراك الجهاز'));
       assert.match(await page.locator('#pdg').innerText(), /OK: اشتراك الجهاز وحفظ الخادم نجحا/);
@@ -100,6 +117,12 @@ const { chromium } = require('playwright');
       console.log(role + ' local diagnostic:', localDiagnostic);
       console.log(role + ' browser permission:', await page.evaluate(async () => (await navigator.permissions.query({ name: 'notifications' })).state));
       assert.match(localDiagnostic, /showNotification OK/);
+      }else{
+        await page.evaluate(()=>bellClick());
+        assert.match(await page.locator('#toast').innerText(),/الإشعارات مفعّلة/);
+        assert.equal(await page.evaluate(()=>pushClient.enabled),true);
+        await page.evaluate(()=>pushClient.showTest('اختبار إشعارات الإدارة',{body:'الاشتراك يعمل'}));
+      }
       const notifications = await page.evaluate(async () => (await (await pushClient.registration()).getNotifications()).length);
       assert.ok(notifications >= 1, 'the real browser service worker must display the local notification');
       assert.deepEqual(errors, [], role + ' diagnostics must not raise page errors');

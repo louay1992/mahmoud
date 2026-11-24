@@ -140,8 +140,10 @@ async function populate(page, role, screen) {
         channel.port1.postMessage(JSON.stringify({type:'delivery.native.ready',version:1,role,permission:'granted',configured:true,saved:false}));
       },role);
       await nativePage.waitForFunction(()=>pushClient.enabled);
-      await nativePage.evaluate(()=>pushDiag());
-      assert.match(await nativePage.locator('#pdg').innerText(),/Firebase FCM/);
+      if(role==='captain'){
+        await nativePage.evaluate(()=>pushDiag());
+        assert.match(await nativePage.locator('#pdg').innerText(),/Firebase FCM/);
+      }
       await nativePage.evaluate(()=>pushClient.unsubscribe());
       assert.equal(await nativePage.evaluate(()=>pushClient.enabled),false);
       assert.ok((await nativePage.evaluate(()=>window.nativeCalls)).includes('unbind'));
