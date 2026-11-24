@@ -136,7 +136,8 @@ async function populate(page, role, screen) {
         const channel=new MessageChannel(); window.nativeCalls=[];
         channel.port1.onmessage=event=>{const message=JSON.parse(event.data);window.nativeCalls.push(message.type);channel.port1.postMessage(JSON.stringify({id:message.id,ok:true,saved:message.type!=='unbind',permission:'granted',configured:true,account_id:'current-user'}))};
         window.nativeHostPort=channel.port1;
-        window.postMessage(JSON.stringify({type:'delivery.native.ready',version:1,role,permission:'granted',configured:true,saved:false}),location.origin,[channel.port2]);
+        window.postMessage('',location.origin,[channel.port2]);
+        channel.port1.postMessage(JSON.stringify({type:'delivery.native.ready',version:1,role,permission:'granted',configured:true,saved:false}));
       },role);
       await nativePage.waitForFunction(()=>pushClient.enabled);
       await nativePage.evaluate(()=>pushDiag());
