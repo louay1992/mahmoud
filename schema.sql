@@ -1372,3 +1372,8 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 -- create_order: للموظف يُلزم سعر بيع ≥ رأس المال ولا يرى رأس المال.
 -- إصلاح: مقارنة captain_id = my_captain_id() صارت coalesce(..., false) (كانت تمرّر الطلبات غير المسندة).
 -- admin-set-password: إداري كامل فقط، ويقبل email لحساب في جدول admins.
+
+-- ===== v18: مركز الإشعارات =====
+-- جدول notifications (audience admin/captain, kind, level, title, body, order_id, read_by[]) + RLS للقراءة فقط.
+-- notify(...) تحفظ الإشعار وترسل push. mark_notifications_read(ids). fmt_money / order_lines.
+-- المشغّلات trg_orders_push / trg_orders_push_admin / trg_pay_push / trg_pr_push / trg_pr_push_admin أعيدت كتابتها لنصوص وافية.
