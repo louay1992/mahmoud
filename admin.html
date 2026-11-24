@@ -381,7 +381,7 @@ function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
-function go(k){ if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(k){ if(k==="settings") SSEC=null; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 /* ===== الإشعارات ===== */
@@ -1003,26 +1003,35 @@ async function submitStatus(){
 }
 
 /* ================= الإعدادات ================= */
+let SSEC=null;
 function vSettings(){
   const st=D.settings;
-  $("main").innerHTML = `
-  <div class="card"><h2>بيانات النشاط</h2>
+  const secs={
+    biz:`<div class="card"><h2>بيانات النشاط</h2>
     <div class="row"><input id="sb" placeholder="اسم النشاط" value="${esc(st.business_name)}"><input id="sc" placeholder="رمز العملة (د.أ)" value="${esc(st.currency)}"><input id="sl" type="number" min="0" placeholder="حد تنبيه المخزون المنخفض" value="${esc(st.low_stock)}"><input id="spc" placeholder="رمز الدولة للواتساب (مثال 963)" dir="ltr" value="${esc(st.phone_country||"963")}"></div>
-    <button class="b" onclick="saveSettings()">حفظ</button></div>
-  <div class="card"><h2>حساب فروقات الأسعار</h2>
+    <button class="b" onclick="saveSettings()">حفظ</button></div>`,
+    price:`<div class="card"><h2>حساب فروقات الأسعار</h2>
     <div class="row"><select id="spm"><option value="actual" ${st.price_mode!=="list"?"selected":""}>الفعلي: الكابتن يسلّمني ما قبضه فعلياً</option><option value="list" ${st.price_mode==="list"?"selected":""}>المثبت: الكابتن يسلّمني سعر المنتج المثبت (الزيادة له والنقص عليه)</option></select>
     <select id="sce"><option value="false" ${st.captain_can_edit_price!=="true"?"selected":""}>الإداري فقط يعدّل أسعار الطلبات</option><option value="true" ${st.captain_can_edit_price==="true"?"selected":""}>يُسمح للكابتن بتعديل السعر (بسبب إلزامي)</option></select></div>
     <p class="mut">يُطبَّق النمط على الطلبات التي تُسلَّم بعد الحفظ فقط؛ أما الطلبات المُسلَّمة سابقاً فيبقى مبلغها المطلوب كما حُسب وقت التسليم.</p>
-    <button class="b" onclick="savePriceSettings()">حفظ</button></div>
-  <div class="card"><h2>الإداريون</h2><table>
+    <button class="b" onclick="savePriceSettings()">حفظ</button></div>`,
+    admins:`<div class="card"><h2>الإداريون</h2><table>
     ${D.admins.map(a=>`<tr><td dir="ltr">${esc(a.email)}</td><td>${a.email.toLowerCase()===ME?'<span class="mut">أنت</span>':`<button class="b s r" onclick="delAdmin('${esc(a.email)}')">حذف</button>`}</td></tr>`).join("")}</table>
     <div class="row" style="margin-top:10px"><input id="nae" type="email" dir="ltr" placeholder="بريد إداري جديد"><button class="b" style="flex:0 0 auto" onclick="addAdmin()">إضافة</button></div>
-    <p class="mut">يجب أن يكون للإداري الجديد مستخدم بنفس البريد في Supabase > Authentication > Users.</p></div>
-  <div class="card"><h2>تغيير كلمة المرور</h2>
-    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>
-  <div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
+    <p class="mut">يجب أن يكون للإداري الجديد مستخدم بنفس البريد في Supabase > Authentication > Users.</p></div>`,
+    pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
+    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
+    danger:`<div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
     <p class="mut">يمسح كل الطلبات والجرد والدفعات وسجل الحركة. يبقى المنتجات والكباتن والمستودعات. استخدمه بعد انتهاء التجربة فقط.</p>
-    <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`;
+    <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`,
+  };
+  const meta=[["biz", "بيانات النشاط", "اسم النشاط والعملة وتنبيه المخزون", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"], ["danger", "منطقة الخطر", "مسح البيانات التجريبية", "x"]];
+  if(SSEC&&secs[SSEC]){
+    const m=meta.find(x=>x[0]===SSEC);
+    $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
+    return;
+  }
+  $("main").innerHTML=`<div class="card"><h2>الإعدادات</h2><div class="more" style="grid-template-columns:1fr">${meta.map(([k,t,d,i])=>`<button onclick="SSEC='${k}';vSettings();scrollTo({top:0})" style="flex-direction:row;justify-content:flex-start;gap:12px;text-align:right"><span>${ic(i)}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>${t}</b><small class="mut">${d}</small></span></button>`).join("")}</div></div>`;
 }
 async function savePriceSettings(){
   if(await run(sb.from("settings").upsert([{key:"price_mode",value:$("spm").value},{key:"captain_can_edit_price",value:$("sce").value}]),"تم الحفظ")) refresh();
