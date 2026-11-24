@@ -222,11 +222,24 @@ async function savePrices(id){
   const ch=all.filter(p=>p.unit_price!==p.old); if(!ch.length) return toast("لم تغيّر أي سعر");
   if(await run(sb.rpc("update_order_prices",{p_order:id,p_prices:ch.map(({item_id,unit_price})=>({item_id,unit_price})),p_note:note}),"تم حفظ السعر")){ closeStatus(); refresh() }
 }
+function ask(title,html,ok,cls){
+  return new Promise(res=>{
+    const d=document.createElement("div");
+    d.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px";
+    d.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;max-width:380px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)"><h3 style="margin:0 0 8px">${title}</h3><div style="margin-bottom:14px;line-height:1.7">${html}</div>
+      <div style="display:flex;gap:8px"><button class="b ${cls||"g"}" style="flex:1" id="dk">${ok}</button><button class="b o" style="flex:1" id="dc">إلغاء</button></div></div>`;
+    const done=v=>{d.remove();res(v)};
+    d.querySelector("#dk").onclick=()=>done(true); d.querySelector("#dc").onclick=()=>done(false);
+    d.onclick=e=>{if(e.target===d)done(false)}; document.body.appendChild(d);
+  });
+}
+const askDeliver=id=>{const o=D.orders.find(x=>x.id===id);
+  return ask("✅ تأكيد التسليم",`هل سلّمت الطلب <b>#${o.order_no}</b> للزبون <b>${esc(o.customer_name)}</b>؟<br>المبلغ المستلم من الزبون: <b>${money(o.total)}</b><div class="mut" style="font-size:13px">سيُخصم المنتجات من جردك ولا يمكن التراجع.</div>`,"نعم، تم التسليم")};
 async function quick(id,k){
-  if(k==="delivered"){ if(!confirm("تأكيد تسليم الطلب للزبون؟")) return; if(await run(sb.rpc("deliver_order",{p_order:id,p_note:null}),"تم التسليم")) refresh(); return }
+  if(k==="delivered"){ if(!await askDeliver(id)) return; if(await run(sb.rpc("deliver_order",{p_order:id,p_note:null}),"تم التسليم")) refresh(); return }
   if(await run(sb.rpc("set_order_status",{p_order:id,p_status:k,p_note:null}),k==="in_delivery"?"الطلب الآن قيد التوصيل":"تم")) refresh();
 }
-async function restore(id){ if(!confirm("استرجاع هذا الطلب ليعود «جديداً»؟")) return;
+async function restore(id){ if(!await ask("↩️ استرجاع الطلب","استرجاع هذا الطلب ليعود «جديداً»؟","نعم، استرجاع")) return;
   if(await run(sb.rpc("restore_order",{p_order:id,p_note:null}),"تم استرجاع الطلب")) refresh() }
 
 /* ===== نافذة تحديث الحالة ===== */
@@ -247,8 +260,8 @@ function drawStatus(){
 async function submitStatus(){
   const note=$("sm_note").value.trim(), k=SM.k, id=SM.id;
   if(k==="other"&&!note) return toast("اكتب الملاحظة");
-  if(k==="cancelled"&&!confirm("إلغاء الطلب؟")) return;
-  if(k==="delivered"&&!confirm("تأكيد تسليم الطلب للزبون؟")) return;
+  if(k==="cancelled"&&!await ask("❌ إلغاء الطلب","هل تريد إلغاء هذا الطلب؟","نعم، إلغاء","r")) return;
+  if(k==="delivered"&&!await askDeliver(id)) return;
   const call = k==="delivered" ? sb.rpc("deliver_order",{p_order:id,p_note:note||null})
              : k==="cancelled" ? sb.rpc("cancel_order",{p_order:id,p_note:note||null})
              : sb.rpc("set_order_status",{p_order:id,p_status:k,p_note:note||null});
