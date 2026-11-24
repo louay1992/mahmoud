@@ -201,13 +201,19 @@ class DeliveryPush {
     await this.retireLegacyEndpoint(null);
   }
 
-  async inspect() {
-    if (this.native?.expected) return this.native.inspect();
-    const result = {
+  snapshot() {
+    if (this.native?.expected) return this.native.snapshot();
+    return {
+      transport: 'Web Push',
       permission: this.permission, requestResult: this.requestResult, saved: this.saved,
       push: "PushManager" in globalThis, scope: this.scope, active: false, subscription: false,
       userAgent: navigator.userAgent, error: this.lastError?.message || ""
     };
+  }
+
+  async inspect() {
+    if (this.native?.expected) return this.native.inspect();
+    const result = this.snapshot();
     try {
       const reg = await this.registration();
       result.scope = new URL(reg.scope).pathname;

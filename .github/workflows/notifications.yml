@@ -2,9 +2,9 @@ name: Check notification flow
 on:
   push:
     branches: [main]
-    paths: ['auth-session.js', 'push-client.js', 'native-push.js', 'mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'push*.js', 'native-push.js', 'mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
   pull_request:
-    paths: ['auth-session.js', 'push-client.js', 'native-push.js', 'mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'push*.js', 'native-push.js', 'mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
 permissions:
   contents: read
 jobs:
@@ -29,6 +29,7 @@ jobs:
       - run: node tests/notifications-browser.cjs
       - run: node tests/mobile-browser.cjs
       - run: node tests/auth-browser.cjs
+      - run: node tests/diagnostics-browser.cjs
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: browser-failure-screenshots, path: test-results/ }

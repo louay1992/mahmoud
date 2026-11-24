@@ -15,6 +15,7 @@
 <script src="/auth-session.js"></script>
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
+<script src="/push-diagnostics.js"></script>
 <script src="/mobile-ui.js" defer></script>
 <style>
 :root{
@@ -341,7 +342,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"
 const authGate = new DeliverySession("sb-captain-auth");
 /* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
 let _lc=0,_le=null;
-document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b) return;
+document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b || b.closest("#pdg") || b.hasAttribute("data-push-diagnostic")) return;
   const now=Date.now();
   if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800)){ e.stopPropagation(); e.preventDefault(); return }
   _le=b; _lc=now },true);
@@ -592,42 +593,15 @@ async function bellClick(){
 
 /* تعرض الأداة الإذن الفعلي ونتيجة الطلب والحفظ كلّاً على حدة. */
 async function pushDiag(initialLog=""){
-  let box=document.getElementById("pdg"); if(box) box.remove();
-  box=document.createElement("div"); box.id="pdg"; box.style.cssText="position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:flex-end;justify-content:center";
-  document.body.appendChild(box);
-  const log=initialLog?[initialLog]:[];
-  let o=await pushClient.inspect();
-  function draw(){
-    const mode=(matchMedia("(display-mode: standalone)").matches||document.referrer.startsWith("android-app://"))?"تطبيق":"متصفح";
-    box.innerHTML=`<div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:16px;max-height:85vh;overflow:auto;direction:rtl;font-size:14px;color:#0f172a">
-      <b style="font-size:16px">🔧 فحص الإشعارات · 1.1.0 · ${esc(o.transport||"Web Push")}</b>
-      <div style="margin:10px 0;line-height:1.9">إذن الموقع الفعلي: <b>${esc(o.permission)}</b><br>نتيجة آخر طلب إذن: <b>${esc(o.requestResult||"لم يُطلب")}</b><br>طريقة التشغيل: <b>${mode}</b><br>دعم Push: <b>${o.push?"نعم":"لا"}</b><br>خدمة الخلفية: <b>${o.active?"يعمل":"غير جاهزة"}</b><br>نطاق الخدمة: <b dir="ltr">${esc(o.scope)}</b><br>اشتراك الجهاز: <b>${o.subscription?"موجود ✓":"غير موجود"}</b><br>حفظ الاشتراك بالخادم: <b>${o.saved?"تم ✓":"غير مؤكّد"}</b></div>
-      ${o.error?`<div style="color:#b91c1c;margin-bottom:10px">${esc(o.error)}</div>`:""}
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="b btn" id="pdg-ask">1) طلب الإذن</button><button class="b btn" id="pdg-sub">2) تفعيل الاشتراك</button><button class="b btn" id="pdg-local">3) إشعار تجريبي</button><button class="b btn" id="pdg-close">إغلاق</button></div>
-      <div style="background:#f1f5f9;border-radius:10px;padding:8px 10px;white-space:pre-wrap;direction:ltr;text-align:left;font-size:12px;min-height:40px">${esc(log.join("\n")||"...")}</div>
-      <div style="margin-top:8px;font-size:11px;direction:ltr;text-align:left;overflow-wrap:anywhere">${esc(o.userAgent)}</div></div>`;
-    box.querySelector("#pdg-close").onclick=()=>box.remove();
-    box.querySelector("#pdg-ask").onclick=()=>act(async()=>{
-      try{ await pushClient.requestPermission() }
-      finally{ log.push("requestPermission → "+pushClient.requestResult+"; Notification.permission → "+notifState()) }
-    });
-    box.querySelector("#pdg-sub").onclick=()=>act(async()=>{ await ensurePush({strict:true}); log.push("OK: اشتراك الجهاز وحفظ الخادم نجحا") });
-    box.querySelector("#pdg-local").onclick=()=>act(async()=>{ await pushClient.showTest("إشعار تجريبي",{body:"إذا ظهر هذا الإشعار فالعرض يعمل",dir:"rtl",icon:"/icons/captain-192.png",data:{url:"/captain.html"}}); log.push("showNotification OK — فحص عرض محلي") });
-    if(pushClient.native?.expected){ const b=document.createElement("button"); b.className="b btn"; b.id="pdg-server"; b.textContent="4) اختبار FCM من الخادم"; box.querySelector("#pdg-local").after(b); b.onclick=()=>act(async()=>{ await pushClient.native.serverTest(); log.push("FCM accepted — أُرسل للاختبار؛ تحقّق من وصوله على الجهاز") }) }
-  }
-  async function act(fn){
-    box.querySelectorAll("button").forEach(b=>b.disabled=true);
-    try{ await fn() }catch(e){ log.push("ERR: "+e.name+" "+e.message) }
-    finally{ o=await pushClient.inspect(); initNotifUI(); if(box.isConnected) draw() }
-  }
-  draw();
+  return openDeliveryPushDiagnostics({client:pushClient,role:"captain",initialLog,enable:()=>ensurePush({strict:true}),refreshUI:initNotifUI,escape:esc});
 }
 async function ensurePush({strict=false}={}){
   try{
-    if(authGate.blocked) return false;
+    if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(!(!!me)) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
+    if(strict && pushClient.native?.expected && !pushClient.native.port) throw new Error("قناة Android غير متصلة. تحقق من نسخة التطبيق وChrome ثم أعد فتحه من أيقونته.");
     if(pushClient.native?.expected) await pushClient.native.ready();
-    if(authGate.blocked) return false;
+    if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(notifState()!=="granted" && !strict) return false;
     await pushClient.subscribe(); return true;
   }catch(e){ if(strict) throw e; console.warn("push",e); return false }
@@ -727,7 +701,7 @@ function vOrders(){
   const cnt=k=>D.orders.filter(o=>o.status===k).length;
   if(!TF||!SBAR.some(x=>x[0]===TF)) TF=["assigned","in_delivery","no_answer","closed","other"].find(k=>cnt(k)>0)||"assigned";
   const nb=!pushClient.enabled&&notifState()!=="na"&&!localStorage.getItem("nb_dismiss");
-  $("main").innerHTML = `${nb?`<div id="push-banner" class="banner n">${ic("bell")}<div><b>فعّل الإشعارات</b><span>لتصلك الطلبات الجديدة وملاحظات الإداري فوراً</span></div><button class="btn" onclick="bellClick().then(()=>render())">تفعيل</button><button class="btn" onclick="pushDiag()" style="margin-inline-start:6px">فحص</button></div>`:""}
+  $("main").innerHTML = `${nb?`<div id="push-banner" class="banner n">${ic("bell")}<div><b>فعّل الإشعارات</b><span>لتصلك الطلبات الجديدة وملاحظات الإداري فوراً</span></div><button class="btn" onclick="bellClick().then(()=>render())">تفعيل</button><button class="btn" data-push-diagnostic onclick="pushDiag()" style="margin-inline-start:6px">فحص</button></div>`:""}
   <div class="sbar" id="sbar">${SBAR.map(([k,l])=>{const n=cnt(k);return `<button class="sch ${TF===k?"on":""} ${n&&(k==="assigned"||k==="no_answer")?"hot":""}" style="--c:${SCOL[k]}" onclick="TF='${k}';vOrders();scrollTo({top:0})">${l}<span class="n">${n}</span></button>`}).join("")}</div>
   <div class="search" style="margin-bottom:12px">${ic("search")}<input id="oq" placeholder="بحث بالاسم أو الموبايل أو الرقم" value="${esc(q)}" oninput="q=this.value;drawOrders()"></div>
   <div id="groups"></div>`;
