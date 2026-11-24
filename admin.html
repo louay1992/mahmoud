@@ -221,6 +221,14 @@ tr:last-child td{border-bottom:0}
 .capc{padding:14px}.capc.off{opacity:.6}.caph{display:flex;gap:10px;align-items:center}.cav{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#0f766e,#2dd4bf);color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px;flex:0 0 auto}
 .capb{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.capb .b{flex:1 1 auto}.capm{margin-top:10px;border-top:1px solid #e2e8f0;padding-top:8px}.capm summary{cursor:pointer;font-weight:700;color:#0f766e;padding:4px 0}
 @media(max-width:480px){.capst{grid-template-columns:repeat(2,1fr)}.capsum{grid-template-columns:1fr 1fr}.capsum .rem{grid-column:1/-1}}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.kp{background:#fff;border-radius:16px;padding:12px;box-shadow:var(--sh);display:flex;flex-direction:column;gap:2px;min-width:0}.kp .kpi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:17px;margin-bottom:4px}.kp small{color:#64748b;font-size:11.5px}.kp b{font-size:17px;word-break:break-word}.dl2{font-style:normal;font-size:11.5px;font-weight:700;color:#64748b}.dl2.up{color:#16a34a}.dl2.dn{color:#dc2626}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sgrid .card{min-width:0}
+.bars{display:flex;gap:3px;align-items:flex-end;height:150px}.bars.sm{height:120px}.bc{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0;gap:3px}.bb{width:100%;flex:1;display:flex;align-items:flex-end}.b1{width:100%;background:#99f6e4;border-radius:5px 5px 0 0;min-height:2px;display:flex;align-items:flex-end}.b2{width:100%;background:#0f766e;border-radius:5px 5px 0 0}.bc span{font-size:9.5px;color:#64748b;height:12px;white-space:nowrap}
+.lg{display:flex;gap:14px;margin-top:8px;font-size:12px;color:#475569}.lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:5px}
+.dn2{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.ring{width:120px;height:120px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto}.ring>div{width:76px;height:76px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}.ring b{font-size:20px}.ring small{color:#64748b;font-size:11px}
+.dlg2{flex:1;min-width:130px;display:flex;flex-direction:column;gap:5px;font-size:13px}.dlg2>div{display:flex;align-items:center;gap:6px}.dlg2 i{width:10px;height:10px;border-radius:3px;flex:0 0 auto}.dlg2 b{margin-right:auto}.dlg2 small{color:#64748b;min-width:34px;text-align:left}
+.hb{margin-bottom:10px}.hl{display:flex;justify-content:space-between;font-size:13.5px;gap:8px}.ht{height:9px;background:#f1f5f9;border-radius:6px;overflow:hidden;margin:4px 0 2px}.ht>div{height:100%;border-radius:6px}
+@media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}.sgrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -431,7 +439,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
 const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
@@ -570,7 +578,7 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,stats:vStats,customers:vCustomers,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -1092,6 +1100,92 @@ async function saveOrder(){
   if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:($("oc")||{}).value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null,p_governorate:($("og")||{}).value||null}),"تم إنشاء الطلب")){ if(ACC.role==="staff"){ await refresh(); go(can("view_orders")?"orders":"new") } else { tab="orders"; renderNav(); refresh() } }
 }
 
+/* ================= إحصائيات عامة ================= */
+let STP="30", SDATA=null, SLOAD=0;
+const SPER=[["today","اليوم"],["7","7 أيام"],["30","30 يوماً"],["month","هذا الشهر"],["all","الكل"]];
+const WD=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const dayK=d=>{const x=new Date(d);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
+async function vStats(){
+  $("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">إحصائيات عامة</h2><div class="chips" id="spc"></div><div class="mut" id="sinfo" style="font-size:12px"></div></div><div id="sbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
+  const my=++SLOAD;
+  const [o,p,st]=await Promise.all([
+    sb.from("orders").select("id,order_no,status,created_at,delivered_at,total,items_total,list_total,delivery_fee,governorate,marketer_id,captain_id,customer_name,customer_phone,order_items(qty,unit_price,list_price,products(name))").order("created_at",{ascending:false}).limit(5000),
+    sb.from("order_profits").select("order_id,marketer_id,capital,profit").limit(5000),
+    sb.from("stock").select("qty,warehouse_id,product_id,products(name)")]);
+  if(my!==SLOAD||tab!=="stats") return;
+  if(o.error){ $("sbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
+  const pf={}; (p.data||[]).forEach(x=>pf[x.order_id]=x);
+  SDATA={orders:o.data,pf,stock:st.data||[]}; drawStats();
+}
+function drawStats(){
+  if(!SDATA||!$("sbody")) return;
+  $("spc").innerHTML=SPER.map(([k,l])=>`<button class="chip ${STP===k?"on":""}" onclick="STP='${k}';drawStats()">${l}</button>`).join("");
+  const now=new Date(), d0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  let from=0,len=0; if(STP==="today"){from=d0;len=1} else if(STP==="7"){from=d0-6*864e5;len=7} else if(STP==="30"){from=d0-29*864e5;len=30} else if(STP==="month"){from=new Date(now.getFullYear(),now.getMonth(),1).getTime();len=Math.round((d0-from)/864e5)+1}
+  const to=now.getTime(), prevFrom=from?from-(to-from):0;
+  const all=SDATA.orders, inP=o=>!from||new Date(o.created_at).getTime()>=from;
+  const cur=all.filter(inP), prev=from?all.filter(o=>{const t=new Date(o.created_at).getTime();return t>=prevFrom&&t<from}):[];
+  const sum=(arr)=>{ const dl=arr.filter(o=>o.status==="delivered");
+    const sales=dl.reduce((a,o)=>a+Number(o.items_total),0), fee=dl.reduce((a,o)=>a+Number(o.delivery_fee),0), mk=dl.reduce((a,o)=>a+Number((SDATA.pf[o.id]||{}).profit||0),0);
+    const cap=dl.reduce((a,o)=>a+Number((SDATA.pf[o.id]||{}).capital||o.list_total||0),0);
+    const canc=arr.filter(o=>o.status==="cancelled"||o.status==="returned").length;
+    return {n:arr.length,dl:dl.length,sales,fee,mk,cap,canc,rate:pct(dl.length,arr.length-arr.filter(o=>o.status==="cancelled").length),avg:dl.length?sales/dl.length:0} };
+  const A=sum(cur), B=sum(prev);
+  const dlt=(a,b)=>{ if(!from||!b) return ""; const d=Math.round((a-b)/b*100); return `<i class="dl2 ${d>0?"up":d<0?"dn":""}">${d>0?"▲":d<0?"▼":"•"} ${Math.abs(d)}%</i>` };
+  const kpi=(ic2,l,v,d,c)=>`<div class="kp"><div class="kpi" style="background:${c}">${ic2}</div><small>${l}</small><b>${v}</b>${d||""}</div>`;
+  // trend
+  const days=len||Math.min(60,Math.max(14,Math.round((to-new Date(all.length?all[all.length-1].created_at:to).getTime())/864e5)+1));
+  const keys=[]; for(let i=days-1;i>=0;i--) keys.push(dayK(d0-i*864e5));
+  const byDay={}; keys.forEach(k=>byDay[k]={n:0,d:0}); all.forEach(o=>{const k=dayK(o.created_at); if(byDay[k]){ byDay[k].n++; if(o.status==="delivered") byDay[k].d++ }});
+  const mxd=Math.max(1,...keys.map(k=>byDay[k].n));
+  const trend=`<div class="bars">${keys.map((k,i)=>{const v=byDay[k];return `<div class="bc" title="${k}: ${v.n} طلب (${v.d} مسلَّم)"><div class="bb"><div class="b1" style="height:${v.n/mxd*100}%"><div class="b2" style="height:${v.n?v.d/v.n*100:0}%"></div></div></div>${keys.length<=14||i%Math.ceil(keys.length/10)===0?`<span>${k.slice(8)}/${k.slice(5,7)}</span>`:"<span></span>"}</div>`}).join("")}</div>
+    <div class="lg"><span><i style="background:#99f6e4"></i>كل الطلبات</span><span><i style="background:#0f766e"></i>المسلَّمة</span></div>`;
+  // status donut
+  const stc={}; cur.forEach(o=>stc[o.status]=(stc[o.status]||0)+1);
+  let acc=0; const segs=Object.keys(stc).map(k=>{const a=acc,b=acc+stc[k]/cur.length*100;acc=b;return `${SCOL[k]||"#94a3b8"} ${a}% ${b}%`});
+  const donut=cur.length?`<div class="dn2"><div class="ring" style="background:conic-gradient(${segs.join(",")})"><div><b>${cur.length}</b><small>طلب</small></div></div>
+    <div class="dlg2">${Object.keys(stc).sort((a,b)=>stc[b]-stc[a]).map(k=>`<div><i style="background:${SCOL[k]||"#94a3b8"}"></i>${ST[k]||k}<b>${stc[k]}</b><small>${pct(stc[k],cur.length)}%</small></div>`).join("")}</div></div>`:'<p class="mut">لا طلبات في هذه الفترة</p>';
+  const hb=(rows,color,fmt)=>{ const mx=Math.max(1,...rows.map(r=>r.v)); return rows.length?rows.map(r=>`<div class="hb"><div class="hl"><span>${r.l}</span><b>${fmt?fmt(r.v):r.v}</b></div><div class="ht"><div style="width:${r.v/mx*100}%;background:${color}"></div></div>${r.s?`<small class="mut">${r.s}</small>`:""}</div>`).join(""):'<p class="mut">لا بيانات</p>' };
+  const dl=cur.filter(o=>o.status==="delivered");
+  // products
+  const pr={}; dl.forEach(o=>o.order_items.forEach(i=>{const n=i.products?.name||"—"; const x=pr[n]=pr[n]||{q:0,r:0}; x.q+=i.qty; x.r+=i.qty*Number(i.unit_price)}));
+  const topP=Object.entries(pr).sort((a,b)=>b[1].q-a[1].q).slice(0,6).map(([n,x])=>({l:esc(n),v:x.q,s:"إيراد "+money(x.r)}));
+  // marketers
+  const mkr={}; dl.forEach(o=>{ if(!o.marketer_id) return; const x=mkr[o.marketer_id]=mkr[o.marketer_id]||{n:0,p:0}; x.n++; x.p+=Number((SDATA.pf[o.id]||{}).profit||0) });
+  const topM=Object.entries(mkr).sort((a,b)=>b[1].n-a[1].n).slice(0,6).map(([id,x])=>({l:esc(mname(id)),v:x.n,s:"ربحها "+money(x.p)}));
+  // captains
+  const cpr={}; cur.forEach(o=>{ if(!o.captain_id) return; const x=cpr[o.captain_id]=cpr[o.captain_id]||{t:0,d:0}; x.t++; if(o.status==="delivered") x.d++ });
+  const topC=Object.entries(cpr).sort((a,b)=>b[1].d-a[1].d).slice(0,6).map(([id,x])=>({l:esc(cname(id)),v:x.d,s:"من "+x.t+" طلب · نسبة التسليم "+pct(x.d,x.t)+"%"}));
+  // governorates
+  const gv={}; cur.forEach(o=>{const g=o.governorate||"غير محددة"; gv[g]=(gv[g]||0)+1});
+  const topG=Object.entries(gv).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([g,n])=>({l:esc(g),v:n,s:pct(n,cur.length)+"% من الطلبات"}));
+  // weekday
+  const wd=Array(7).fill(0); cur.forEach(o=>wd[new Date(o.created_at).getDay()]++);
+  const mw=Math.max(1,...wd), bestWd=wd.indexOf(Math.max(...wd));
+  const wdc=`<div class="bars sm">${wd.map((v,i)=>`<div class="bc"><b style="font-size:11px">${v||""}</b><div class="bb"><div class="b1" style="height:${v/mw*100}%;background:${i===bestWd&&v?"#0f766e":"#99f6e4"}"></div></div><span>${WD[i].replace("ال","")}</span></div>`).join("")}</div>`;
+  // customers
+  const first={}; all.slice().reverse().forEach(o=>{const k=normPh(o.customer_phone); if(k&&!first[k]) first[k]=o.created_at});
+  const custCur={}; cur.forEach(o=>{const k=normPh(o.customer_phone); if(k) (custCur[k]=custCur[k]||{name:o.customer_name,n:0}).n++});
+  const ck=Object.keys(custCur), newC=ck.filter(k=>!from||new Date(first[k]).getTime()>=from).length;
+  const topCust=Object.entries(custCur).sort((a,b)=>b[1].n-a[1].n).slice(0,5).filter(x=>x[1].n>1).map(([k,x])=>({l:esc(x.name),v:x.n,s:k}));
+  // stock
+  const low=Number(D.settings.low_stock||3), stk={}; SDATA.stock.forEach(r=>{const n=r.products?.name||"—"; stk[n]=(stk[n]||0)+r.qty});
+  const lowL=Object.entries(stk).filter(([n,q])=>q<=low).sort((a,b)=>a[1]-b[1]).slice(0,6), units=Object.values(stk).reduce((a,q)=>a+Math.max(q,0),0);
+  const owed=(D.balances||[]).reduce((a,b)=>a+Number(b.balance||0),0);
+  const sec=(t,b,w)=>`<div class="card ${w?"sw":""}"><h3 style="margin:0 0 10px">${t}</h3>${b}</div>`;
+  $("sinfo").textContent=(from?"من "+new Date(from).toLocaleDateString("ar-EG")+" حتى اليوم · ":"كل الفترة · ")+"المبالغ تخص الطلبات المسلَّمة ضمن الفترة"+(from?" · النسب المئوية مقارنة بالفترة السابقة المماثلة":"");
+  $("sbody").innerHTML=`<div class="kpis">
+    ${kpi("📦","إجمالي الطلبات",A.n,dlt(A.n,B.n),"#e0f2fe")}${kpi("✅","طلبات مسلَّمة",A.dl,dlt(A.dl,B.dl),"#dcfce7")}${kpi("🎯","نسبة التسليم",A.rate+"%",from?dlt(A.rate,B.rate):"","#fef3c7")}
+    ${kpi("💰","إجمالي المبيعات",money(A.sales),dlt(A.sales,B.sales),"#ccfbf1")}${kpi("🏢","حصة الإدارة (رأس المال)",money(A.cap),dlt(A.cap,B.cap),"#e0e7ff")}${kpi("🛍️","أرباح المسوّقات",money(A.mk),dlt(A.mk,B.mk),"#fce7f3")}
+    ${kpi("🚚","أجور التوصيل",money(A.fee),dlt(A.fee,B.fee),"#ffedd5")}${kpi("🧮","متوسط قيمة الطلب",money(A.avg),dlt(A.avg,B.avg),"#f1f5f9")}${kpi("↩️","ملغى / مرتجع",A.canc,"","#fee2e2")}</div>
+  ${sec("📈 الطلبات يومياً (آخر "+keys.length+" يوماً)",trend,1)}
+  <div class="sgrid">${sec("🥧 توزيع الحالات",donut)}${sec("📅 أيام الأسبوع الأكثر نشاطاً",wdc+(cur.length?`<p class="mut" style="margin:6px 0 0">الأنشط: <b>${WD[bestWd]}</b></p>`:""))}</div>
+  <div class="sgrid">${sec("🏆 المنتجات الأكثر مبيعاً",hb(topP,"#0f766e",v=>v+" قطعة"))}${sec("🌟 أفضل المسوّقات",hb(topM,"#db2777",v=>v+" طلب"))}</div>
+  <div class="sgrid">${sec("🚚 أداء الكباتن",hb(topC,"#2563eb",v=>v+" مسلَّم"))}${sec("📍 الطلبات حسب المحافظة",hb(topG,"#f59e0b",v=>v+" طلب"))}</div>
+  <div class="sgrid">${sec("👥 العملاء",`<div class="capsum"><div><small>عملاء الفترة</small><b>${ck.length}</b></div><div><small>عملاء جدد</small><b>${newC}</b></div><div><small>عملاء عائدون</small><b>${ck.length-newC}</b></div></div>${topCust.length?'<h4 style="margin:12px 0 4px">الأكثر تكراراً للطلب</h4>'+hb(topCust,"#7c3aed",v=>v+" طلب"):""}`)}
+  ${sec("🏬 المخزون والمستحقات",`<div class="capsum"><div><small>إجمالي القطع بالمخزون</small><b>${units}</b></div><div><small>أصناف منخفضة</small><b class="${lowL.length?"neg":""}">${lowL.length}</b></div><div class="rem"><small>مستحق على الكباتن</small><b>${money(owed)}</b></div></div>${lowL.length?'<h4 style="margin:12px 0 4px">تحتاج تعبئة</h4>'+lowL.map(([n,q])=>`<div class="dr"><span class="dl">${esc(n)}</span><span class="dv2 ${q<=0?"neg":""}">${q} قطعة</span></div>`).join(""):""}`)}</div>`;
+}
 /* ================= العملاء (أرشيف حسب رقم الموبايل) ================= */
 const normPh=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/[۰-۹]/g,c=>"۰۱۲۳۴۵۶۷۸۹".indexOf(c)).replace(/\D/g,"");
   if(!d) return ""; if(d.startsWith("00963")) return "0"+d.slice(5); if(d.startsWith("963")) return "0"+d.slice(3); if(d.length===9&&d[0]==="9") return "0"+d; return d };
