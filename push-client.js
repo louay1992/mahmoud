@@ -1,11 +1,13 @@
 /* Shared notification subscription flow for the captain and admin applications. */
 class DeliveryPush {
-  constructor({ scope, keyUrl, apiKey, save, remove }) {
+  constructor({ scope, keyUrl, apiKey, save, remove, session }) {
     this.scope = scope;
     this.keyUrl = keyUrl;
     this.apiKey = apiKey;
     this.save = save;
     this.remove = remove;
+    this.native = globalThis.NativeDeliveryPush && session ?
+      new NativeDeliveryPush({ role: scope.slice(1), session }) : null;
     this.saved = false;
     this.lastError = null;
     this.lastWarning = null;
@@ -15,14 +17,20 @@ class DeliveryPush {
   }
 
   get permission() {
+    if (this.native?.expected) return this.native.permission;
     return "Notification" in globalThis ? Notification.permission : "na";
   }
 
   get enabled() {
+    if (this.native?.expected) return this.native.enabled;
     return this.permission === "granted" && this.saved;
   }
 
   async requestPermission() {
+    if (this.native?.expected) {
+      this.requestResult = await this.native.requestPermission();
+      return this.requestResult;
+    }
     if (this.permission === "na") throw new Error("المتصفح لا يدعم الإشعارات");
     this.requestResult = await Notification.requestPermission();
     // A delegated Android permission can take a moment to reach the page.
@@ -101,6 +109,20 @@ class DeliveryPush {
     this.lastError = null;
     this.lastWarning = null;
     try {
+      if (this.native?.expected) {
+        const result = await this.native.bind();
+        // Retire Web Push on this browser profile only after FCM binding succeeds.
+        try {
+          const reg = await navigator.serviceWorker?.getRegistration(this.scope);
+          const sub = await reg?.pushManager.getSubscription();
+          if (sub) {
+            const removed = await this.remove({ p_endpoint: sub.endpoint });
+            if (removed?.error) throw new Error(removed.error.message);
+          }
+          await this.retireLegacyEndpoint(null);
+        } catch (error) { this.lastWarning = error; }
+        return result;
+      }
       if (this.permission !== "granted") {
         throw new Error("إذن الموقع ليس granted (" + this.permission + ")");
       }
@@ -162,6 +184,11 @@ class DeliveryPush {
   }
 
   async unsubscribe() {
+    if (this.native?.expected) {
+      await this.native.unbind();
+      this.saved = false;
+      return;
+    }
     const reg = await this.registration();
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
@@ -174,6 +201,7 @@ class DeliveryPush {
   }
 
   async inspect() {
+    if (this.native?.expected) return this.native.inspect();
     const result = {
       permission: this.permission, requestResult: this.requestResult, saved: this.saved,
       push: "PushManager" in globalThis, scope: this.scope, active: false, subscription: false,
@@ -188,6 +216,12 @@ class DeliveryPush {
       result.error = error.message;
     }
     return result;
+  }
+
+  async showTest(title, options) {
+    if (this.native?.expected) return this.native.showTest();
+    const reg = await this.registration();
+    await reg.showNotification(title, options);
   }
 }
 globalThis.DeliveryPush = DeliveryPush;

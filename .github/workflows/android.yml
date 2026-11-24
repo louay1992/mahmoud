@@ -18,8 +18,14 @@ jobs:
         with: { gradle-version: '8.7' }
       - name: Test provider selection and build release (unsigned)
         working-directory: android
-        run: gradle --no-daemon testAdminDebugUnitTest testCaptainDebugUnitTest assembleAdminRelease assembleCaptainRelease
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json; fi
+          gradle --no-daemon testAdminDebugUnitTest testCaptainDebugUnitTest
+          if [ -f app/google-services.json ]; then gradle --no-daemon assembleAdminRelease assembleCaptainRelease; fi
       - name: Collect
+        if: ${{ hashFiles('android/app/google-services.json') != '' }}
         run: |
           mkdir out
           cp android/app/build/outputs/apk/admin/release/*.apk out/admin-unsigned.apk
@@ -32,9 +38,10 @@ jobs:
           git rev-parse HEAD > out/SOURCE_COMMIT.txt
           (cd out && sha256sum admin-unsigned.apk captain-unsigned.apk > SHA256SUMS)
       - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('android/app/google-services.json') != '' }}
         with: { name: apk-unsigned, path: out/ }
       - name: Publish unsigned build to apk-build branch
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && hashFiles('android/app/google-services.json') != ''
         run: |
           cd out && git init -q -b apk-build && git config user.name ci && git config user.email ci@example.com
           git add -A && git commit -qm "unsigned build" 
