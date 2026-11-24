@@ -129,6 +129,7 @@ tr:last-child td{border-bottom:0}
 .stat:active{transform:scale(.97)}.stat .ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:#fff;margin-bottom:6px}
 .stat .big{font-size:23px}
 
+.empty{text-align:center;padding:28px 10px;color:var(--mut,#64748b)}.empty b{display:block;color:#0f172a;margin-bottom:4px}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;overflow-x:auto}
 .chip{background:#fff;border:1.5px solid var(--bd);border-radius:20px;padding:6px 14px;font-size:14px;cursor:pointer;font-weight:600;transition:transform .12s,background .2s;white-space:nowrap}
 .chip:active{transform:scale(.95)}.chip.on{background:var(--p);color:#fff;border-color:var(--p)}.chip b{margin-inline-start:4px}
@@ -797,12 +798,45 @@ async function saveOrder(){
 }
 
 /* ================= الطلبات ================= */
+let orderCap="", orderMk="", orderPer="all", orderGrp="none";
+const ORD_STATUS=["new","assigned","in_delivery","no_answer","closed","other","delivered","cancelled","returned"];
+const SCOL={new:"#64748b",assigned:"#f59e0b",in_delivery:"#2563eb",no_answer:"#ea580c",closed:"#475569",other:"#0891b2",delivered:"#16a34a",cancelled:"#ef4444",returned:"#a855f7"};
+function ordBase(skipStatus){
+  const q=orderQuery.trim().toLowerCase(), now=new Date(), d0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  const from=orderPer==="today"?d0:orderPer==="week"?d0-6*864e5:orderPer==="month"?new Date(now.getFullYear(),now.getMonth(),1).getTime():0;
+  return D.orders.filter(o=>
+    (skipStatus||orderFilter==="all"||o.status===orderFilter)&&
+    (!orderCap||(orderCap==="none"?!o.captain_id:o.captain_id===orderCap))&&
+    (!orderMk||(orderMk==="none"?!o.marketer_id:o.marketer_id===orderMk))&&
+    (!from||new Date(o.created_at).getTime()>=from)&&
+    (!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id),mname(o.marketer_id)].some(v=>String(v||"").toLowerCase().includes(q))));
+}
 function vOrders(){
-  $("main").innerHTML = `<div class="card"><div class="row">
-    <input id="oq" placeholder="بحث: اسم الزبون، الموبايل، رقم الطلب، الكابتن" value="${esc(orderQuery)}" oninput="orderQuery=this.value;renderOrderList()">
-    <select onchange="orderFilter=this.value;renderOrderList()">${[["all","كل الطلبات"],...Object.entries(ST)].map(([k,l])=>`<option value="${k}" ${orderFilter===k?"selected":""}>${l}</option>`).join("")}</select>
-    <button class="b o" style="flex:0 0 auto" onclick="refresh()">تحديث</button></div></div><div id="olist"></div>`;
+  $("main").innerHTML = `<div class="card">
+    <div class="row" style="margin-bottom:8px"><input id="oq" placeholder="بحث: اسم الزبون، الموبايل، رقم الطلب، الكابتن، المسوّقة" value="${esc(orderQuery)}" oninput="orderQuery=this.value;renderOrderList()"></div>
+    <div class="chips" id="ochips"></div>
+    <div class="row" style="margin-bottom:8px">
+      <select onchange="orderCap=this.value;renderOrderList()"><option value="">كل الكباتن</option><option value="none" ${orderCap==="none"?"selected":""}>غير مُسنَد لكابتن</option>${D.captains.map(c=>`<option value="${c.id}" ${orderCap===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
+      <select onchange="orderMk=this.value;renderOrderList()"><option value="">كل المسوّقات</option><option value="none" ${orderMk==="none"?"selected":""}>بدون مسوّقة</option>${D.marketers.map(m=>`<option value="${m.id}" ${orderMk===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select>
+      <select onchange="orderPer=this.value;renderOrderList()">${[["all","كل الأوقات"],["today","اليوم"],["week","آخر 7 أيام"],["month","هذا الشهر"]].map(([k,l])=>`<option value="${k}" ${orderPer===k?"selected":""}>${l}</option>`).join("")}</select>
+    </div>
+    <div class="chips" style="margin:0;align-items:center"><span class="mut">تجميع:</span>${[["none","بدون"],["status","حسب الحالة"],["captain","حسب الكابتن"],["marketer","حسب المسوّقة"],["day","حسب اليوم"]].map(([k,l])=>`<button class="chip ${orderGrp===k?"on":""}" data-g="${k}" onclick="orderGrp='${k}';document.querySelectorAll('[data-g]').forEach(c=>c.classList.toggle('on',c.dataset.g==='${k}'));renderOrderList()">${l}</button>`).join("")}
+      <button class="chip" onclick="orderFilter='all';orderCap='';orderMk='';orderPer='all';orderQuery='';orderGrp='none';vOrders()">إعادة ضبط ✕</button></div>
+    </div><div id="osum" class="mut" style="margin:0 4px 10px"></div><div id="olist"></div>`;
   renderOrderList();
+}
+function oc2(o){
+  const prq=(D.pr[o.id]||[]).some(x=>x.status==="pending");
+  const items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
+  return `<div class="card oc s-${o.status}" style="padding:12px 14px;margin-bottom:10px;cursor:pointer" onclick="openOrder('${o.id}')">
+    <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
+    <div class="mut" style="margin-bottom:4px">${items}</div>
+    <div class="row" style="justify-content:space-between;align-items:center;margin:0;gap:6px">
+      <span class="mut">🚚 ${o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد</b>'}${o.marketer_id?" · 🛍️ "+esc(mname(o.marketer_id)):""} · ${dt(o.created_at)}</span>
+      <b>${money(o.total)}</b></div>
+    ${prq?`<div style="color:#b45309;font-weight:700;margin-top:6px">📝 بانتظار قرارك: طلب تعديل سعر</div>`:""}
+    ${o.captain_note?`<div class="note" style="margin-top:6px">🗒️ ${esc(o.captain_note)}</div>`:""}
+  </div>`;
 }
 const itemsLine=o=>o.order_items.map(i=>{const d=Number(i.unit_price)-Number(i.list_price);return `${esc(i.products?.name)} × ${i.qty} @ ${money(i.unit_price)}${d?` <span class="${d>0?"up":"dn"}">(${d>0?"+":""}${money(d)} عن المثبت)</span>`:""}`}).join("<br>");
 function orderCard(o){
@@ -833,9 +867,18 @@ function orderCard(o){
   </div>`;
 }
 function renderOrderList(){
-  const q=orderQuery.trim().toLowerCase();
-  const list=D.orders.filter(o=>(orderFilter==="all"||o.status===orderFilter)&&(!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id)].some(v=>String(v||"").toLowerCase().includes(q))));
-  $("olist").innerHTML = list.map(orderCard).join("")||'<p class="mut">لا توجد طلبات</p>';
+  const base=ordBase(true), cnt={all:base.length}; base.forEach(o=>cnt[o.status]=(cnt[o.status]||0)+1);
+  $("ochips").innerHTML=[["all","الكل"],...ORD_STATUS.map(k=>[k,ST[k]])].filter(([k])=>k==="all"||cnt[k]||orderFilter===k).map(([k,l])=>`<button class="chip ${orderFilter===k?"on":""}" onclick="orderFilter='${k}';renderOrderList()">${k==="all"?"":`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${SCOL[k]};margin-inline-end:6px"></span>`}${l}<b>${cnt[k]||0}</b></button>`).join("");
+  const list=ordBase(false), tot=list.reduce((a,o)=>a+Number(o.total),0);
+  $("osum").innerHTML=`${list.length} طلب · الإجمالي: <b>${money(tot)}</b>`;
+  if(!list.length){ $("olist").innerHTML='<div class="empty"><b>لا توجد طلبات مطابقة</b><span>غيّر الفلاتر أو اضغط «إعادة ضبط»</span></div>'; return }
+  if(orderGrp==="none"){ $("olist").innerHTML=list.map(oc2).join(""); return }
+  const keyOf={status:o=>o.status,captain:o=>o.captain_id||"-",marketer:o=>o.marketer_id||"-",day:o=>new Date(o.created_at).toLocaleDateString("ar-EG")}[orderGrp];
+  const nameOf=k=>orderGrp==="status"?ST[k]:orderGrp==="captain"?(k==="-"?"غير مُسنَد":cname(k)):orderGrp==="marketer"?(k==="-"?"بدون مسوّقة":mname(k)):k;
+  const g={}; list.forEach(o=>(g[keyOf(o)]=g[keyOf(o)]||[]).push(o));
+  let keys=Object.keys(g); if(orderGrp==="status") keys.sort((x,y)=>ORD_STATUS.indexOf(x)-ORD_STATUS.indexOf(y));
+  $("olist").innerHTML=keys.map(k=>{const l=g[k],sum=l.reduce((a,o)=>a+Number(o.total),0);
+    return `<div class="row" style="justify-content:space-between;align-items:center;margin:14px 4px 8px"><h3 style="margin:0">${orderGrp==="status"?`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${SCOL[k]};margin-inline-end:8px"></span>`:""}${esc(nameOf(k))} <span class="mut">(${l.length})</span></h3><b>${money(sum)}</b></div>`+l.map(oc2).join("")}).join("");
 }
 async function restoreO(id){ if(!await askc("استرجاع هذا الطلب؟",{ok:"نعم، استرجاع"})) return;
   if(await run(sb.rpc("restore_order",{p_order:id,p_note:null}),"تم استرجاع الطلب")) refresh() }
