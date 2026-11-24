@@ -951,6 +951,17 @@ function renderOrderList(){
 async function restoreO(id){ if(!await askc("استرجاع هذا الطلب؟",{ok:"نعم، استرجاع"})) return;
   if(await run(sb.rpc("restore_order",{p_order:id,p_note:null}),"تم استرجاع الطلب")) refresh() }
 async function returnO(id){
+  try{
+    const {data:imp}=await sb.rpc("marketer_return_impact",{p_order:id});
+    if(imp&&imp.marketer&&Number(imp.profit)>0){
+      const short=Number(imp.shortfall)>0.004;
+      const ok=await askc(short
+        ?`⚠️ <b>رصيد المسوّقة «${esc(imp.name)}» غير كافٍ لاسترجاع نسبتها من هذا الطلب.</b><br>ربحها من الطلب: <b>${money(imp.profit)}</b><br>رصيدها الحالي: <b>${money(imp.balance)}</b><br>النقص: <b>${money(imp.shortfall)}</b><br><br>إذا تابعتَ سيصبح رصيدها <b>${money(imp.after)}</b> (مبلغ مستحق عليها لك).`
+        :`سيُخصم ربح المسوّقة «${esc(imp.name)}» من هذا الطلب (${money(imp.profit)}) من رصيدها.<br>رصيدها بعد الإرجاع: <b>${money(imp.after)}</b>`,
+        {title:short?"رصيد المسوّقة غير كافٍ":"أثر الإرجاع على المسوّقة",ok:short?"متابعة رغم ذلك":"متابعة",cls:short?"r":""});
+      if(!ok) return;
+    }
+  }catch(e){ console.warn(e) }
   const restock=await ask3("ستُلغى قيمة هذا الطلب من رصيد الكابتن.<br>هل البضاعة سليمة وتعود لمستودع الكابتن؟",{title:"إرجاع الطلب",yes:"سليمة — تعود للجرد",no:"تالفة — لا تعود"}); if(restock===null) return;
   if(await run(sb.rpc("return_order",{p_order:id,p_restock:restock,p_note:null}),"تم إرجاع الطلب")) refresh();
 }
