@@ -1,6 +1,7 @@
 name: Check notification flow
 on:
   push:
+    branches: [main]
     paths: ['push-client.js', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'tests/**', '.github/workflows/notifications.yml']
   pull_request:
     paths: ['push-client.js', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'tests/**', '.github/workflows/notifications.yml']

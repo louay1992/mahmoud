@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const http = require('node:http');
+const os = require('node:os');
 const { chromium } = require('playwright');
 
 (async () => {
@@ -21,12 +22,14 @@ const { chromium } = require('playwright');
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
-  let browser;
+  let context;
+  const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'delivery-notifications-'));
   try {
-    browser = await chromium.launch({ headless: true,
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: ['--no-sandbox'] });
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    await context.grantPermissions(['notifications'], { origin });
+    // Use a regular profile for persistent notifications, rather than an incognito context.
+    context = await chromium.launchPersistentContext(profile, { headless: true,
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: ['--no-sandbox'],
+      viewport: { width: 390, height: 844 } });
+    await context.grantPermissions(['notifications']);
     await context.route('**/*', route => {
       const url = route.request().url();
       if (url.startsWith(origin + '/')) return route.continue();
@@ -96,9 +99,9 @@ const { chromium } = require('playwright');
     }
     const scopes = await pages[0].evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map(r => new URL(r.scope).pathname).sort());
     assert.deepEqual(scopes, ['/admin', '/captain']);
-    await context.close();
   } finally {
-    if (browser) await browser.close();
+    if (context) await context.close();
+    await fs.rm(profile, { recursive: true, force: true });
     await new Promise(resolve => server.close(resolve));
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
