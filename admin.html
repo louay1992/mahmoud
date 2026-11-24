@@ -1280,7 +1280,7 @@ async function vShip(mode,{quiet=false,signal}={}){
   const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
   if(signal?.aborted||my!==SHLOAD||tab!==mode||who!==ME||authGate.blocked) return false;
   if(quiet&&(o.error||p.error))throw new Error('تعذّر تحميل الشحنات');
-  if(o.error){ if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
+  if(o.error||p.error){ if(mode==="carriers"&&globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError("شركات الشحن","carriers"); if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc((o.error||p.error).message)}</div>`; return }
   SHIPS=o.data; CPAYS=p.data||[]; if(quiet&&!appRefresh.safe())return false;
   const y=scrollY; if(mode==="carriers") drawCarriers(); else drawShip(); if(quiet)scrollTo({top:y,behavior:'instant'});
 }
@@ -1558,7 +1558,7 @@ async function vCustomers(){
   const my=++CLOAD,who=ME;
   const {data,error}=await timedRead(sb.from("orders").select("id,order_no,customer_name,customer_phone,marketer_id,status,total,created_at,governorate,order_items(qty,products(name))").order("created_at",{ascending:false}).limit(5000));
   if(my!==CLOAD||who!==ME||tab!=="customers"||authGate.blocked||!ME) return;
-  if(error){ $("clist").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
+  if(error){ if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('العملاء','customers'); $("clist").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
   const g={};
   data.forEach(o=>{ const k=normPh(o.customer_phone); if(!k) return; (g[k]=g[k]||{phone:k,name:o.customer_name,orders:[]}).orders.push(o) });
   CUS.rows=Object.values(g).map(c=>{ const mk={}; c.orders.forEach(o=>{ const id=o.marketer_id||"-"; mk[id]=(mk[id]||0)+1 });
