@@ -212,6 +212,7 @@ tr:last-child td{border-bottom:0}
 .nf{display:flex;justify-content:space-between;align-items:center}.ncat{font-size:11.5px;background:#eef2f7;color:#475569;padding:2px 9px;border-radius:99px;font-weight:700}.nlk{font-size:12.5px;color:var(--p);font-weight:700}
 .chk{display:flex;flex-wrap:wrap;gap:8px 14px}.chk label{display:flex;align-items:center;gap:6px;font-size:14px;background:#f1f5f9;padding:6px 10px;border-radius:10px}
 .pk{max-height:55vh;overflow:auto;margin:8px 0;display:flex;flex-direction:column;gap:6px}.pk label{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f1f5f9;border-radius:12px;cursor:pointer}.pk label.on{background:#ccfbf1}.pk label.dis{opacity:.45}.pk .sb{margin-right:auto;font-size:12px;color:#64748b}.pk input{width:auto}.pksearch{width:100%;margin-bottom:4px}.pkbtn{width:100%;text-align:right;background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:11px 12px;font:inherit;cursor:pointer}
+.pkr{background:#f1f5f9;border-radius:12px;padding:8px 10px}.pkr.on{background:#ccfbf1}.pkr label{display:flex;align-items:center;gap:10px;background:none;padding:2px;cursor:pointer}.pkr input[type=checkbox]{width:auto}.pkd{gap:8px;margin-top:8px}.pkd>div{flex:1}.pkd small{display:block;color:#475569;margin-bottom:2px}.pkd input{width:100%}
 </style>
 </head>
 <body>
@@ -810,11 +811,35 @@ function pickDlg(title,items,o={}){ // items:[{id,label,sub,off}]
   });
 }
 async function addProductsDlg(id){
+  const staff=ACC.role==="staff";
   const have=new Set([...$(id).children].map(r=>r.querySelector("select").value));
-  const items=D.products.filter(p=>p.active).map(p=>({id:p.id,label:p.name,sub:p.price!==undefined?money(p.price):"",off:have.has(p.id)}));
-  if(!items.length) return toast("لا توجد منتجات");
-  const r=await pickDlg("اختر منتجاً أو أكثر",items,{multi:true}); if(!r||!r.length) return;
-  r.forEach(pid=>{ addRow(id); const row=$(id).lastChild; row.querySelector("select").value=pid; rowPick(row.querySelector("select")) });
+  const prods=D.products.filter(p=>p.active&&!have.has(p.id));
+  if(!prods.length) return toast("لا توجد منتجات أخرى لإضافتها");
+  const st={}; // id -> {on,q,p}
+  const r=await new Promise(res=>{
+    const d=dlgShell(`<h3>إضافة منتجات للطلب</h3><input class="pksearch" id="pks" placeholder="🔍 ابحث بالاسم..." autocomplete="off"><div class="pk" id="pkl"></div><div class="btns"><button class="b" id="pkok">إضافة المحدد</button><button class="b o" id="pkc">إلغاء</button></div>`);
+    d.firstChild.style.maxWidth="440px";
+    const done=v=>{d.remove();res(v)};
+    const draw=()=>{ const q=nrm(d.querySelector("#pks").value);
+      d.querySelector("#pkl").innerHTML=prods.filter(p=>!q||nrm(p.name).includes(q)).map(p=>{const x=st[p.id]||{};
+        return `<div class="pkr ${x.on?"on":""}" data-id="${p.id}"><label><input type="checkbox" class="ck" ${x.on?"checked":""}> <span>${esc(p.name)}</span><span class="sb">${staff||p.price===undefined?"":"رأس المال: "+money(p.price)}</span></label>
+        <div class="pkd" style="display:${x.on?"flex":"none"}"><div><small>العدد المطلوب</small><input type="number" class="dq" min="1" step="1" value="${x.q||1}"></div><div><small>سعر البيع</small><input type="number" class="dp" min="0" step="0.01" value="${x.p!==undefined?x.p:(staff||p.price===undefined?"":p.price)}" placeholder="السعر"></div></div></div>`}).join("")||'<p class="mut" style="text-align:center">لا نتائج</p>';
+      d.querySelectorAll(".pkr").forEach(row=>{ const pid=row.dataset.id, g=()=>st[pid]=st[pid]||{};
+        row.querySelector(".ck").onchange=e=>{ g().on=e.target.checked; row.classList.toggle("on",e.target.checked); row.querySelector(".pkd").style.display=e.target.checked?"flex":"none" };
+        row.querySelector(".dq").oninput=e=>g().q=e.target.value; row.querySelector(".dp").oninput=e=>g().p=e.target.value }) };
+    d.querySelector("#pks").oninput=draw; draw();
+    d.querySelector("#pkok").onclick=()=>{
+      const sel=prods.filter(p=>st[p.id]&&st[p.id].on).map(p=>({id:p.id,q:parseInt(st[p.id].q)||1,p:st[p.id].p}));
+      for(const x of sel){ if(x.q<1) return toast("العدد غير صالح");
+        if(staff&&(x.p===undefined||x.p===""||isNaN(parseFloat(x.p)))) return toast("اكتب سعر البيع لكل منتج مختار") }
+      done(sel) };
+    d.querySelector("#pkc").onclick=()=>done(null); d.onclick=e=>{if(e.target===d)done(null)};
+    setTimeout(()=>d.querySelector("#pks").focus(),60);
+  });
+  if(!r||!r.length) return;
+  r.forEach(x=>{ addRow(id); const row=$(id).lastChild; row.querySelector("select").value=x.id; rowPick(row.querySelector("select"));
+    row.querySelector(".q").value=x.q; const pr=row.querySelector(".pr"); if(pr&&x.p!==undefined&&x.p!==""&&!isNaN(parseFloat(x.p))) pr.value=parseFloat(x.p); });
+  upd();
 }
 async function pickMarketer(){
   const cur=$("omk").value;
