@@ -379,7 +379,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["mbal","أرصدة المسوّقات","wallet"],["products","رأس مال المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","رأس مال المنتجات","tag"],["settings","الإعدادات","gear"]];
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
@@ -394,7 +394,7 @@ function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="mbal") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 /* ===== الإشعارات ===== */
@@ -473,7 +473,7 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers,mbal:vMbal})[tab]() }
+function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -514,14 +514,7 @@ function vMarketers(){
       <button class="b" onclick="addMarketer()">حفظ</button></div>`;
     return;
   }
-  $("main").innerHTML = `
-  <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">المسوّقات (${D.marketers.length})</h2>
-    <button class="b s" style="flex:0 0 auto" onclick="MSV='add';vMarketers();scrollTo({top:0})">+ إضافة</button></div>
-  ${D.marketers.length?`<div class="tw"><table>
-   <tr><th>الاسم</th><th>المحافظة</th><th>الموبايل</th><th></th></tr>
-   ${D.marketers.map(m=>`<tr style="${m.active?"":"opacity:.45"}"><td>${esc(m.name)}</td><td>${esc(m.governorate)}</td><td dir="ltr">${esc(m.phone)}</td>
-    <td style="white-space:nowrap"><button class="b s o" onclick="editMarketer('${m.id}')">تعديل</button> <button class="b s o" onclick="toggleMarketer('${m.id}',${!m.active})">${m.active?"إيقاف":"تفعيل"}</button></td></tr>`).join("")}
-  </table></div>`:'<p class="mut">لا توجد مسوّقات بعد</p>'}</div>`;
+  vMbal();
 }
 async function addMarketer(){
   const name=$("mn").value.trim(); if(!name) return toast("أدخل اسم المسوّقة");
@@ -552,18 +545,20 @@ const mkRows=()=>{
 };
 function mbList(){
   const rows=mkRows(), tot=rows.reduce((a,b)=>a+Number(b.balance),0);
-  $("mblist").innerHTML=`<div class="mut" style="margin-bottom:8px">${rows.length} مسوّقة · مجموع المتبقي لهن: <b>${money(tot)}</b></div>`+(rows.length?rows.map(b=>{const m=D.marketers.find(x=>x.id===b.marketer_id)||{};return `<div class="card" style="box-shadow:none;border:1px solid var(--line,#e2ecec);margin:0 0 12px">
-    <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 6px"><b style="font-size:17px">${esc(b.name)}${m.governorate?` <span class="mut" style="font-weight:400">— ${esc(m.governorate)}</span>`:""}</b><span class="mut">${b.delivered_count} طلب مُسلَّم</span></div>
+  $("mblist").innerHTML=`<div class="mut" style="margin-bottom:8px">${rows.length} مسوّقة · مجموع المتبقي لهن: <b>${money(tot)}</b></div>`+(rows.length?rows.map(b=>{const m=D.marketers.find(x=>x.id===b.marketer_id)||{};return `<div class="card" style="box-shadow:none;border:1px solid var(--line,#e2ecec);margin:0 0 12px;${m.active===false?"opacity:.55":""}">
+    <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 6px"><b style="font-size:17px">${esc(b.name)}${m.governorate?` <span class="mut" style="font-weight:400">— ${esc(m.governorate)}</span>`:""}</b><span class="mut">${m.active===false?"موقوفة · ":""}${b.delivered_count} طلب مُسلَّم</span></div>
+    ${m.phone?`<div class="mut" dir="ltr" style="text-align:end;margin:-2px 0 6px">${esc(m.phone)}</div>`:""}
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 6px"><div><div class="mut">الأرباح</div><b>${money(b.earned)}</b></div><div><div class="mut">المسدَّد</div><b>${money(b.paid)}</b></div><div><div class="mut">المتبقي لها</div><span class="big ${b.balance<0?"neg":""}">${money(b.balance)}</span></div></div>
     ${Number(b.pending)?`<div class="mut" style="margin-bottom:8px">أرباح بانتظار التسليم: ${money(b.pending)}</div>`:""}
-    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="b s" onclick="payMarketer('${b.marketer_id}')">تسديد دفعة</button><button class="b s o" onclick="mDetails('${b.marketer_id}')">التفاصيل</button></div></div>`}).join(""):'<p class="mut">لا توجد نتائج مطابقة</p>');
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="b s" onclick="payMarketer('${b.marketer_id}')">تسديد دفعة</button><button class="b s o" onclick="mDetails('${b.marketer_id}')">التفاصيل</button><button class="b s o" onclick="editMarketer('${b.marketer_id}')">تعديل</button><button class="b s o" onclick="toggleMarketer('${b.marketer_id}',${m.active===false})">${m.active===false?"تفعيل":"إيقاف"}</button></div></div>`}).join(""):'<p class="mut">لا توجد نتائج مطابقة</p>');
 }
 function mbFilter(k,v){ MF[k]=v; if(k==="f") document.querySelectorAll("#mbchips .chip").forEach(c=>c.classList.toggle("on",c.dataset.k===v)); mbList() }
 function vMbal(){
   const tot=D.mbal.reduce((a,b)=>({e:a.e+Number(b.earned),p:a.p+Number(b.paid),b:a.b+Number(b.balance)}),{e:0,p:0,b:0});
   const govs=[...new Set(D.marketers.map(m=>m.governorate).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"ar"));
   const chips=[["all","الكل"],["due","لها رصيد"],["settled","مسدَّدة بالكامل"],["pending","أرباح بانتظار التسليم"],["none","بدون نشاط"]];
-  $("main").innerHTML = `<div class="card"><h2>أرصدة المسوّقات</h2>
+  $("main").innerHTML = `<div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="margin:0">المسوّقات (${D.marketers.length})</h2>
+    <button class="b s" style="flex:0 0 auto" onclick="MSV='add';vMarketers();scrollTo({top:0})">+ إضافة مسوّقة</button></div>
    <div class="mut" style="margin-bottom:10px">مستحقات الكل: <b>${money(tot.b)}</b> · إجمالي الأرباح: ${money(tot.e)} · المسدَّد: ${money(tot.p)}</div>
    <div class="row"><input id="mbq" placeholder="بحث: اسم المسوّقة أو المحافظة أو الموبايل" value="${esc(MF.q)}" oninput="mbFilter('q',this.value)">
     <select onchange="mbFilter('g',this.value)"><option value="">كل المحافظات</option>${govs.map(g=>`<option ${MF.g===g?"selected":""}>${esc(g)}</option>`).join("")}</select></div>
