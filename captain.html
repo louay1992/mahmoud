@@ -277,6 +277,15 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .acr-i{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;flex:none}.acr-i svg{width:20px;height:20px}
 .acr-l{flex:1;font-size:14px;color:#475569}.acr-v{font-size:17px;font-weight:800}
 .acr{cursor:pointer}.acr-ch{color:#94a3b8;font-size:20px}.dayh{display:flex;justify-content:space-between;align-items:center;margin:14px 4px 6px;font-size:13px;color:#475569}.dayh span{font-weight:800;color:#0f172a}
+.nbd{position:absolute;top:-4px;inset-inline-end:-4px;min-width:18px;height:18px;border-radius:9px;background:#ef4444;color:#fff;font-size:11px;font-style:normal;display:grid;place-items:center;padding:0 4px;border:2px solid #fff}
+.nchips{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px;scrollbar-width:none}.nchips::-webkit-scrollbar{display:none}.nchips button{flex:none;border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:7px 13px;font:inherit;font-size:13px;color:#475569}
+.nchips button.on{background:var(--p);color:#fff;border-color:var(--p)}.nchips i{font-style:normal;opacity:.7}
+.nday{margin:14px 4px 6px;font-size:13px;font-weight:800;color:#475569}
+.nc{background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:8px;border-inline-start:4px solid #2563eb;box-shadow:0 1px 3px #0001;cursor:pointer}
+.nc.nu{background:#f0f7ff;box-shadow:0 2px 8px #2563eb26}
+.nh{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.nh b{font-size:15px}.nh span{font-size:12px;color:#64748b;white-space:nowrap}
+.nb{white-space:pre-line;font-size:14px;color:#334155;margin:6px 0 8px;line-height:1.6}
+.nf{display:flex;justify-content:space-between;align-items:center}.ncat{font-size:11.5px;background:#eef2f7;color:#475569;padding:2px 9px;border-radius:99px;font-weight:700}.nlk{font-size:12.5px;color:var(--p);font-weight:700}
 </style>
 </head>
 <body>
@@ -304,7 +313,7 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
   <header>
     <div class="av" id="av">ك</div>
     <div class="tt"><b id="hn">كابتن التوصيل</b><span id="hs"></span></div>
-    <button class="ib" id="bell" onclick="bellClick()" aria-label="الإشعارات"></button>
+    <button class="ib" id="bell" onclick="go('notifs')" aria-label="الإشعارات"></button>
     <button class="ib" id="rf" onclick="manualRefresh()" aria-label="تحديث"></button>
     <button class="ib" id="lo" onclick="logout()" aria-label="خروج"></button>
   </header>
@@ -429,6 +438,7 @@ async function load(initial){
     sb.from("settings").select("*"),
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(1000),
     sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
+    sb.from("notifications").select("*").order("created_at",{ascending:false}).limit(150),
   ]);
   if(seq!==LSEQ||!me||me.id!==who) return;
   const bad=r.find(x=>x.error); if(bad){ if(!initial) return; toast("خطأ تحميل: "+bad.error.message,"err") }
@@ -440,7 +450,7 @@ async function load(initial){
   D.pr={}; (r[6].data||[]).forEach(x=>{ (D.pr[x.order_id]=D.pr[x.order_id]||[]).push(x) });
   D.ev={}; (r[5].data||[]).forEach(e=>(D.ev[e.order_id]=D.ev[e.order_id]||[]).push(e));
   const n=D.orders.filter(o=>OPEN.includes(o.status)).length; setBadge(n);
-  detect(prev);
+  D.notifs=r[7].data||[]; detectNotifs();
 }
 function setBadge(n){
   $("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"+(n?`<i class="bd">${n}</i>`:"");
@@ -472,7 +482,7 @@ function render_if_idle(){ if($("modal").style.display==="flex"||document.queryS
 async function refresh(){ await load(); render_if_idle() }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await load(); render(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 function go(t){ tab=t; if(t==="acc")ASUB="";["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
-function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
+function render(){ ({orders:vOrders,stock:vStock,acc:vAcc,notifs:vNotifs})[tab]() }
 
 /* ===== الإشعارات ===== */
 let actx;
@@ -484,6 +494,51 @@ async function notify(title, body, tag){
   if(document.hidden && "Notification" in window && Notification.permission==="granted"){
     const opt={body,tag,icon:"/icons/captain-192.png",badge:"/icons/captain-192.png",dir:"rtl",lang:"ar",renotify:true,vibrate:[200,100,200],data:{url:"/captain.html"}};
     try{ const reg=await navigator.serviceWorker.getRegistration(); if(reg) reg.showNotification(title,opt); else new Notification(title,opt) }catch(e){} }
+}
+const NME=()=>String((me&&me.email)||"").toLowerCase();
+
+/* ===== مركز الإشعارات ===== */
+const NK={new_order:["طلبات"],order_edit:["طلبات"],order_removed:["طلبات"],staff_order:["طلبات"],status:["الحالات"],admin_note:["ملاحظات"],captain_note:["ملاحظات"],payment:["دفعات"],price_request:["أسعار"],price_decision:["أسعار"]};
+const NCAT=[["all","الكل"],["unread","غير مقروء"],["طلبات","الطلبات"],["الحالات","الحالات"],["ملاحظات","الملاحظات"],["دفعات","الدفعات"],["أسعار","الأسعار"]];
+const NLV={info:"#2563eb",success:"#16a34a",warn:"#f59e0b",danger:"#ef4444"};
+let NF="all", NU=new Set();
+const nUnread=n=>!(n.read_by||[]).includes(NME());
+const nCat=n=>(NK[n.kind]||["أخرى"])[0];
+function nDay(s){ const d=new Date(s), t=new Date(), y=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1);
+  if(d.toDateString()===t.toDateString()) return "اليوم"; if(d.toDateString()===y.toDateString()) return "أمس";
+  return d.toLocaleDateString("ar-EG",{weekday:"long",day:"numeric",month:"long"}) }
+function nBadge(){ const c=(D.notifs||[]).filter(nUnread).length; return c?`<i class="nbd">${c>99?"99+":c}</i>`:"" }
+function markRead(){
+  const ids=(D.notifs||[]).filter(nUnread).map(n=>n.id); if(!ids.length) return;
+  ids.forEach(i=>NU.add(i)); const m=NME();
+  D.notifs.forEach(n=>{ if(ids.includes(n.id)) n.read_by=[...(n.read_by||[]),m] }); initNotifUI();
+  sb.rpc("mark_notifications_read",{p_ids:ids}).then(()=>{},()=>{});
+}
+function markAllRead(){ markRead(); vNotifs() }
+function vNotifs(){
+  const all=D.notifs||[]; (all.filter(nUnread)).forEach(n=>NU.add(n.id));
+  const cnt=k=>k==="all"?all.length:k==="unread"?all.filter(n=>NU.has(n.id)).length:all.filter(n=>nCat(n)===k).length;
+  const list=all.filter(n=>NF==="all"||(NF==="unread"?NU.has(n.id):nCat(n)===NF));
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0">الإشعارات</h2>${NU.size?`<button class="btn" style="min-height:36px;padding:0 12px;background:#eaf1ff;color:#1d4ed8;font-size:13px" onclick="NU=new Set();vNotifs()">تعليم الكل كمقروء</button>`:""}</div>`;
+  if(notifState()!=="granted"&&notifState()!=="na") h+=`<div class="card" style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a"><div style="flex:1;font-size:14px">فعّل إشعارات الجهاز لتصلك التنبيهات والتطبيق مغلق</div><button class="btn btn-p" style="min-height:36px;padding:0 14px" onclick="bellClick().then(vNotifs)">تفعيل</button></div>`;
+  h+=`<div class="nchips">${NCAT.map(([k,l])=>`<button class="${NF===k?"on":""}" onclick="NF='${k}';vNotifs()">${l} <i>${cnt(k)}</i></button>`).join("")}</div>`;
+  if(!list.length) h+=`<div class="card mut" style="text-align:center;padding:30px 14px">لا توجد إشعارات${NF!=="all"?" في هذا التصنيف":" بعد"}.</div>`;
+  let last="";
+  list.forEach(n=>{ const dd=nDay(n.created_at); if(dd!==last){ h+=`<div class="nday">${dd}</div>`; last=dd }
+    h+=`<div class="nc ${NU.has(n.id)?"nu":""}" style="border-inline-start-color:${NLV[n.level]||NLV.info}" ${n.order_id?`onclick="openNotif('${n.order_id}')"`:""}>
+      <div class="nh"><b>${esc(n.title)}</b><span>${new Date(n.created_at).toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"})}</span></div>
+      <div class="nb">${esc(n.body)}</div>
+      <div class="nf"><span class="ncat">${nCat(n)}</span>${n.order_id?`<span class="nlk">عرض الطلب ‹</span>`:""}</div></div>`; });
+  $("main").innerHTML=h; markRead();
+}
+function openNotif(oid){ if(!(D.orders||[]).some(o=>o.id===oid)) return toast("الطلب غير متاح","err"); openOrder(oid) }
+function detectNotifs(){
+  const key="nseen_"+NME(); let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
+  const ids=(D.notifs||[]).map(n=>n.id);
+  if(S&&tab!=="notifs"){ const fresh=D.notifs.filter(n=>!S.includes(n.id)&&nUnread(n)).slice(0,4).reverse();
+    fresh.forEach((n,i)=>setTimeout(()=>notify(n.title,n.body.split("\n").slice(0,2).join(" · "),"n"+n.id),i*900)) }
+  try{ localStorage.setItem(key,JSON.stringify(ids.slice(0,150))) }catch(e){}
+  initNotifUI();
 }
 function notifState(){ return !("Notification" in window)?"na":Notification.permission }
 function initNotifUI(){ const s=notifState(), b=$("bell"); b.innerHTML=ic(s==="denied"?"bell":"bell")+(s==="granted"?"":'<i class="dot"></i>'); b.classList.toggle("on",s==="granted") }
@@ -512,7 +567,7 @@ function startLive(){
   const kick=()=>{ clearTimeout(deb); deb=setTimeout(refresh,500) };
   try{ rt=sb.channel("cap-live").on("postgres_changes",{event:"*",schema:"public",table:"orders"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"captain_payments"},kick)
-      .on("postgres_changes",{event:"*",schema:"public",table:"price_requests"},kick).subscribe() }catch(e){}
+      .on("postgres_changes",{event:"*",schema:"public",table:"price_requests"},kick).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},kick).subscribe() }catch(e){}
 }
 setInterval(()=>{ if(me && !document.hidden) refresh() }, 20000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&me){ refresh(); checkUpdate() } });
