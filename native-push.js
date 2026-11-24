@@ -9,26 +9,56 @@ class NativeDeliveryPush {
     this.unbindKey = 'delivery-native-unbind-' + role;
     try { this.unbindPending = globalThis.localStorage?.getItem(this.unbindKey) === '1'; } catch (_) { this.unbindPending = false; }
     this.pending = new Map();
+    this.candidates = new Map();
     this.serial = 0;
     globalThis.addEventListener("message", event => {
       if (event.origin !== location.origin || !event.ports?.[0]) return;
+      if (event.source && event.source !== globalThis) return;
       let data;
-      try { data = typeof event.data === "string" ? JSON.parse(event.data) : event.data; } catch (_) { return; }
-      if (data?.type !== "delivery.native.ready" || data.role !== this.role || data.version !== 1) return;
-      if (this.port) {
-        this.port.close();
-        for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error("أُعيد الاتصال بتطبيق Android؛ أعد المحاولة")); }
-        this.pending.clear();
+      try { data = typeof event.data === 'string' && event.data ? JSON.parse(event.data) : event.data; } catch (_) { return; }
+      const port = event.ports[0];
+      // Chromium transfers a port with an empty Window message. The Android hello
+      // then arrives ON that port, rather than in the Window bootstrap payload.
+      if (data?.type === 'delivery.native.ready') {
+        if (this.validHello(data)) this.activate(port, data); else port.close();
+        return;
       }
-      this.expected = true;
-      this.port = event.ports[0];
-      this.update(data);
-      this.port.onmessage = event => this.receive(event.data);
-      this.port.start?.();
-      this.readyResolve?.();
-      if (this.unbindPending) this.unbind().catch(() => {});
-      globalThis.dispatchEvent(new Event("delivery-native-ready"));
+      if (data !== '' && data != null) return;
+      if (this.candidates.has(port)) return;
+      const timer = setTimeout(() => {
+        this.discardCandidate(port);
+        if (!this.port) this.state.error = 'وصل منفذ Chrome لكن لم يصل تعريف Android. أعد فتح التطبيق وتحقق من نسخة APK.';
+      }, 5000);
+      this.candidates.set(port, timer);
+      port.onmessage = event => {
+        if (!this.candidates.has(port)) return;
+        let hello;
+        try { hello = typeof event.data === 'string' ? JSON.parse(event.data) : event.data; } catch (_) { return; }
+        if (hello?.type !== 'delivery.native.ready') return;
+        if (this.validHello(hello)) this.activate(port, hello); else this.discardCandidate(port);
+      };
+      port.start?.();
     });
+  }
+
+  validHello(data) { return data.role === this.role && data.version === 1; }
+  discardCandidate(port) {
+    clearTimeout(this.candidates.get(port)); this.candidates.delete(port);
+    port.onmessage = null; port.close();
+  }
+  activate(port, data) {
+    clearTimeout(this.candidates.get(port)); this.candidates.delete(port);
+    for (const candidate of this.candidates.keys()) this.discardCandidate(candidate);
+    if (this.port && this.port !== port) {
+      this.port.close();
+      for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('أُعيد الاتصال بتطبيق Android؛ أعد المحاولة')); }
+      this.pending.clear(); this.unbindPromise = null;
+    }
+    this.expected = true; this.port = port; this.state.error = ''; this.update(data);
+    port.onmessage = event => this.receive(event.data); port.start?.();
+    this.readyResolve?.();
+    if (this.unbindPending) this.unbind().catch(() => {});
+    globalThis.dispatchEvent(new Event('delivery-native-ready'));
   }
 
   get permission() { return this.state.permission; }
@@ -93,19 +123,22 @@ class NativeDeliveryPush {
     this.unbindPending = true;
     this.state.saved = false; this.state.account_id = '';
     try { globalThis.localStorage?.setItem(this.unbindKey, '1'); } catch (_) {}
-    if (!this.unbindPromise) this.unbindPromise = this.request('unbind').then(result => {
+    if (!this.unbindPromise) {
+      const operation = this.request('unbind').then(result => {
       if (result.saved) throw new Error('لم يُؤكّد فصل إشعارات الحساب');
       this.unbindPending = false;
       try { globalThis.localStorage?.removeItem(this.unbindKey); } catch (_) {}
       return result;
-    }).finally(() => { this.unbindPromise = null; });
+      }).finally(() => { if (this.unbindPromise === operation) this.unbindPromise = null; });
+      this.unbindPromise = operation;
+    }
     return this.unbindPromise;
   }
   snapshot() {
     return { ...this.state, transport: "Firebase FCM", requestResult: this.permission,
       push: this.port ? this.state.configured : null, active: !!this.port, scope: "/" + this.role,
       subscription: this.state.saved, userAgent: navigator.userAgent,
-      error: this.port ? this.state.error : 'قناة Android غير متصلة. تحقق من تثبيت نسخة APK الداعمة لـ FCM وتحديث Chrome، ثم افتح التطبيق من أيقونته.' };
+      error: this.port ? this.state.error : this.state.error || 'قناة Android غير متصلة. تحقق من تثبيت نسخة APK الداعمة لـ FCM وتحديث Chrome، ثم افتح التطبيق من أيقونته.' };
   }
   async inspect() {
     if (!this.port) return this.snapshot();

@@ -52,7 +52,8 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
    await page.evaluate(role=>{
     const channel=new MessageChannel();window.nativeCalls=[];window.fixtureHost=channel.port1;
     channel.port1.onmessage=async event=>{const msg=JSON.parse(event.data);window.nativeCalls.push(msg.type);const {data}=await sb.auth.getSession();channel.port1.postMessage(JSON.stringify({id:msg.id,ok:true,saved:msg.type==='bind',permission:'granted',configured:true,account_id:data.session?.user.id||''}))};
-    window.postMessage(JSON.stringify({type:'delivery.native.ready',version:1,role,permission:'granted',configured:true,saved:true,account_id:'old'}),location.origin,[channel.port2]);
+    window.postMessage('',location.origin,[channel.port2]);
+    channel.port1.postMessage(JSON.stringify({type:'delivery.native.ready',version:1,role,permission:'granted',configured:true,saved:true,account_id:'old'}));
    },role);
    await page.waitForFunction(role=>!localStorage.getItem('delivery-native-unbind-'+role),role);
    assert.deepEqual(await page.evaluate(()=>window.nativeCalls),['unbind']);

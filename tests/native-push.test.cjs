@@ -16,10 +16,31 @@ function fixture(scope = 'captain', search = '?native=1', storage = new Map()) {
     const reply = { ...data, ok: true, saved: data.type !== 'unbind', account_id: 'current-user', permission: 'granted' };
     queueMicrotask(() => port.onmessage({ data: JSON.stringify(reply) }));
   } };
-  const connect = (origin = context.location.origin, role = scope) => listeners.message({ origin, ports: [port],
-    data: JSON.stringify({ type: 'delivery.native.ready', version: 1, role, permission: 'granted', configured: true, saved: false }) });
-  return { client, calls, connect, port, storage };
+  const bootstrap = (origin = context.location.origin, source) => listeners.message({ origin, source, ports: [port], data: '' });
+  const hello = (role = scope) => port.onmessage?.({data:JSON.stringify({type:'delivery.native.ready',version:1,role,permission:'granted',configured:true,saved:false})});
+  const connect = (origin = context.location.origin, role = scope) => { bootstrap(origin); hello(role); };
+  return { client, calls, connect, bootstrap, hello, port, storage, listeners };
 }
+
+test('Chromium empty bootstrap is accepted, then the Android hello on the port activates binding',async()=>{
+ const f=fixture();f.bootstrap();assert.equal(f.client.port,undefined);assert.equal(f.calls.length,0);
+ assert.equal(f.client.candidates.size,1);f.hello();assert.equal(f.client.port,f.port);assert.equal(f.client.candidates.size,0);
+ await f.client.bind();assert.equal(f.calls[0].access_token,'jwt-current');
+});
+
+test('a transferred port cannot become active with an invalid role or from a child frame',()=>{
+ const f=fixture();f.bootstrap(undefined,{});assert.equal(f.client.candidates.size,0);
+ f.bootstrap();f.hello('admin');assert.equal(f.client.port,undefined);assert.equal(f.client.candidates.size,0);assert.equal(f.calls.length,0);
+ f.hello();assert.equal(f.client.port,undefined,'a rejected port remains rejected');
+});
+
+test('an unverified candidate never disconnects the active Android channel',async()=>{
+ const f=fixture();f.connect();let rejected=false;
+ const candidate={start(){},close(){rejected=true}};
+ f.listeners.message({origin:'https://hhyyw.netlify.app',ports:[candidate],data:''});
+ assert.equal(f.client.port,f.port);candidate.onmessage({data:JSON.stringify({type:'delivery.native.ready',version:1,role:'admin'})});
+ assert.equal(rejected,true);assert.equal(f.client.port,f.port);await f.client.bind();assert.equal(f.client.enabled,true);
+});
 test('native channel rejects other origins and the other application role', () => {
   const f = fixture(); f.connect('https://evil.example'); assert.equal(f.client.port, undefined);
   f.connect(undefined, 'admin'); assert.equal(f.client.port, undefined);
