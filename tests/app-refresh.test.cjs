@@ -35,10 +35,16 @@ test('a new interface waits for drafts and deletes only its own shell cache',asy
 });
 test('editing that begins during cache cleanup cancels automatic reload',async()=>{
  const f=fixture();let release;f.context.caches.keys=()=>new Promise(resolve=>release=resolve);f.controller.pendingVersion='b'.repeat(64);
- const pending=f.controller.applyUpdate(false);await Promise.resolve();f.safe=false;release([]);await pending;
+ const pending=f.controller.applyUpdate(false);await new Promise(resolve=>setTimeout(resolve,0));f.safe=false;release([]);await pending;
  assert.equal(f.reloads,0);assert.equal(f.controller.applying,false);assert.equal(f.storage.has(f.controller.attemptKey),false);
 });
 test('a stale deployment cannot create an automatic reload loop',async()=>{
  const f=fixture();f.storage.set(f.controller.attemptKey,JSON.stringify({version:'b'.repeat(64),at:Date.now()}));
  await f.controller.checkUpdate();assert.equal(f.reloads,0);
+});
+test('a pending release never clears offline caches or reloads while disconnected',async()=>{
+ const f=fixture();f.controller.pendingVersion='b'.repeat(64);f.context.navigator.onLine=false;
+ await f.controller.applyUpdate(false);assert.equal(f.reloads,0);assert.deepEqual(f.deleted,[]);
+ f.context.navigator.onLine=true;f.context.fetch=async()=>{throw Error('network down')};
+ await f.controller.applyUpdate(false);assert.equal(f.reloads,0);assert.deepEqual(f.deleted,[]);
 });

@@ -69,19 +69,28 @@ class DeliveryRefresh {
     }
   }
   async applyUpdate(manual=false){
-    if(!this.pendingVersion||this.applying)return;
+    if(!this.pendingVersion||this.applying||navigator.onLine===false)return;
     if(this.flight||!this.safe()||(!manual&&Date.now()-this.lastInteraction<1200)){
       if(manual)this.options.toast('احفظ التغييرات أو أغلق النموذج قبل تطبيق التحديث.','err');return;
     }
     const version=this.pendingVersion;
     try{const attempt=JSON.parse(sessionStorage.getItem(this.attemptKey)||'null');if(!manual&&attempt?.version===version&&Date.now()-attempt.at<300000)return;}catch(_){}
     this.applying=true;
+    // A release may have waited behind a draft for hours. Verify connectivity
+    // and the current deployment before clearing any offline shell.
+    const probe=new AbortController(),probeTimer=setTimeout(()=>probe.abort(),4000);
+    try{
+      const response=await fetch('/app-version.json',{cache:'no-store',signal:probe.signal});
+      const manifest=response.ok?await response.json():null;
+      if(manifest?.schema!==1||manifest[this.role]!==version){this.applying=false;return;}
+    }catch(_){this.applying=false;if(manual)this.options.toast('تعذّر تحميل التحديث. حاول مجددًا عند استقرار الاتصال.','err');return;}
+    finally{clearTimeout(probeTimer);}
     // Only this application's shell cache is touched. Auth and the other app remain intact.
     let timer;
     try{
       if(globalThis.caches)await Promise.race([(async()=>{const names=await caches.keys();await Promise.all(names.filter(k=>k.startsWith('shell-'+this.role+'-')).map(k=>caches.delete(k)));})(),new Promise(resolve=>{timer=setTimeout(resolve,1500)})]);
     }catch(_){}finally{clearTimeout(timer);}
-    if(!this.safe()){this.applying=false;return;}
+    if(!this.safe()||navigator.onLine===false){this.applying=false;return;}
     try{
       sessionStorage.setItem(this.attemptKey,JSON.stringify({version,at:Date.now()}));
       sessionStorage.setItem(this.viewKey,JSON.stringify(this.options.captureView?.()||{}));
