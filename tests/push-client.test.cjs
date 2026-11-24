@@ -95,10 +95,11 @@ for (const role of ['captain', 'admin']) {
       beep() {}, render() {}, toast: (text, kind) => f.calls.notices.push({ text, kind })
     });
     vm.runInContext(html.slice(start, end), f.context);
-    vm.runInContext('pushDiag=async message=>{globalThis.diagnostic=message}', f.context);
+    if(role === 'captain') vm.runInContext('pushDiag=async message=>{globalThis.diagnostic=message}', f.context);
     await vm.runInContext('bellClick()', f.context);
     assert.equal(f.calls.notices.some(n => n.kind === 'ok'), false);
-    assert.match(f.context.diagnostic, /database failed/);
+    if(role === 'captain') assert.match(f.context.diagnostic, /database failed/);
+    else { assert.equal(f.context.diagnostic, undefined); assert.match(f.calls.notices.at(-1).text, /تعذّر تفعيل الإشعارات/); }
     assert.equal(await vm.runInContext('ensurePush()', f.context), false);
     await assert.rejects(vm.runInContext('ensurePush({strict:true})', f.context), /database failed/);
   });

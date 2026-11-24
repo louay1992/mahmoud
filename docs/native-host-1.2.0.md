@@ -28,4 +28,8 @@
 
 يجب نشر ملفات الواجهة الجديدة (كاش v10)، ثم تثبيت APK 1.2.0 كتحديث فوق النسخ الحالية. لا يكفي تحديث الموقع لتحويل APK قديم من TWA إلى WebView داخلي. بعد تسجيل الدخول والسماح بإشعارات Android، يجب أن يعرض الفحص اسم التطبيق وإصدار 1.2.0 واتصالًا يعمل. اختبر الإشعار المحلي ثم FCM من الخادم، ثم حدث طلب والتطبيق مغلق وافتح الطلب بالضغط على الإشعار. كرر للتطبيق الآخر، ثم اختبر الخروج وإعادة الفتح وتبديل الحساب.
 
+## متابعة التجربة — 25 نوفمبر 2026
+
+أكد المستخدم عمل الإشعارات على الهاتف بعد تجربة الإصدار 1.2.0. أُزيلت واجهة فحص الإشعارات من الإداري بطلبه: زر الإعدادات ونافذة الفحص والاستدعاء التلقائي عند فشل التفعيل. بقي تفعيل الإشعارات وربط الجهاز وFCM فعالًا، وتُعرض رسالة مختصرة عند رفض الإذن أو فشل التفعيل. فحص الكابتن باقٍ. هذا تحديث لملفات الواجهة وكاش v11؛ لا يحتاج APK جديدًا ولا تغييرًا في الخادم أو الشهادة.
+
 مراجع التنفيذ: [Android WebMessageListener](https://developer.android.com/reference/androidx/webkit/WebViewCompat#addWebMessageListener(android.webkit.WebView,java.lang.String,java.util.Set%3Cjava.lang.String%3E,androidx.webkit.WebViewCompat.WebMessageListener))، [Firebase Android messages](https://firebase.google.com/docs/cloud-messaging/android/receive).
