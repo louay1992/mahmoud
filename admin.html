@@ -456,7 +456,7 @@ const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
   const n=pendingPR(), bdg=k=>k==="home"&&n?`<i class="bd">${n}</i>`:"";
   $("side").innerHTML=visTabs().map(([k,l,i])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
-  const m=visTabs().filter(t=>MAIN_TABS.includes(t[0])).map(([k,l,i])=>k==="new"
+  const m=visTabs().filter(t=>MAIN_TABS.includes(t[0])).sort((x,y)=>MAIN_TABS.indexOf(x[0])-MAIN_TABS.indexOf(y[0])).map(([k,l,i])=>k==="new"
     ?`<button class="fab ${tab===k?"on":""}" onclick="go('new')" aria-label="${l}"><span class="pl">${ic("plus")}</span></button>`
     :`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
   $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_TABS.includes(tab)?"":"on"}" onclick="openMore()">${ic("menu")}<span>المزيد</span></button>`;
