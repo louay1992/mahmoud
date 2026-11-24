@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'dist');
-const files = ['index.html', 'admin.html', 'captain.html', 'push-client.js', 'native-push.js', 'mobile-ui.js',
+const files = ['index.html', 'admin.html', 'captain.html', 'auth-session.js', 'push-client.js', 'native-push.js', 'mobile-ui.js',
   'mobile.css', 'sw.js', 'manifest-admin.json', 'manifest-captain.json', '.well-known/assetlinks.json'];
 for (const name of fs.readdirSync(path.join(root, 'icons'))) if (name.endsWith('.png')) files.push('icons/' + name);
 // Netlify can restore files added to a previous publish directory. Rebuild our generated output.

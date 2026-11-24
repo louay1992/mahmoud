@@ -21,7 +21,7 @@ function fixture(options = {}) {
     Notification: { permission: options.permission || 'granted', requestPermission: async () => 'granted' },
     navigator: { userAgent: 'Test browser', serviceWorker: {
       register: async (url, config) => { calls.register.push({ url, ...config }); return reg; },
-      getRegistration: async () => options.legacy || null,
+      getRegistration: async scope => scope === '/' + role ? reg : options.legacy || null,
       get ready() { throw new Error('Must not use the legacy controller registration'); }
     } },
     fetch: async () => { calls.fetched = true; return { ok: options.httpError ? false : true,
@@ -87,7 +87,7 @@ for (const role of ['captain', 'admin']) {
     const start = html.indexOf('const pushClient=new DeliveryPush(');
     const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
     Object.assign(f.context, {
-      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public',
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => name.startsWith('save_') ?
         { error: { message: '<database failed>' } } : { error: null } },
@@ -110,7 +110,7 @@ for (const role of ['captain', 'admin']) {
     const start = html.indexOf('const pushClient=new DeliveryPush(');
     const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
     Object.assign(f.context, {
-      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public',
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => { saved.push({ name, args }); return { error: null }; } },
       $: id => id === 'bell' ? { classList: { toggle() {} } } : null,
@@ -193,6 +193,11 @@ test('logout removes the scoped subscription', async () => {
   assert.equal(calls.remove[0].p_endpoint, 'https://push.example/captain');
   assert.equal(calls.unsubscribed, true);
   assert.equal(client.enabled, false);
+});
+
+test('logout disables local Web Push even when removing the server record fails',async()=>{
+ const {client,calls}=fixture({existing:true});client.remove=async()=>({error:{message:'offline'}});
+ await assert.rejects(client.unsubscribe(),/offline/);assert.equal(calls.unsubscribed,true);
 });
 
 test('both pages parse with the shared client loaded before their inline code', () => {

@@ -12,6 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/auth-session.js"></script>
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
 <script src="/mobile-ui.js" defer></script>
@@ -281,6 +282,7 @@ const SUPABASE_URL = "https://jabapvnmfdflysxfxwwf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYmFwdm5tZmRmbHlzeGZ4d3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTg2OTQsImV4cCI6MjExMTA5NDY5NH0.V-Axtg4cGwiSYNhcefmks0MP4iOn2DW5Ai74Ji8cv9I";
 // ===================================================================
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-admin-auth"}});
+const authGate = new DeliverySession("sb-admin-auth");
 /* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
 let _lc=0,_le=null;
 document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b) return;
@@ -377,28 +379,41 @@ let tab = "home", orderFilter = "all", orderQuery = "";
 function hideSplash(){ $("splash").classList.add("off") }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
 async function boot(){
+  if(authGate.blocked){ authGate.clearSession(); showLogin(); return }
   const {data:{session}} = await sb.auth.getSession();
+  if(authGate.blocked){ showLogin(); return }
   if(!session){ showLogin(); return }
   ME = (session.user.email || "").toLowerCase();
   const {data:acc} = await sb.rpc("my_access");
+  if(authGate.blocked){ showLogin(); return }
   if(!acc || acc.role==="none"){ toast("هذا الحساب ليس إدارياً","err"); await sb.auth.signOut(); showLogin(); return }
   ACC=acc;
   $("login").style.display="none"; $("app").style.display="block";
   if(ACC.role==="staff"){
     $("bell").style.display="none";
     if(!visTabs().length){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
-    await loadAll(true); renderNav(); go(visTabs()[0][0]); hideSplash(); checkUpdate(); return }
-  await loadAll(true); renderNav(); go("home"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
+    await loadAll(true); if(authGate.blocked) return; renderNav(); go(visTabs()[0][0]); hideSplash(); checkUpdate(); return }
+  await loadAll(true); if(authGate.blocked) return; renderNav(); go("home"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 async function login(){
   const b=$("lbtn"), em=$("em").value.trim(), pw=$("pw").value; if(!em||!pw) return toast("اكتب البريد وكلمة المرور","err");
   b.disabled=true; b.classList.add("load");
+  if(authGate.blocked) authGate.beginLogin();
   const {error} = await sb.auth.signInWithPassword({email:em, password:pw});
   b.disabled=false; b.classList.remove("load");
   if(error) return toast("فشل الدخول: تحقق من البيانات","err");
+  authGate.completeLogin();
   $("splash").classList.remove("off"); boot();
 }
-async function logout(){ if(!await askc("هل تريد الخروج من حسابك؟",{title:"تسجيل الخروج",ok:"نعم، خروج",cls:"r"})) return; await dropPush(); await sb.auth.signOut(); location.reload() }
+async function logout(){
+  if(authGate.exiting || !await askc("هل تريد الخروج من حسابك؟",{title:"تسجيل الخروج",ok:"نعم، خروج",cls:"r"})) return;
+  await authGate.logout({auth:sb.auth,detach:()=>dropPush(),reload:()=>location.reload(),lock:()=>{
+    ME=""; ACC={role:"none",perms:[]}; showLogin(); $("main").innerHTML="";
+    $("modal").style.display="none"; document.querySelectorAll(".dlg").forEach(d=>d.remove());
+    $("em").value=""; $("pw").value=""; $("lbtn").disabled=true;
+    Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});
+  }});
+}
 
 let firstLoad=true;
 async function loadStaff(){
@@ -539,9 +554,9 @@ function detectNotifs(){
 }
 const pushClient=new DeliveryPush({
   scope:"/admin", keyUrl:SUPABASE_URL+"/functions/v1/send-push", apiKey:SUPABASE_KEY,
-  save:args=>sb.rpc("save_admin_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args), session:()=>sb.auth.getSession()
+  save:args=>sb.rpc("save_admin_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args), session:()=>authGate.blocked?Promise.resolve({data:{session:null}}):sb.auth.getSession()
 });
-globalThis.addEventListener?.("delivery-native-ready",async()=>{ const {data}=await sb.auth.getSession(); if(data.session) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
+globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
 function initNotifUI(){ const b=$("bell"); const nb=nBadge(); b.innerHTML=ic("bell")+(nb||(pushClient.enabled?"":'<i class="dot"></i>')); b.classList.toggle("on",pushClient.enabled) }
 async function bellClick(){
@@ -589,14 +604,16 @@ async function pushDiag(initialLog=""){
 }
 async function ensurePush({strict=false}={}){
   try{
+    if(authGate.blocked) return false;
     if(!(!!ME && ACC.role==="full")) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(pushClient.native?.expected) await pushClient.native.ready();
+    if(authGate.blocked) return false;
     if(notifState()!=="granted" && !strict) return false;
     await pushClient.subscribe(); return true;
   }catch(e){ if(strict) throw e; console.warn("push",e); return false }
   finally{ initNotifUI(); if(pushClient.enabled){ $("push-enable-card")?.remove(); $("push-banner")?.remove() } }
 }
-async function dropPush(){ try{ await pushClient.unsubscribe() }catch(e){ if(pushClient.native?.expected){ toast("تعذّر فصل الجهاز. أعد المحاولة قبل الخروج.","err"); throw e } console.warn("push unsubscribe",e) } }
+async function dropPush(){ await pushClient.unsubscribe() }
 /* كشف التغييرات: طلبات تعديل السعر، حالات الطلبات من الكباتن، ملاحظات الكباتن */
 function detectAdmin(){
   const key="adm_seen_"+ME; let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
