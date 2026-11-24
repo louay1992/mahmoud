@@ -207,7 +207,7 @@
     $('aw-stock-hint').hidden=ACC.role==='staff';$('aw-stock-hint').innerHTML=wh?`المستودع: ${esc(wname(wh))}<br>`+rows.map(i=>`${esc(pname(i.product_id))}: ${qty(wh,i.product_id)} قطعة مسجّلة${qty(wh,i.product_id)<i.qty?' — أقل من المطلوب':''}`).join('<br>'):'حدّد الكابتن أو مستودع الشحن لمراجعة الكمية المسجّلة. المخزون يُخصم وفق عملية التسليم الحالية، ولا يُحجز عند إنشاء الطلب.';
     if(state.newStep===3){$('aw-review').innerHTML=detail('الزبون',esc($('on').value))+detail('الموبايل',`<bdi dir="ltr">${esc($('op').value)}</bdi>`)+detail('العنوان',esc([$('og').value,$('oa').value].filter(Boolean).join('، ')||'لم يُدخل عنوان'))+detail('طريقة التوصيل',NOM==='shipping'?esc(carName($('ocar').value)):($('oc')?.value?esc(cname($('oc').value)):'إسناد لاحقًا'))+rows.map(i=>`<div class="aw-review-item"><span>${esc(pname(i.product_id))} × ${i.qty}</span><b>${amt(i.qty*Number(i.unit_price??D.products.find(p=>p.id===i.product_id)?.price??0))}</b></div>`).join('');}
   }
-  function clearErrors(){document.querySelectorAll('.aw-inline-error').forEach(n=>n.remove());document.querySelectorAll('#aw-order-form [aria-invalid]').forEach(n=>n.removeAttribute('aria-invalid'));if($('aw-items-error'))$('aw-items-error').textContent='';}
+  function clearErrors(){document.querySelectorAll('.aw-inline-error').forEach(n=>n.remove());document.querySelectorAll('#aw-order-form [aria-invalid]').forEach(n=>{n.removeAttribute('aria-invalid');if((n.getAttribute('aria-describedby')||'').startsWith('aw-error-'))n.removeAttribute('aria-describedby');});if($('aw-items-error'))$('aw-items-error').textContent='';}
   function errorAt(el,msg){if(!el)return;el.setAttribute('aria-invalid','true');const error=document.createElement('span');error.className='aw-error aw-inline-error';error.textContent=msg;error.id='aw-error-'+(el.id||Math.random().toString(36).slice(2));error.setAttribute('role','alert');el.setAttribute('aria-describedby',error.id);el.insertAdjacentElement('afterend',error);}
   function validate(step){
     clearErrors();let invalid=null;const fail=(el,msg)=>{errorAt(el,msg);invalid=invalid||el;};
@@ -215,9 +215,9 @@
     if(step===1){const rows=[...$('orows').children];if(!rows.length){$('aw-items-error').textContent='أضف منتجًا واحدًا على الأقل.';invalid=$('orows').nextElementSibling;}
       rows.forEach(r=>{const q=r.querySelector('.q'),p=r.querySelector('.pr'),sel=r.querySelector('select');if(!sel.value)fail(sel,'اختر المنتج.');if(!Number.isInteger(Number(q.value))||Number(q.value)<=0)fail(q,'أدخل عدد قطع صحيحًا أكبر من صفر.');if(p&&((p.value===''&&ACC.role==='staff')||p.value!==''&&(!Number.isFinite(Number(p.value))||Number(p.value)<0)))fail(p,'أدخل سعر بيع صحيحًا لا يقل عن صفر.');});}
     if(step===2&&NOM==='shipping'){if(!$('ocar').value)fail($('ocar'),'اختر شركة الشحن.');if(!$('og').value){fail($('og'),'اختر المحافظة؛ هي مطلوبة للشحن.');state.newStep=0;decorateNew();}for(const id of ['ocost','ofee'])if(!Number.isFinite(Number($(id).value||0))||Number($(id).value||0)<0)fail($(id),'أدخل أجورًا صحيحة لا تقل عن صفر.');}
-    if(invalid){invalid.focus({preventScroll:true});invalid.scrollIntoView({block:'center',behavior:'instant'});return false;}return true;
+    if(invalid){const section=invalid.closest('.aw-order-section');if(section){state.newStep=Number(section.dataset.step);decorateNew();}invalid.focus({preventScroll:true});invalid.scrollIntoView({block:'center',behavior:'instant'});return false;}return true;
   }
-  function newStep(next){if(state.saving)return;const previous=state.newStep;next=Math.min(3,Math.max(0,Number(next)));if(next>state.newStep){for(let i=0;i<next;i++)if(!validate(i)){state.newStep=i;decorateNew();return;}}state.newStep=next;decorateNew();AdminMotion.play(document.querySelector('.aw-order-section:not([hidden])'),[{opacity:.4,transform:`translateX(${next<previous?10:-10}px)`},{opacity:1,transform:'translateX(0)'}],180);scrollTo({top:0,behavior:'instant'});document.querySelector('.aw-order-section:not([hidden]) h2')?.focus({preventScroll:true});}
+  function newStep(next){if(state.saving)return;const previous=state.newStep;next=Math.min(3,Math.max(0,Number(next)));if(next>state.newStep){for(let i=0;i<next;i++)if(!validate(i))return;}state.newStep=next;decorateNew();AdminMotion.play(document.querySelector('.aw-order-section:not([hidden])'),[{opacity:.4,transform:`translateX(${next<previous?10:-10}px)`},{opacity:1,transform:'translateX(0)'}],180);scrollTo({top:0,behavior:'instant'});document.querySelector('.aw-order-section:not([hidden]) h2')?.focus({preventScroll:true});}
   async function pickCustomer(){
     if(ACC.role!=='full'&&!can('view_orders'))return;
     const unique=new Map();D.orders.forEach(o=>{const key=normPh(o.customer_phone);if(key&&!unique.has(key))unique.set(key,o);});
@@ -228,7 +228,7 @@
   async function saveNewOrder(){
     if(state.saving||!$('aw-order-form'))return;
     if(state.uncertain){toast('راجع أحدث الطلبات قبل إعادة الإرسال.','err');$('aw-uncertain').hidden=false;return;}
-    for(let i=0;i<3;i++)if(!validate(i)){state.newStep=i;decorateNew();return;}
+    for(let i=0;i<3;i++)if(!validate(i))return;
     if(navigator.onLine===false){$('aw-save-error').textContent='لا يوجد اتصال. بقيت بياناتك؛ أعد المحاولة بعد عودة الشبكة.';return;}
     const payload=orderPayload(),who=ME,kind=NOM,abort=new AbortController();let timedOut=false;
     const submission=Symbol('order');state.submission=submission;state.saving=true;busy++;lastSelf=Date.now();$('bar').classList.add('on');decorateNew();const controls=[...$('aw-order-form').querySelectorAll('input,select,textarea,button')];controls.forEach(n=>n.disabled=true);
