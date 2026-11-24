@@ -1,5 +1,23 @@
 /* Field hints, responsive records, and the visual viewport are shared by both apps. */
 (() => {
+  globalThis.copyText = async text => {
+    if (typeof pushClient !== 'undefined' && pushClient.native?.embedded) return pushClient.native.copyText(String(text));
+    if (!navigator.clipboard?.writeText) throw new Error('النسخ غير متاح');
+    return navigator.clipboard.writeText(String(text));
+  };
+  globalThis.saveCsv = async (filename, text) => {
+    if (typeof pushClient !== 'undefined' && pushClient.native?.embedded) return pushClient.native.saveCsv(filename, text);
+    const url=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+  globalThis.handleNativeBack = () => {
+    const diagnostic=document.getElementById('pdg');if(diagnostic?.closeDiagnostics){diagnostic.closeDiagnostics();return true;}
+    const dialog=document.querySelector('.dlg');if(dialog){const cancel=dialog.querySelector('#d3,#dc');if(cancel)cancel.click();else dialog.click();return true;}
+    if(document.getElementById('modal')?.style.display==='flex'){closeStatus();return true;}
+    const home=typeof ACC!=='undefined'?(ACC.role==='staff'?visTabs()[0]?.[0]:'home'):'orders';
+    if(home&&typeof tab!=='undefined'&&typeof go==='function'&&tab!==home){go(home);return true;}
+    return false;
+  };
   const editable = el => el && el.matches("input:not([type=checkbox]):not([type=radio]),textarea,select");
   function viewport() {
     const v = window.visualViewport;

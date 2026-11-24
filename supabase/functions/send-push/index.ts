@@ -43,8 +43,8 @@ Deno.serve(async (req) => {
   const { captain_id, admins, title, body, tag, url, icon, order_id } = payload;
   if (typeof title !== "string" || typeof body !== "string") return json({ error: "invalid message" }, 400);
   webpush.setVapidDetails("mailto:admin@example.com", c.vapid_public, c.vapid_private);
-  const q = db.from("push_subscriptions").select("*");
-  const { data: subs } = admins ? await q.not("admin_email", "is", null) : await q.eq("captain_id", captain_id);
+  const { data: subs, error: webTargetError } = await db.rpc("web_push_targets", { p_admins: !!admins, p_captain: captain_id || null });
+  if (webTargetError) console.warn("web push targeting unavailable");
   let sent = 0, removed = 0;
   await Promise.all((subs || []).map(async (s: any) => {
     try {
@@ -74,5 +74,6 @@ Deno.serve(async (req) => {
     } catch (_) { fcm_failed++; }
   }));
   if (native_error || fcm_failed) console.warn("native push delivery", { native_error, fcm_failed });
-  return json({ sent, removed, fcm_sent, fcm_removed, fcm_failed, native_error });
+  return json({ sent, removed, fcm_sent, fcm_removed, fcm_failed, native_error,
+    web_error: webTargetError ? "WEB_TARGETING_UNAVAILABLE" : null });
 });

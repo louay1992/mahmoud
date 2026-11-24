@@ -579,7 +579,7 @@ async function ensurePush({strict=false}={}){
   try{
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(!(!!ME && ACC.role==="full")) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
-    if(strict && pushClient.native?.expected && !pushClient.native.port) throw new Error("قناة Android غير متصلة. تحقق من نسخة التطبيق وChrome ثم أعد فتحه من أيقونته.");
+    if(strict && pushClient.native?.expected && !pushClient.native.port) throw new Error(pushClient.native.channelError());
     if(pushClient.native?.expected) await pushClient.native.ready();
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(notifState()!=="granted" && !strict) return false;
@@ -1070,7 +1070,7 @@ function fillFromWa(){
   upd();
   $("wares").innerHTML=warn.length?`<div style="color:#b45309;margin-top:8px">⚠ راجع قبل الإنشاء:<br>${warn.map(esc).join("<br>")}</div>`:`<div style="color:#16a34a;margin-top:8px">✓ تمت تعبئة بيانات الزبون. اختر الكابتن والمنتجات ثم اضغط إنشاء الطلب.</div>`;
 }
-function copyWaTpl(){ (navigator.clipboard?navigator.clipboard.writeText(WA_TPL):Promise.reject()).then(()=>toast("تم نسخ الكلاشة","ok")).catch(()=>{ $("watpl").select(); toast("انسخها يدوياً") }) }
+function copyWaTpl(){ copyText(WA_TPL).then(()=>toast("تم نسخ الكلاشة","ok")).catch(()=>{ $("watpl").select(); toast("انسخها يدوياً") }) }
 function autoCap(){
   const g=$("og").value, h=$("ohint"); if(!$("oc")||!g){ if(h) h.textContent=""; upd(); return }
   const open=["new","assigned","in_delivery","no_answer","closed","other"];
@@ -1203,7 +1203,7 @@ async function openShip(id){
    ${["returned","cancelled"].includes(cur)?`<div class="shban" style="background:${shl(cur)[2]}22;color:${shl(cur)[2]}">${shl(cur)[3]} ${shl(cur)[1]}</div>`:`<div class="stps">${SHFLOW.map(step).join("")}</div>`}
    <div class="dsec"><div class="dh">تفاصيل الشحنة</div>
     ${drow("الشركة",`<b>${esc(carName(o.carrier_id))}</b>`)}
-    ${drow("رقم البوليصة",o.waybill?`<b dir="ltr">${esc(o.waybill)}</b> <button class="b s o" style="padding:2px 8px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(o.waybill)}');toast('تم النسخ','ok')">نسخ</button>`:'<span style="color:#b45309">لم يُدخل بعد — اضغط «تعديل بيانات الشحنة»</span>')}
+    ${drow("رقم البوليصة",o.waybill?`<b dir="ltr">${esc(o.waybill)}</b> <button class="b s o" style="padding:2px 8px" onclick="copyText(${esc(JSON.stringify(o.waybill))}).then(()=>toast('تم النسخ','ok')).catch(()=>toast('تعذّر النسخ'))">نسخ</button>`:'<span style="color:#b45309">لم يُدخل بعد — اضغط «تعديل بيانات الشحنة»</span>')}
     ${drow("الزبون",`${esc(o.customer_name)} · <span dir="ltr">${esc(o.customer_phone)}</span>`)}
     ${drow("الوجهة",esc((o.governorate||"")+(o.customer_address?" — "+o.customer_address:"")))}
     ${drow("المطلوب تحصيله (COD)",`<b>${money(o.total)}</b>`)}
@@ -1429,12 +1429,12 @@ function drawProfit(){
    ${sortBtn}${pfTable("🏆 الربح حسب المنتج",byP,"المنتج")}${pfTable("🛍️ الربح حسب المسوّقة",byM,"المسوّقة")}${pfTable("🚚 الربح حسب الكابتن",byC,"الكابتن")}${pfTable("📍 الربح حسب المحافظة",byG,"المحافظة")}${pfTable("🗓️ الربح الشهري",byMonth,"الشهر")}
    <div class="sgrid">${top.length?`<div class="card"><h3 style="margin:0 0 8px">⭐ أربح الطلبات</h3>${top.map(x=>`<div class="dr"><span class="dl">#${x.n}${x.mk?" · "+esc(mname(x.mk)):""}</span><span class="dv2">${sg2(x.adm)}</span></div>`).join("")}</div>`:""}${worst.length?`<div class="card"><h3 style="margin:0 0 8px">⚠ طلبات بلا ربح أو بخسارة</h3>${worst.map(x=>`<div class="dr"><span class="dl">#${x.n}</span><span class="dv2">${sg2(x.adm)}</span></div>`).join("")}</div>`:""}</div>`;
 }
-function pfCsv(){
+async function pfCsv(){
   const rows=pfRows(); if(!rows.length) return toast("لا بيانات للتصدير");
   const h=["رقم الطلب","الحالة","التاريخ","المنتج","المسوّقة","الكابتن","المحافظة","الكمية","سعر البيع","رأس مال المسوّقة","رأس مال التاجر","المبيعات","التكلفة","ربح الإدارة","ربح المسوّقة"];
   const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
   const lines=[h.map(q).join(",")].concat(rows.map(r=>{const v=pv(r);return [r.order_no,ST[r.status]||r.status,dayK(r.status==="delivered"?(r.delivered_at||r.created_at):r.created_at),r.product_name,r.marketer_id?mname(r.marketer_id):"",r.captain_id?cname(r.captain_id):"",r.governorate||"",r.qty,r.unit_price,r.capital,r.cost,v.rev,v.cst,v.adm,v.mkp].map(q).join(",")}));
-  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv;charset=utf-8"})); a.download="profit-"+dayK(new Date())+".csv"; document.body.appendChild(a); a.click(); a.remove(); toast("تم تنزيل الملف","ok");
+  try{ await saveCsv("profit-"+dayK(new Date())+".csv", "\ufeff"+lines.join("\n")); toast("تم حفظ الملف","ok") }catch(e){ toast(e.message||"تعذّر حفظ الملف") }
 }
 /* ================= إحصائيات عامة ================= */
 let STP="30", SDATA=null, SLOAD=0;
@@ -2004,7 +2004,7 @@ $("i_mail").innerHTML=ic("mail"); $("i_lock").innerHTML=ic("lock"); $("eye").inn
 $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"password" };
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });
 $("hav").innerHTML=ic("box"); $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
-pushClient.registration().catch(e=>console.warn("push registration",e));
+if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
 boot();
 </script>
 </body>

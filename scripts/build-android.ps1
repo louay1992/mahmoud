@@ -20,6 +20,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Unable to read the supplied signing key' }
 $match = [regex]::Match(($certificate -join "`n"), 'SHA256:\s*([0-9A-F:]+)')
 if (!$match.Success -or $match.Groups[1].Value.Replace(':','') -ne $expectedFingerprint) { throw 'Signing certificate does not match the existing application certificate' }
 $configFile = Join-Path $projectRoot 'android/app/google-services.json'
+$gradleSource = Get-Content -LiteralPath (Join-Path $projectRoot 'android/app/build.gradle') -Raw
+$versionName = [regex]::Match($gradleSource, 'versionName "([0-9.]+)"').Groups[1].Value
+$versionCode = [regex]::Match($gradleSource, 'versionCode ([0-9]+)').Groups[1].Value
+if (!$versionName -or !$versionCode) { throw 'Missing Android application version' }
 if (!(Test-Path -LiteralPath $configFile)) { throw 'Missing Firebase Android configuration: android/app/google-services.json' }
 $firebase = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json
 $packages = @($firebase.client | ForEach-Object { $_.client_info.android_client_info.package_name })
@@ -60,12 +64,12 @@ foreach ($role in @('admin','captain')) {
     & (Join-Path $buildTools 'zipalign.exe') -c -p 4 $signed
     if ($LASTEXITCODE -ne 0) { throw "Signed APK alignment failed: $role" }
     $badging = & (Join-Path $buildTools 'aapt2.exe') dump badging $signed
-    if ($LASTEXITCODE -ne 0 -or !($badging -match "package: name='app.hhyyw.$role' versionCode='4' versionName='1.1.0'")) { throw "APK package/version mismatch: $role" }
+    if ($LASTEXITCODE -ne 0 -or !($badging -match "package: name='app.hhyyw.$role' versionCode='$versionCode' versionName='$versionName'")) { throw "APK package/version mismatch: $role" }
     $hash = (Get-FileHash -LiteralPath $signed -Algorithm SHA256).Hash.ToLowerInvariant()
-    $artifactPath = Join-Path $artifacts "$role-1.1.0.apk"
+    $artifactPath = Join-Path $artifacts "$role-$versionName.apk"
     Copy-Item -LiteralPath $signed -Destination $artifactPath
-    $hashes += "$hash  $role-1.1.0.apk"
-    Write-Output "Verified app.hhyyw.$role 1.1.0 with the existing signing certificate: $artifactPath"
+    $hashes += "$hash  $role-$versionName.apk"
+    Write-Output "Verified app.hhyyw.$role $versionName with the existing signing certificate: $artifactPath"
 }
 $hashes | Set-Content -LiteralPath (Join-Path $artifacts 'SHA256SUMS') -Encoding utf8
 Write-Output "Build and test directory: $buildRoot"

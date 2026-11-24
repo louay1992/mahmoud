@@ -111,6 +111,7 @@ class DeliveryPush {
     try {
       if (this.native?.expected) {
         const result = await this.native.bind();
+        if (this.native.embedded) return result;
         // Retire Web Push on this browser profile only after FCM binding succeeds.
         try {
           const reg = await navigator.serviceWorker?.getRegistration(this.scope);
