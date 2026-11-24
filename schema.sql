@@ -1381,3 +1381,5 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 -- v19: حذف قيد main_no_captain؛ يمكن ربط كابتن بالمستودع الرئيسي فتُخصم مبيعاته منه (deliver_order يستخدم مستودع الكابتن).
 
 -- v20: warehouses.governorate + orders.governorate؛ create_order(p_governorate)، edit_order يحدّث المحافظة، staff_lookups يعيد warehouses.
+
+-- v21: customers archive by phone (norm_phone(), table customers, trigger trg_customer on orders insert; RLS select = is_admin()).
