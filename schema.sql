@@ -247,3 +247,15 @@ grant execute on function create_order, assign_order, deliver_order, cancel_orde
 -- أخيراً: سجّل بريدك كإداري (غيّر البريد ثم شغّل السطر)
 -- insert into admins(email) values ('your@email.com');
 -- =====================================================
+
+-- =====================================================
+-- صلاحيات الجداول لمستخدمي Supabase المسجّلين (ضرورية في المشاريع الجديدة)
+-- =====================================================
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on products, captains, warehouses, stock, stock_invoices, stock_invoice_items, orders, order_items, captain_payments to authenticated;
+grant select on admins, captain_balances to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+
+drop policy if exists admins_self on admins;
+create policy admins_self on admins for select to authenticated
+  using (lower(email) = lower(auth.jwt() ->> 'email'));
