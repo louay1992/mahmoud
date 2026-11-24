@@ -5,7 +5,7 @@
   "lang": "ar",
   "dir": "rtl",
   "start_url": "/captain.html",
-  "scope": "/",
+  "scope": "/captain",
   "display": "standalone",
   "background_color": "#1e3a8a",
   "theme_color": "#1e3a8a",

@@ -28,9 +28,13 @@ jobs:
           cp $BT/lib/apksigner.jar out/
           $BT/zipalign -c -p 4 out/admin-unsigned.apk && echo aligned-admin
           $BT/aapt2 dump badging out/admin-unsigned.apk | head -5 > out/admin-badging.txt || true
+          $BT/aapt2 dump badging out/captain-unsigned.apk | head -5 > out/captain-badging.txt || true
+          git rev-parse HEAD > out/SOURCE_COMMIT.txt
+          (cd out && sha256sum admin-unsigned.apk captain-unsigned.apk > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with: { name: apk-unsigned, path: out/ }
       - name: Publish unsigned build to apk-build branch
+        if: github.ref == 'refs/heads/main'
         run: |
           cd out && git init -q -b apk-build && git config user.name ci && git config user.email ci@example.com
           git add -A && git commit -qm "unsigned build" 
