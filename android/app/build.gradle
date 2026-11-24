@@ -1,0 +1,31 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'app.hhyyw.twa'
+    compileSdk 34
+    defaultConfig {
+        minSdk 23
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+    flavorDimensions "app"
+    productFlavors {
+        admin {
+            dimension "app"
+            applicationId "app.hhyyw.admin"
+            manifestPlaceholders = [appName: "الإدارة", startUrl: "https://hhyyw.netlify.app/admin", host: "hhyyw.netlify.app", pathPrefix: "/admin"]
+            resValue "string", "app_name", "الإدارة"
+        }
+        captain {
+            dimension "app"
+            applicationId "app.hhyyw.captain"
+            manifestPlaceholders = [appName: "كابتن التوصيل", startUrl: "https://hhyyw.netlify.app/captain", host: "hhyyw.netlify.app", pathPrefix: "/captain"]
+            resValue "string", "app_name", "كابتن التوصيل"
+        }
+    }
+    buildTypes { release { minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}
