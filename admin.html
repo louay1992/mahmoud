@@ -900,6 +900,8 @@ function whStats(w){
   const low=Number(D.settings.low_stock||3), rows=D.stock.filter(s=>s.warehouse_id===w.id&&s.qty!==0);
   return {types:rows.filter(s=>s.qty>0).length, units:rows.reduce((a,s)=>a+Math.max(s.qty,0),0), low:rows.filter(s=>s.qty<=low).length};
 }
+let SV={v:"list",wh:null};
+function sv(v,wh){ SV={v,wh:wh||null}; render(); window.scrollTo(0,0) }
 function vStock(){ ({list:vStockList,wh:vWarehouse,invoice:vInvoice,transfer:vTransfer})[SV.v]() }
 
 function vStockList(){
