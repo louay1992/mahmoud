@@ -60,21 +60,23 @@ class NativeDeliveryPush {
     });
     await this.readyPromise;
   }
-  async request(type, payload = {}) {
-    await this.ready();
+  async request(type, payload = {}, { timeout = 35000, waitForChannel = true } = {}) {
+    if (!waitForChannel && !this.port) throw new Error('قناة Android غير متصلة. افتح التطبيق من أيقونته وتحقق من تثبيت نسخة FCM وتحديث Chrome.');
+    if (waitForChannel) await this.ready();
     if (type === 'bind' && this.unbindPending) throw new Error('جارٍ فصل الحساب السابق؛ أعد المحاولة');
     const id = String(++this.serial);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error("انتهت مهلة اتصال Android؛ تحقق من الاتصال وأعد المحاولة"));
-      }, 35000);
+      }, timeout);
       this.pending.set(id, { resolve, reject, timer });
-      this.port.postMessage(JSON.stringify({ type, id, ...payload }));
+      try { this.port.postMessage(JSON.stringify({ type, id, ...payload })); }
+      catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
   async requestPermission() {
-    const result = await this.request("permission");
+    const result = await this.request("permission", {}, { waitForChannel: false });
     return result.permission;
   }
   async bind() {
@@ -99,17 +101,23 @@ class NativeDeliveryPush {
     }).finally(() => { this.unbindPromise = null; });
     return this.unbindPromise;
   }
-  async inspect() {
-    try { await this.request("status"); } catch (error) { this.state.error = error.message; }
+  snapshot() {
     return { ...this.state, transport: "Firebase FCM", requestResult: this.permission,
-      push: this.state.configured, active: !!this.port, scope: "/" + this.role,
-      subscription: this.state.saved, userAgent: navigator.userAgent };
+      push: this.port ? this.state.configured : null, active: !!this.port, scope: "/" + this.role,
+      subscription: this.state.saved, userAgent: navigator.userAgent,
+      error: this.port ? this.state.error : 'قناة Android غير متصلة. تحقق من تثبيت نسخة APK الداعمة لـ FCM وتحديث Chrome، ثم افتح التطبيق من أيقونته.' };
   }
-  async showTest() { return this.request("test"); }
+  async inspect() {
+    if (!this.port) return this.snapshot();
+    try { await this.request('status', {}, { timeout: 2500, waitForChannel: false }); }
+    catch (error) { this.state.error = error.message; }
+    return this.snapshot();
+  }
+  async showTest() { return this.request("test", {}, { waitForChannel: false }); }
   async serverTest() {
     const { data: { session } } = await this.session();
     if (!session?.access_token) throw new Error("سجّل الدخول أولاً");
-    return this.request("server-test", { access_token: session.access_token });
+    return this.request("server-test", { access_token: session.access_token }, { waitForChannel: false });
   }
 }
 globalThis.NativeDeliveryPush = NativeDeliveryPush;

@@ -3,7 +3,7 @@
 const APP = new URL(self.registration.scope).pathname.startsWith("/admin") ? "admin" :
   new URL(self.registration.scope).pathname.startsWith("/captain") ? "captain" : "legacy";
 const CACHE_PREFIX = "shell-" + APP + "-";
-const CACHE = CACHE_PREFIX + "v7";
+const CACHE = CACHE_PREFIX + "v8";
 self.addEventListener("install", () => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith(CACHE_PREFIX) && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));

@@ -28,6 +28,18 @@ test('native channel rejects other origins and the other application role', () =
 test('a browser visit keeps Web Push mode until a verified native channel exists', () => {
   const f = fixture('admin', ''); assert.equal(f.client.expected, false);
 });
+
+test('diagnostics without an Android channel return immediately without waiting for ready',async()=>{
+ const f=fixture();const state=await f.client.inspect();
+ assert.equal(state.active,false);assert.equal(state.push,null);assert.match(state.error,/قناة Android/);assert.equal(f.client.readyPromise,undefined);
+ await assert.rejects(f.client.requestPermission(),/قناة Android/);await assert.rejects(f.client.showTest(),/قناة Android/);
+ assert.equal(f.client.pending.size,0);
+});
+
+test('an unresponsive native status request times out and removes its pending entry',async()=>{
+ const f=fixture();f.connect();f.port.postMessage=()=>{};
+ await assert.rejects(f.client.request('status',{}, {timeout:5,waitForChannel:false}),/مهلة/);assert.equal(f.client.pending.size,0);
+});
 test('device binding uses the current session and logout waits for native acknowledgement', async () => {
   const f = fixture(); f.connect(); await f.client.bind();
   assert.equal(f.calls[0].access_token, 'jwt-current'); assert.equal(f.client.enabled, true);
