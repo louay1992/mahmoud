@@ -29,7 +29,9 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;vertica
 th{color:var(--mut);font-weight:600;font-size:13px}
 .tw{overflow-x:auto}
 .tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff;white-space:nowrap}
-.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}
+.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;cursor:pointer}
 .neg{color:var(--red);font-weight:700}
 .mut{color:var(--mut);font-size:13px}
 #login{max-width:340px;margin:12vh auto;padding:0 14px}
@@ -50,7 +52,7 @@ th{color:var(--mut);font-weight:600;font-size:13px}
 </div>
 
 <div id="app" style="display:none">
-  <header><h1>📦 إدارة كباتن التوصيل</h1><button class="b s o" onclick="logout()">خروج</button></header>
+  <header><h1 id="hbiz">📦 إدارة كباتن التوصيل</h1><button class="b s o" onclick="logout()">خروج</button></header>
   <nav id="nav"></nav>
   <main id="main"></main>
 </div>
@@ -64,19 +66,22 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const money = n => Number(n || 0).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2});
+let CUR = "", ME = "";
+const money = n => Number(n || 0).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
-const ST = {new: "جديد", assigned: "مُسند", delivered: "مُسلَّم", cancelled: "ملغي"};
+const ST = {new: "جديد", assigned: "مُسند", delivered: "مُسلَّم", cancelled: "ملغي", returned: "مُرجَع"};
+const MK = {invoice:"إدخال بضاعة", sale:"بيع", return:"مرتجع", adjust:"تسوية جرد", transfer_in:"نقل وارد", transfer_out:"نقل صادر"};
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
 async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
 
-let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[]};
-let tab = "orders", orderFilter = "all";
+let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[], movements:[], admins:[], settings:{}, stats:null};
+let tab = "home", orderFilter = "all", orderQuery = "";
 
 async function boot(){
   const {data:{session}} = await sb.auth.getSession();
   if(!session){ $("login").style.display="block"; $("app").style.display="none"; return }
-  const {data} = await sb.from("admins").select("email"); // يظهر فقط إن كان المستخدم إدارياً
+  ME = (session.user.email || "").toLowerCase();
+  const {data} = await sb.from("admins").select("email");
   if(!data || !data.length){ toast("هذا الحساب ليس إدارياً"); await sb.auth.signOut(); $("login").style.display="block"; return }
   $("login").style.display="none"; $("app").style.display="block";
   await loadAll(); renderNav(); render();
@@ -98,20 +103,29 @@ async function loadAll(){
     sb.from("captain_balances").select("*"),
     sb.from("captain_payments").select("*").order("created_at",{ascending:false}).limit(100),
     sb.from("stock_invoices").select("*, stock_invoice_items(qty, products(name))").order("created_at",{ascending:false}).limit(50),
+    sb.from("stock_movements").select("*, products(name)").order("created_at",{ascending:false}).limit(100),
+    sb.from("admins").select("email").order("email"),
+    sb.from("settings").select("*"),
+    sb.rpc("dashboard_stats"),
   ];
   const r = await Promise.all(q);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
-  [D.products,D.captains,D.warehouses,D.stock,D.orders,D.balances,D.payments,D.invoices] = r.map(x => x.data || []);
+  [D.products,D.captains,D.warehouses,D.stock,D.orders,D.balances,D.payments,D.invoices,D.movements,D.admins] = r.slice(0,10).map(x => x.data || []);
+  D.settings = Object.fromEntries((r[10].data || []).map(x => [x.key, x.value]));
+  D.stats = r[11].data || null;
+  CUR = D.settings.currency || "";
+  const biz = D.settings.business_name || "إدارة كباتن التوصيل";
+  $("hbiz").textContent = "📦 " + biz; document.title = biz;
 }
 const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["orders","الطلبات"],["new","طلب جديد"],["stock","المخزون"],["accounts","المستحقات"],["captains","الكباتن والمستودعات"],["products","المنتجات"]];
+const TABS = [["home","الرئيسية"],["orders","الطلبات"],["new","طلب جديد"],["stock","المخزون"],["accounts","المستحقات"],["captains","الكباتن والمستودعات"],["products","المنتجات"],["settings","الإعدادات"]];
 function renderNav(){ $("nav").innerHTML = TABS.map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${l}</button>`).join("") }
 function go(k){ tab=k; renderNav(); render() }
 async function refresh(){ await loadAll(); render() }
-function render(){ ({orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,products:vProducts})[tab]() }
+function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,products:vProducts})[tab]() }
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
 /* ================= المنتجات ================= */
@@ -208,10 +222,19 @@ function vStock(){
   <div class="card"><h2>فاتورة إدخال بضاعة لمستودع</h2>
     <div class="row"><select id="iw">${D.warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join("")}</select><input id="inote" placeholder="ملاحظة (رقم الفاتورة...)"></div>
     ${itemRows("irows")}<br><br><button class="b" onclick="saveInvoice()">حفظ الفاتورة وإضافتها للجرد</button></div>
+  <div class="card"><h2>تسوية جرد (ضبط الكمية الفعلية)</h2>
+    <div class="row"><select id="aw">${whOpts()}</select><select id="ap">${prodOpts()}</select><input id="aq" type="number" min="0" step="1" placeholder="الكمية الفعلية"><input id="an" placeholder="السبب (اختياري)"></div>
+    <button class="b" onclick="adjustStock()">حفظ التسوية</button></div>
+  <div class="card"><h2>نقل بضاعة بين مستودعين</h2>
+    <div class="row"><select id="tf">${whOpts()}</select><select id="tt">${whOpts()}</select><select id="tp">${prodOpts()}</select><input id="tq" type="number" min="1" step="1" placeholder="الكمية"></div>
+    <div class="row"><input id="tn" placeholder="ملاحظة (اختياري)"></div>
+    <button class="b" onclick="transferStock()">نقل</button></div>
   ${byW}
   <div class="card"><h2>آخر الفواتير</h2><div class="tw"><table><tr><th>التاريخ</th><th>المستودع</th><th>الأصناف</th><th>ملاحظة</th></tr>
   ${D.invoices.map(i=>`<tr><td>${dt(i.created_at)}</td><td>${esc(wname(i.warehouse_id))}</td>
-   <td>${i.stock_invoice_items.map(x=>`${esc(x.products?.name)} × ${x.qty}`).join("، ")}</td><td>${esc(i.note)}</td></tr>`).join("")}</table></div></div>`;
+   <td>${i.stock_invoice_items.map(x=>`${esc(x.products?.name)} × ${x.qty}`).join("، ")}</td><td>${esc(i.note)}</td></tr>`).join("")}</table></div></div>
+  <div class="card"><h2>سجل حركة المخزون (آخر 100)</h2><div class="tw"><table><tr><th>التاريخ</th><th>المستودع</th><th>المنتج</th><th>الحركة</th><th>الكمية</th><th>ملاحظة</th></tr>
+  ${D.movements.map(m=>`<tr><td>${dt(m.created_at)}</td><td>${esc(wname(m.warehouse_id))}</td><td>${esc(m.products?.name)}</td><td>${MK[m.kind]||m.kind}</td><td class="${m.qty<0?"neg":""}" dir="ltr">${m.qty>0?"+":""}${m.qty}</td><td>${esc(m.note)}</td></tr>`).join("")}</table></div></div>`;
   addRow("irows");
 }
 async function saveInvoice(){
@@ -245,11 +268,16 @@ async function saveOrder(){
 
 /* ================= الطلبات ================= */
 function vOrders(){
-  const list=D.orders.filter(o=>orderFilter==="all"||o.status===orderFilter);
   $("main").innerHTML = `<div class="card"><div class="row">
-    <select onchange="orderFilter=this.value;vOrders()">${[["all","كل الطلبات"],...Object.entries(ST)].map(([k,l])=>`<option value="${k}" ${orderFilter===k?"selected":""}>${l}</option>`).join("")}</select>
-    <button class="b o" style="flex:0 0 auto" onclick="refresh()">تحديث</button></div></div>
-  ${list.map(o=>`<div class="card">
+    <input id="oq" placeholder="بحث: اسم الزبون، الموبايل، رقم الطلب، الكابتن" value="${esc(orderQuery)}" oninput="orderQuery=this.value;renderOrderList()">
+    <select onchange="orderFilter=this.value;renderOrderList()">${[["all","كل الطلبات"],...Object.entries(ST)].map(([k,l])=>`<option value="${k}" ${orderFilter===k?"selected":""}>${l}</option>`).join("")}</select>
+    <button class="b o" style="flex:0 0 auto" onclick="refresh()">تحديث</button></div></div><div id="olist"></div>`;
+  renderOrderList();
+}
+function renderOrderList(){
+  const q=orderQuery.trim().toLowerCase();
+  const list=D.orders.filter(o=>(orderFilter==="all"||o.status===orderFilter)&&(!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id)].some(v=>String(v||"").toLowerCase().includes(q))));
+  $("olist").innerHTML = list.map(o=>`<div class="card">
     <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
     <div>${o.order_items.map(i=>`${esc(i.products?.name)} × ${i.qty}`).join("، ")}</div>
@@ -260,7 +288,13 @@ function vOrders(){
       <button class="b s" style="flex:0 0 auto" onclick="assign('${o.id}')">${o.status==="new"?"إسناد":"تغيير الكابتن"}</button>
       ${o.status==="assigned"?`<button class="b s g" style="flex:0 0 auto" onclick="deliver('${o.id}')">تم التسليم</button>`:""}
       <button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button></div>`:""}
-  </div>`).join("")||'<p class="mut">لا توجد طلبات</p>'}`;
+    ${o.status==="delivered"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="returnO('${o.id}')">إرجاع الطلب</button></div>`:""}
+  </div>`).join("")||'<p class="mut">لا توجد طلبات</p>';
+}
+async function returnO(id){
+  if(!confirm("إرجاع هذا الطلب؟ ستُلغى قيمته من رصيد الكابتن.")) return;
+  const restock=confirm("هل البضاعة سليمة وتعود لمستودع الكابتن؟\nموافق = تعود للجرد، إلغاء = لا تعود (تالفة)");
+  if(await run(sb.rpc("return_order",{p_order:id,p_restock:restock,p_note:null}),"تم إرجاع الطلب")) refresh();
 }
 async function assign(id){ const c=$("as_"+id).value; if(!c) return toast("اختر كابتن");
   if(await run(sb.rpc("assign_order",{p_order:id,p_captain:c}),"تم الإسناد")) refresh() }
@@ -275,10 +309,10 @@ function vAccounts(){
    <tr><th>الكابتن</th><th>طلبات مُسلَّمة</th><th>قيمة المنتجات</th><th>المستلَم منه</th><th>المتبقي عليه</th><th></th></tr>
    ${D.balances.map(b=>`<tr><td>${esc(b.name)}</td><td>${b.delivered_count}</td><td>${money(b.delivered_total)}</td><td>${money(b.paid_total)}</td>
      <td class="big ${b.balance<0?"neg":""}">${money(b.balance)}</td>
-     <td><button class="b s" onclick="addPayment('${b.captain_id}')">استلام دفعة</button></td></tr>`).join("")}
+     <td><button class="b s" onclick="addPayment('${b.captain_id}')">استلام دفعة</button> <button class="b s o" onclick="statement('${b.captain_id}')">كشف حساب</button></td></tr>`).join("")}
   </table></div><p class="mut">المتبقي = قيمة منتجات الطلبات المُسلَّمة − الدفعات التي استلمتها من الكابتن. أجور التوصيل تبقى مع الكابتن ولا تدخل في المبلغ المطلوب منه.</p></div>
-  <div class="card"><h2>آخر الدفعات المستلمة</h2><div class="tw"><table><tr><th>التاريخ</th><th>الكابتن</th><th>المبلغ</th><th>ملاحظة</th></tr>
-   ${D.payments.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${esc(cname(p.captain_id))}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td></tr>`).join("")}</table></div></div>
+  <div class="card"><h2>آخر الدفعات المستلمة</h2><div class="tw"><table><tr><th>التاريخ</th><th>الكابتن</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr>
+   ${D.payments.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${esc(cname(p.captain_id))}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td><td><button class="b s r" onclick="delPayment('${p.id}')">حذف</button></td></tr>`).join("")}</table></div></div>
   <div class="card"><h2>أجور التوصيل التي يحتفظ بها الكابتن</h2><table><tr><th>الكابتن</th><th>مجموع الأجور</th></tr>
    ${D.balances.map(b=>`<tr><td>${esc(b.name)}</td><td>${money(b.fees_total)}</td></tr>`).join("")}</table></div>`;
 }
@@ -287,6 +321,89 @@ async function addPayment(id){
   if(isNaN(amount)||amount<=0) return toast("مبلغ غير صحيح");
   const note=prompt("ملاحظة (اختياري)")||null;
   if(await run(sb.from("captain_payments").insert({captain_id:id,amount,note}),"تم تسجيل الدفعة")) refresh();
+}
+
+/* ================= مساعدات المخزون ================= */
+function whOpts(){ return D.warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join("") }
+function prodOpts(){ return D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("") }
+async function adjustStock(){
+  const q=parseInt($("aq").value); if(isNaN(q)||q<0) return toast("أدخل الكمية الفعلية");
+  if(await run(sb.rpc("adjust_stock",{p_warehouse:$("aw").value,p_product:$("ap").value,p_new_qty:q,p_note:$("an").value.trim()||null}),"تم ضبط الجرد")) refresh();
+}
+async function transferStock(){
+  const q=parseInt($("tq").value); if(isNaN(q)||q<=0) return toast("أدخل الكمية");
+  if(await run(sb.rpc("transfer_stock",{p_from:$("tf").value,p_to:$("tt").value,p_product:$("tp").value,p_qty:q,p_note:$("tn").value.trim()||null}),"تم النقل")) refresh();
+}
+
+/* ================= المستحقات: حذف دفعة وكشف حساب ================= */
+async function delPayment(id){ if(!confirm("حذف هذه الدفعة؟ سيزيد رصيد الكابتن بقيمتها.")) return;
+  if(await run(sb.from("captain_payments").delete().eq("id",id),"تم الحذف")) refresh() }
+function statement(cid){
+  const c=D.captains.find(x=>x.id===cid), b=D.balances.find(x=>x.captain_id===cid)||{};
+  const ords=D.orders.filter(o=>o.captain_id===cid&&o.status==="delivered").sort((x,y)=>new Date(x.delivered_at)-new Date(y.delivered_at));
+  const pays=D.payments.filter(p=>p.captain_id===cid).sort((x,y)=>new Date(x.created_at)-new Date(y.created_at));
+  const w=window.open("","_blank"); if(!w) return toast("اسمح بالنوافذ المنبثقة لطباعة الكشف");
+  w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف حساب ${esc(c.name)}</title>
+  <style>body{font-family:Tahoma,Arial,sans-serif;padding:20px;color:#111}table{width:100%;border-collapse:collapse;margin:8px 0 20px}th,td{border:1px solid #ccc;padding:6px;text-align:right;font-size:13px}th{background:#f3f3f3}h1,h2{margin:6px 0}.t{font-size:18px;font-weight:700}</style></head><body>
+  <h1>${esc(D.settings.business_name||"")} — كشف حساب الكابتن: ${esc(c.name)}</h1><div>التاريخ: ${new Date().toLocaleDateString("ar-EG")}</div>
+  <h2>الطلبات المُسلَّمة</h2><table><tr><th>التاريخ</th><th>#</th><th>الزبون</th><th>قيمة المنتجات</th><th>أجور التوصيل (للكابتن)</th></tr>
+  ${ords.map(o=>`<tr><td>${dt(o.delivered_at)}</td><td>${o.order_no}</td><td>${esc(o.customer_name)}</td><td>${money(o.items_total)}</td><td>${money(o.delivery_fee)}</td></tr>`).join("")}</table>
+  <h2>الدفعات المستلمة من الكابتن</h2><table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th></tr>
+  ${pays.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td></tr>`).join("")}</table>
+  <div class="t">إجمالي المنتجات: ${money(b.delivered_total)} · المستلَم: ${money(b.paid_total)} · المتبقي على الكابتن: ${money(b.balance)}</div>
+  <p style="color:#666;font-size:12px">يشمل آخر 300 طلب محمَّل في التطبيق.</p>
+  <script>setTimeout(()=>print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ================= الرئيسية ================= */
+function vHome(){
+  const s=D.stats||{}, low=s.low_stock||[];
+  $("main").innerHTML = `<div class="stats">
+    <div class="stat" onclick="orderFilter='new';go('orders')"><div class="mut">طلبات بلا كابتن</div><div class="big">${s.new_orders??0}</div></div>
+    <div class="stat" onclick="orderFilter='assigned';go('orders')"><div class="mut">قيد التوصيل</div><div class="big">${s.in_delivery??0}</div></div>
+    <div class="stat"><div class="mut">سُلِّم اليوم</div><div class="big">${s.delivered_today??0}</div><div class="mut">مبيعات: ${money(s.sales_today)}</div></div>
+    <div class="stat" onclick="go('accounts')"><div class="mut">مستحق على الكباتن</div><div class="big">${money(s.owed_total)}</div></div></div>
+  <div class="card"><h2>⚠️ مخزون منخفض (${D.settings.low_stock||3} أو أقل)</h2>
+    ${low.length?`<table><tr><th>المستودع</th><th>المنتج</th><th>الكمية</th></tr>${low.map(x=>`<tr><td>${esc(x.warehouse)}</td><td>${esc(x.product)}</td><td class="${x.qty<=0?"neg":""}">${x.qty}</td></tr>`).join("")}</table>`:'<p class="mut">لا يوجد</p>'}</div>
+  <div class="card"><h2>المتبقي على كل كابتن</h2><table><tr><th>الكابتن</th><th>المتبقي</th></tr>
+    ${D.balances.map(b=>`<tr><td>${esc(b.name)}</td><td>${money(b.balance)}</td></tr>`).join("")}</table></div>`;
+}
+
+/* ================= الإعدادات ================= */
+function vSettings(){
+  const st=D.settings;
+  $("main").innerHTML = `
+  <div class="card"><h2>بيانات النشاط</h2>
+    <div class="row"><input id="sb" placeholder="اسم النشاط" value="${esc(st.business_name)}"><input id="sc" placeholder="رمز العملة (د.أ)" value="${esc(st.currency)}"><input id="sl" type="number" min="0" placeholder="حد تنبيه المخزون المنخفض" value="${esc(st.low_stock)}"></div>
+    <button class="b" onclick="saveSettings()">حفظ</button></div>
+  <div class="card"><h2>الإداريون</h2><table>
+    ${D.admins.map(a=>`<tr><td dir="ltr">${esc(a.email)}</td><td>${a.email.toLowerCase()===ME?'<span class="mut">أنت</span>':`<button class="b s r" onclick="delAdmin('${esc(a.email)}')">حذف</button>`}</td></tr>`).join("")}</table>
+    <div class="row" style="margin-top:10px"><input id="nae" type="email" dir="ltr" placeholder="بريد إداري جديد"><button class="b" style="flex:0 0 auto" onclick="addAdmin()">إضافة</button></div>
+    <p class="mut">يجب أن يكون للإداري الجديد مستخدم بنفس البريد في Supabase > Authentication > Users.</p></div>
+  <div class="card"><h2>تغيير كلمة المرور</h2>
+    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>
+  <div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
+    <p class="mut">يمسح كل الطلبات والجرد والدفعات وسجل الحركة. يبقى المنتجات والكباتن والمستودعات. استخدمه بعد انتهاء التجربة فقط.</p>
+    <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`;
+}
+async function saveSettings(){
+  const rows=[{key:"business_name",value:$("sb").value.trim()},{key:"currency",value:$("sc").value.trim()},{key:"low_stock",value:String(parseInt($("sl").value)||0)}];
+  if(await run(sb.from("settings").upsert(rows),"تم الحفظ")) refresh();
+}
+async function addAdmin(){
+  const email=$("nae").value.trim().toLowerCase(); if(!email) return toast("أدخل البريد");
+  if(await run(sb.from("admins").insert({email}),"تمت إضافة الإداري")) refresh();
+}
+async function delAdmin(email){ if(!confirm("حذف الإداري "+email+"؟")) return;
+  if(await run(sb.from("admins").delete().eq("email",email),"تم الحذف")) refresh() }
+async function changePw(){
+  const p=$("np").value; if(p.length<6) return toast("كلمة المرور قصيرة");
+  if(await run(sb.auth.updateUser({password:p}),"تم تغيير كلمة المرور")) $("np").value="";
+}
+async function resetData(){
+  if(prompt("للتأكيد اكتب: مسح")!=="مسح") return;
+  if(await run(sb.rpc("reset_test_data"),"تم مسح البيانات")) refresh();
 }
 
 boot();
