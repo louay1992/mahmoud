@@ -412,10 +412,10 @@ async function logout(){ if(!await ask("تسجيل الخروج","هل تريد 
 let firstLoad=true;
 async function load(initial){
   const r = await Promise.all([
-    sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").order("created_at",{ascending:false}).limit(200),
-    sb.from("stock").select("qty, products(name)"),
-    sb.from("captain_payments").select("*").order("created_at",{ascending:false}),
-    sb.from("captain_balances").select("*").limit(1),
+    sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("captain_id",me.id).order("created_at",{ascending:false}).limit(200),
+    sb.from("stock").select("qty, products(name), warehouses!inner(captain_id)").eq("warehouses.captain_id",me.id),
+    sb.from("captain_payments").select("*").eq("captain_id",me.id).order("created_at",{ascending:false}),
+    sb.from("captain_balances").select("*").eq("captain_id",me.id).limit(1),
     sb.from("settings").select("*"),
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(1000),
     sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
