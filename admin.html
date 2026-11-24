@@ -443,7 +443,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["ship","الشحن","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","طلبات التوصيل","box"],["ship","طلبات الشحن","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
 const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
@@ -1199,7 +1199,7 @@ async function shipLabel(id){
   w.document.close();
 }
 /* ===== تبويب الشحن ===== */
-let SHF={st:"open",q:"",car:""}, SHIPS=null, CPAYS=[], SHLOAD=0;
+let SHF={st:"open",q:"",car:"",mk:"",gov:"",per:"all"}, SHIPS=null, CPAYS=[], SHLOAD=0;
 async function vShip(){
   $("main").innerHTML=`<div id="shbody"><p class="mut" style="text-align:center">جارٍ تحميل الشحنات…</p></div>`;
   const my=++SHLOAD;
@@ -1212,31 +1212,36 @@ const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.f
   const col=L.filter(o=>o.status==="delivered").reduce((a,o)=>a+Number(o.total),0), fees=L.filter(o=>["delivered","returned"].includes(o.status)).reduce((a,o)=>a+Number(o.shipping_cost),0), paid=P.reduce((a,x)=>a+Number(x.amount),0);
   const fly=L.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)), pend=fly.reduce((a,o)=>a+Number(o.total),0);
   return {col,fees,paid,owed:col-fees-paid,fly:fly.length,pend,n:L.length,dl:L.filter(o=>o.status==="delivered").length,rt:L.filter(o=>o.status==="returned").length} };
+const shFilt=()=>{ const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), q=nrm(SHF.q), n=new Date(), d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
+  const from=SHF.per==="today"?d0:SHF.per==="week"?d0-6*864e5:SHF.per==="month"?new Date(n.getFullYear(),n.getMonth(),1).getTime():0;
+  return (SHIPS||[]).filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):(o.ship_status||"preparing")===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!SHF.mk||(SHF.mk==="none"?!o.marketer_id:o.marketer_id===SHF.mk))&&(!SHF.gov||o.governorate===SHF.gov)&&(!from||new Date(o.created_at).getTime()>=from)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate,mname(o.marketer_id)].some(v=>nrm(v).includes(q)))) };
 function drawShip(){
   if(!$("shbody")||!SHIPS) return;
   const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing");
   const cnt={open:SHIPS.filter(isOpen).length}; SHS.forEach(([k])=>cnt[k]=SHIPS.filter(o=>(o.ship_status||"preparing")===k).length);
-  const q=nrm(SHF.q);
-  const list=SHIPS.filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):(o.ship_status||"preparing")===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate].some(v=>nrm(v).includes(q))));
   const tot=D.carriers.reduce((a,c)=>{const b=carBal(c.id);a.owed+=b.owed;a.pend+=b.pend;return a},{owed:0,pend:0});
   const stuck=SHIPS.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)&&(Date.now()-new Date(o.status_at||o.created_at).getTime())>5*864e5).length;
   $("shbody").innerHTML=`<div class="kpis"><div class="kp"><div class="kpi" style="background:#e0f2fe">🚚</div><small>شحنات جارية</small><b>${cnt.open}</b></div><div class="kp"><div class="kpi" style="background:#fef3c7">⏳</div><small>تحصيل معلّق عند الشركات</small><b>${money(tot.pend)}</b></div><div class="kp"><div class="kpi" style="background:#ccfbf1">💰</div><small>مستحق لك عند الشركات</small><b class="${tot.owed<0?"dn":"up"}">${money(tot.owed)}</b></div></div>
    ${stuck?`<div class="card" style="background:#fffbeb;border:1px solid #fcd34d">⚠ <b>${stuck}</b> شحنة عند الشركة منذ أكثر من 5 أيام بلا تحديث — راجعها.</div>`:""}
+   <div class="card"><h2 style="margin:0 0 8px">📦 طلبات الشحن (<span id="shcnt"></span>)</h2>
+    <input placeholder="بحث: اسم الزبون، الموبايل، رقم البوليصة، رقم الطلب" value="${esc(SHF.q)}" oninput="SHF.q=this.value;drawShipList()" style="width:100%;margin-bottom:8px">
+    <div class="chips"><button class="chip ${SHF.st==="open"?"on":""}" onclick="SHF.st='open';drawShip()">جارية (${cnt.open})</button><button class="chip ${SHF.st==="all"?"on":""}" onclick="SHF.st='all';drawShip()">الكل (${SHIPS.length})</button>${SHS.map(([k,l,c,i])=>`<button class="chip ${SHF.st===k?"on":""}" onclick="SHF.st='${k}';drawShip()">${i} ${l} (${cnt[k]})</button>`).join("")}</div>
+    <div class="row" style="margin:8px 0 0"><select onchange="SHF.car=this.value;drawShip()"><option value="">كل الشركات</option>${D.carriers.map(c=>`<option value="${c.id}" ${SHF.car===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
+     <select onchange="SHF.mk=this.value;drawShip()"><option value="">كل المسوّقات</option><option value="none" ${SHF.mk==="none"?"selected":""}>بدون مسوّقة</option>${D.marketers.map(m=>`<option value="${m.id}" ${SHF.mk===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div>
+    <div class="row" style="margin:6px 0 8px"><select onchange="SHF.gov=this.value;drawShip()"><option value="">كل المحافظات</option>${[...new Set(SHIPS.map(o=>o.governorate).filter(Boolean))].map(g=>`<option value="${esc(g)}" ${SHF.gov===g?"selected":""}>${esc(g)}</option>`).join("")}</select>
+     <select onchange="SHF.per=this.value;drawShip()">${[["all","كل الأوقات"],["today","اليوم"],["week","آخر 7 أيام"],["month","هذا الشهر"]].map(([k,l])=>`<option value="${k}" ${SHF.per===k?"selected":""}>${l}</option>`).join("")}</select>
+     <button class="chip" onclick="SHF={st:'open',q:'',car:'',mk:'',gov:'',per:'all'};drawShip()">إعادة ضبط ✕</button></div>
+    <div id="shlist"></div></div>
    <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 10px"><h2 style="margin:0">شركات الشحن</h2><button class="b s" style="flex:0 0 auto" onclick="carEdit()">+ شركة</button></div>
     ${D.carriers.length?D.carriers.map(c=>{const b=carBal(c.id);return `<div class="card capc ${c.active?"":"off"}" style="box-shadow:none;border:1px solid #e2e8f0"><div class="caph"><div class="cav">📦</div><div style="flex:1;min-width:0"><b style="font-size:17px">${esc(c.name)}</b>${c.active?"":' <span class="tag cancelled">موقوفة</span>'}<div class="mut" style="font-size:12px">${b.n} شحنة · ${b.dl} مُسلَّمة · ${b.rt} مرتجعة · ${b.fly} في الطريق</div></div></div>
      <div class="capst"><div><small>مُحصَّل لدى الشركة</small><b>${money(b.col)}</b></div><div><small>أجورها</small><b>${money(b.fees)}</b></div><div><small>حوّلته لك</small><b>${money(b.paid)}</b></div><div class="rem"><small>المستحق لك</small><b class="${b.owed<0?"neg":""}">${money(b.owed)}</b></div></div>
-     <div class="capb"><button class="b s" onclick="carPay('${c.id}')">💵 تسجيل تحويل</button><button class="b s o" onclick="carStatement('${c.id}')">📄 كشف حساب</button><button class="b s o" onclick="carPays('${c.id}')">🧾 التحويلات</button><button class="b s o" onclick="carEdit('${c.id}')">✏️ تعديل</button></div></div>`}).join(""):'<p class="mut">لا توجد شركات</p>'}</div>
-   <div class="card"><h2 style="margin:0 0 8px">الشحنات</h2>
-    <input placeholder="بحث: اسم الزبون، الموبايل، رقم البوليصة، رقم الطلب" value="${esc(SHF.q)}" oninput="SHF.q=this.value;drawShipList()" style="width:100%;margin-bottom:8px">
-    <div class="chips"><button class="chip ${SHF.st==="open"?"on":""}" onclick="SHF.st='open';drawShip()">جارية (${cnt.open})</button><button class="chip ${SHF.st==="all"?"on":""}" onclick="SHF.st='all';drawShip()">الكل (${SHIPS.length})</button>${SHS.map(([k,l,c,i])=>`<button class="chip ${SHF.st===k?"on":""}" onclick="SHF.st='${k}';drawShip()">${i} ${l} (${cnt[k]})</button>`).join("")}</div>
-    <select onchange="SHF.car=this.value;drawShip()" style="margin:8px 0"><option value="">كل الشركات</option>${D.carriers.map(c=>`<option value="${c.id}" ${SHF.car===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
-    <div id="shlist"></div></div>`;
+     <div class="capb"><button class="b s" onclick="carPay('${c.id}')">💵 تسجيل تحويل</button><button class="b s o" onclick="carStatement('${c.id}')">📄 كشف حساب</button><button class="b s o" onclick="carPays('${c.id}')">🧾 التحويلات</button><button class="b s o" onclick="carEdit('${c.id}')">✏️ تعديل</button></div></div>`}).join(""):'<p class="mut">لا توجد شركات</p>'}</div>`;
   drawShipList();
 }
 function drawShipList(){
   if(!$("shlist")||!SHIPS) return;
-  const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), q=nrm(SHF.q);
-  const list=SHIPS.filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):(o.ship_status||"preparing")===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate].some(v=>nrm(v).includes(q))));
+  const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), list=shFilt();
+  if($("shcnt")) $("shcnt").textContent=list.length;
   $("shlist").innerHTML=list.length?list.map(o=>{ const age=Math.floor((Date.now()-new Date(o.status_at||o.created_at).getTime())/864e5); return `<div class="card" style="padding:12px 14px;margin:0 0 10px;cursor:pointer;box-shadow:none;border:1px solid #e2e8f0" onclick="openShip('${o.id}')">
     <div class="row" style="justify-content:space-between;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b>${shTag(o)}</div>
     <div class="mut" style="font-size:13px">📍 ${esc(o.governorate||"—")} · 📞 <span dir="ltr">${esc(o.customer_phone||"")}</span></div>
@@ -1498,23 +1503,22 @@ function ordBase(skipStatus){
   return D.orders.filter(o=>
     (skipStatus||orderFilter==="all"||o.status===orderFilter)&&
     (!orderCap||(orderCap==="none"?(!o.captain_id&&o.fulfillment!=="shipping"):o.captain_id===orderCap))&&
-    (!orderFul||o.fulfillment===orderFul)&&
+    o.fulfillment!=="shipping"&&
     (!orderMk||(orderMk==="none"?!o.marketer_id:o.marketer_id===orderMk))&&
     (!from||new Date(o.created_at).getTime()>=from)&&
     (!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id),mname(o.marketer_id)].some(v=>String(v||"").toLowerCase().includes(q))));
 }
 function vOrders(){
-  $("main").innerHTML = `<div class="card">
+  $("main").innerHTML = `<div class="card"><h2 style="margin:0 0 10px">🚚 طلبات التوصيل</h2>
     <div class="row" style="margin-bottom:8px"><input id="oq" placeholder="بحث: اسم الزبون، الموبايل، رقم الطلب، الكابتن، المسوّقة" value="${esc(orderQuery)}" oninput="orderQuery=this.value;renderOrderList()"></div>
     <div class="chips" id="ochips"></div>
     <div class="row" style="margin-bottom:8px">
-      <select onchange="orderFul=this.value;renderOrderList()"><option value="">توصيل وشحن</option><option value="delivery" ${orderFul==="delivery"?"selected":""}>🚚 توصيل فقط</option><option value="shipping" ${orderFul==="shipping"?"selected":""}>📦 شحن فقط</option></select>
       <select onchange="orderCap=this.value;renderOrderList()"><option value="">كل الكباتن</option><option value="none" ${orderCap==="none"?"selected":""}>غير مُسنَد لكابتن</option>${D.captains.map(c=>`<option value="${c.id}" ${orderCap===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select>
       <select onchange="orderMk=this.value;renderOrderList()"><option value="">كل المسوّقات</option><option value="none" ${orderMk==="none"?"selected":""}>بدون مسوّقة</option>${D.marketers.map(m=>`<option value="${m.id}" ${orderMk===m.id?"selected":""}>${esc(m.name)}</option>`).join("")}</select>
       <select onchange="orderPer=this.value;renderOrderList()">${[["all","كل الأوقات"],["today","اليوم"],["week","آخر 7 أيام"],["month","هذا الشهر"]].map(([k,l])=>`<option value="${k}" ${orderPer===k?"selected":""}>${l}</option>`).join("")}</select>
     </div>
     <div class="chips" style="margin:0;align-items:center"><span class="mut">تجميع:</span>${[["none","بدون"],["status","حسب الحالة"],["captain","حسب الكابتن"],["marketer","حسب المسوّقة"],["day","حسب اليوم"]].map(([k,l])=>`<button class="chip ${orderGrp===k?"on":""}" data-g="${k}" onclick="orderGrp='${k}';document.querySelectorAll('[data-g]').forEach(c=>c.classList.toggle('on',c.dataset.g==='${k}'));renderOrderList()">${l}</button>`).join("")}
-      <button class="chip" onclick="orderFilter='all';orderFul='';orderCap='';orderMk='';orderPer='all';orderQuery='';orderGrp='none';vOrders()">إعادة ضبط ✕</button></div>
+      <button class="chip" onclick="orderFilter='all';orderCap='';orderMk='';orderPer='all';orderQuery='';orderGrp='none';vOrders()">إعادة ضبط ✕</button></div>
     </div><div id="osum" class="mut" style="margin:0 4px 10px"></div><div id="olist"></div>`;
   renderOrderList();
 }
