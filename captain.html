@@ -549,11 +549,36 @@ function initNotifUI(){ const s=notifState(), b=$("bell"); b.innerHTML=ic(s==="d
 async function bellClick(){
   const s=notifState();
   if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");
-  if(s==="granted"){ beep(); return toast("الإشعارات مفعّلة — ستصلك الطلبات الجديدة وملاحظات الإداري","ok") }
+  if(s==="granted"){ ensurePush(); beep(); return toast("الإشعارات مفعّلة — ستصلك الطلبات الجديدة وملاحظات الإداري","ok") }
   if(s==="denied") return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
-  const r=await Notification.requestPermission(); initNotifUI(); if(r==="granted"){ ensurePush(); beep(); toast("تم تفعيل الإشعارات","ok"); render() }
+  const r=await Notification.requestPermission(); initNotifUI(); if(r==="granted"){ ensurePush(); beep(); toast("تم تفعيل الإشعارات","ok"); render() } else pushDiag()
 }
 /* اشتراك Push: يصل الإشعار حتى والتطبيق مغلق */
+
+/* فحص الإشعارات (تشخيص): يعرض حالة الإذن والاشتراك ويحاول التفعيل مع إظهار الخطأ الحقيقي */
+async function pushDiag(){
+  let box=document.getElementById("pdg"); if(box) box.remove();
+  box=document.createElement("div"); box.id="pdg"; box.style.cssText="position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:flex-end;justify-content:center";
+  document.body.appendChild(box);
+  const log=[]; const add=(t)=>{ log.push(t); draw() };
+  async function info(){
+    const o={}; o.perm=("Notification" in window)?Notification.permission:"غير مدعوم"; o.push=("PushManager" in window)?"نعم":"لا";
+    o.mode=(matchMedia("(display-mode: standalone)").matches||document.referrer.startsWith("android-app://"))?"تطبيق":"متصفح";
+    try{ const reg=await navigator.serviceWorker.getRegistration(); o.sw=reg?(reg.active?"يعمل":"مسجّل"):"غير مسجّل"; o.sub=reg&&await reg.pushManager.getSubscription(); }catch(e){ o.sw="خطأ: "+e.message }
+    return o }
+  let o=await info();
+  function draw(){
+    box.innerHTML=`<div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:16px;max-height:85vh;overflow:auto;direction:rtl;font-size:14px;color:#0f172a">
+     <b style="font-size:16px">🔧 فحص الإشعارات</b>
+     <div style="margin:10px 0;line-height:1.9">إذن الإشعارات: <b>${o.perm}</b><br>طريقة التشغيل: <b>${o.mode}</b><br>دعم Push: <b>${o.push}</b><br>خدمة الخلفية: <b>${o.sw}</b><br>اشتراك الجهاز: <b>${o.sub?"موجود ✓":"غير موجود"}</b></div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="b btn" onclick="pdgAsk()">1) طلب الإذن</button><button class="b btn" onclick="pdgSub()">2) تفعيل الاشتراك</button><button class="b btn" onclick="pdgLocal()">3) إشعار تجريبي</button><button class="b btn" onclick="document.getElementById('pdg').remove()">إغلاق</button></div>
+     <div style="background:#f1f5f9;border-radius:10px;padding:8px 10px;white-space:pre-wrap;direction:ltr;text-align:left;font-size:12px;min-height:40px">${log.join("\n")||"..."}</div></div>`;
+  }
+  window.pdgAsk=async()=>{ try{ const r=await Notification.requestPermission(); o=await info(); add("requestPermission → "+r) }catch(e){ add("ERR ask: "+e.message) } };
+  window.pdgSub=async()=>{ try{ if(Notification.permission!=="granted") throw new Error("الإذن ليس granted ("+Notification.permission+")"); await ensurePush(); o=await info(); add(o.sub?"OK: تم الاشتراك وحُفظ":"لم يُنشأ اشتراك (راجع الاتصال)") }catch(e){ add("ERR sub: "+e.name+" "+e.message) } };
+  window.pdgLocal=async()=>{ try{ const reg=await navigator.serviceWorker.ready; await reg.showNotification("إشعار تجريبي",{body:"إذا ظهر هذا الإشعار فالعرض يعمل",dir:"rtl"}); add("showNotification OK") }catch(e){ add("ERR local: "+e.name+" "+e.message) } };
+  draw();
+}
 const b64u8=b=>{ const p="=".repeat((4-b.length%4)%4), r=atob((b+p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from([...r].map(c=>c.charCodeAt(0))) };
 async function ensurePush(){
   if(!("serviceWorker" in navigator)||!("PushManager" in window)||notifState()!=="granted"||!me) return;
@@ -658,7 +683,7 @@ function vOrders(){
   const cnt=k=>D.orders.filter(o=>o.status===k).length;
   if(!TF||!SBAR.some(x=>x[0]===TF)) TF=["assigned","in_delivery","no_answer","closed","other"].find(k=>cnt(k)>0)||"assigned";
   const nb=notifState()==="default"&&!localStorage.getItem("nb_dismiss");
-  $("main").innerHTML = `${nb?`<div class="banner n">${ic("bell")}<div><b>فعّل الإشعارات</b><span>لتصلك الطلبات الجديدة وملاحظات الإداري فوراً</span></div><button class="btn" onclick="bellClick().then(()=>render())">تفعيل</button></div>`:""}
+  $("main").innerHTML = `${nb?`<div class="banner n">${ic("bell")}<div><b>فعّل الإشعارات</b><span>لتصلك الطلبات الجديدة وملاحظات الإداري فوراً</span></div><button class="btn" onclick="bellClick().then(()=>render())">تفعيل</button><button class="btn" onclick="pushDiag()" style="margin-inline-start:6px">فحص</button></div>`:""}
   <div class="sbar" id="sbar">${SBAR.map(([k,l])=>{const n=cnt(k);return `<button class="sch ${TF===k?"on":""} ${n&&(k==="assigned"||k==="no_answer")?"hot":""}" style="--c:${SCOL[k]}" onclick="TF='${k}';vOrders();scrollTo({top:0})">${l}<span class="n">${n}</span></button>`}).join("")}</div>
   <div class="search" style="margin-bottom:12px">${ic("search")}<input id="oq" placeholder="بحث بالاسم أو الموبايل أو الرقم" value="${esc(q)}" oninput="q=this.value;drawOrders()"></div>
   <div id="groups"></div>`;
