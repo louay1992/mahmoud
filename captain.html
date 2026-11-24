@@ -254,6 +254,24 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 }
 @media(max-width:340px){.tiles{grid-template-columns:repeat(2,1fr)}.opts{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.stk-hero{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#2563eb,#1e40af);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:10px}
+.stk-l{opacity:.85;font-size:13px}.stk-n{font-size:38px;font-weight:800;line-height:1.1}
+.stk-ic{width:52px;height:52px;border-radius:14px;background:#ffffff26;display:grid;place-items:center}.stk-ic svg{width:26px;height:26px}
+.stk-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stk-t{background:#fff;border-radius:14px;padding:10px;text-align:center;box-shadow:0 1px 3px #0001}.stk-t b{display:block;font-size:20px}.stk-t span{font-size:12px;color:#64748b}
+.stk-q{width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid #e2e8f0;border-radius:12px;font:inherit;margin-bottom:8px;background:#fff}
+.stk-ch{display:flex;gap:8px;margin-bottom:10px}.stk-ch button{flex:1;border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:8px;font:inherit;font-size:13px;color:#475569}
+.stk-ch button.on{background:#2563eb;color:#fff;border-color:#2563eb}.stk-ch i{font-style:normal;opacity:.7;margin-inline-start:2px}
+.stk-c{display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:12px;margin-bottom:8px;box-shadow:0 1px 3px #0001}
+.stk-av{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-weight:800;font-size:18px;flex:none}
+.stk-m{flex:1;min-width:0}.stk-m b{display:block;font-size:15px;margin-bottom:8px}
+.stk-bar{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden}.stk-bar i{display:block;height:100%;border-radius:99px}
+.stk-r{text-align:center;flex:none;min-width:58px}.stk-q2{font-size:24px;font-weight:800;line-height:1}
+.stk-b{display:inline-block;margin-top:6px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px}
+.stk-back{border:0;background:none;color:#2563eb;font:inherit;font-weight:700;padding:4px 2px 10px}
+.stk-go{display:flex;align-items:center;gap:12px;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin-bottom:10px;font:inherit;box-shadow:0 1px 3px #0001}
+.stk-gi{width:42px;height:42px;border-radius:12px;background:#2563eb;color:#fff;display:grid;place-items:center}.stk-gi svg{width:22px;height:22px}
+.stk-go b{display:block;font-size:15px}.stk-go small{color:#64748b;font-size:12px}
 </style>
 </head>
 <body>
@@ -288,7 +306,7 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
   <main id="main"></main>
   <nav><div class="row">
     <button id="t_orders" onclick="go('orders')"></button>
-    <button id="t_stock" onclick="go('stock')"></button>
+    <button id="t_stock" onclick="go('stock')" style="display:none"></button>
     <button id="t_acc" onclick="go('acc')"></button>
   </div></nav>
 </div>
@@ -437,7 +455,7 @@ function detect(prev){
 function render_if_idle(){ if($("modal").style.display==="flex"||document.querySelector(".dlg")) return; if(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; const y=scrollY; render(); scrollTo(0,y) }
 async function refresh(){ await load(); render_if_idle() }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await load(); render(); b.classList.remove("sp"); toast("تم التحديث","ok") }
-function go(t){ tab=t; ["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t)); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(t){ tab=t; ["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
 
 /* ===== الإشعارات ===== */
@@ -672,14 +690,39 @@ async function submitStatus(){
 }
 
 /* ===== الجرد والحساب ===== */
+let SF="all", SQ="";
 function vStock(){
   const low=Number(D.settings.low_stock||3);
-  $("main").innerHTML = `<div class="card"><h2>${ic("store")} الجرد الموجود معي</h2>
-   ${D.stock.length?D.stock.map(s=>`<div class="row2"><div class="ri" style="background:${s.qty<=0?"#ef4444":s.qty<=low?"#f59e0b":"#2563eb"}">${ic("box")}</div><div class="m"><b>${esc(s.products?.name)}</b></div><span class="qty ${s.qty<0?"neg":s.qty<=low?"low":""}">${s.qty}</span></div>`).join(""):`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>لا يوجد جرد مسجَّل</b><span>سيضيف الإداري بضاعتك قريباً</span></div>`}</div>`;
+  const all=D.stock||[];
+  const st=q=>q<=0?"out":q<=low?"low":"ok";
+  const units=all.reduce((a,s)=>a+Math.max(0,Number(s.qty)||0),0);
+  const nLow=all.filter(s=>st(s.qty)==="low").length, nOut=all.filter(s=>st(s.qty)==="out").length;
+  const cnt={all:all.length,low:nLow,out:nOut};
+  $("main").innerHTML = `<button class="stk-back" onclick="go('acc')">${ic("back")||"→"} رجوع إلى حسابي</button><div class="stk-hero"><div><div class="stk-l">إجمالي القطع معي</div><div class="stk-n">${units}</div></div><div class="stk-ic">${ic("store")}</div></div>
+   <div class="stk-tiles"><div class="stk-t"><b>${all.length}</b><span>صنف</span></div><div class="stk-t" style="color:#b45309"><b>${nLow}</b><span>منخفض</span></div><div class="stk-t" style="color:#dc2626"><b>${nOut}</b><span>نفد</span></div></div>
+   <input id="stkq" class="stk-q" placeholder="ابحث عن منتج…" value="${esc(SQ)}" oninput="SQ=this.value;drawStock()">
+   <div class="stk-ch">${[["all","الكل"],["low","منخفض"],["out","نفد"]].map(([k,l])=>`<button class="${SF===k?"on":""}" onclick="SF='${k}';vStock()">${l} <i>${cnt[k]}</i></button>`).join("")}</div>
+   <div id="stklist"></div>`;
+  drawStock();
+}
+function drawStock(){
+  const low=Number(D.settings.low_stock||3), q=SQ.trim().toLowerCase();
+  const st=n=>n<=0?"out":n<=low?"low":"ok";
+  const rank={out:0,low:1,ok:2};
+  const L={ok:"متوفر",low:"منخفض",out:"نفد"}, C={ok:"#16a34a",low:"#f59e0b",out:"#ef4444"};
+  const list=(D.stock||[]).filter(s=>(SF==="all"||st(s.qty)===SF)&&(!q||String(s.products?.name||"").toLowerCase().includes(q)))
+    .sort((x,y)=>rank[st(x.qty)]-rank[st(y.qty)]||String(x.products?.name).localeCompare(String(y.products?.name),"ar"));
+  const mx=Math.max(10,low*3,...(D.stock||[]).map(s=>Number(s.qty)||0));
+  $("stklist").innerHTML = list.length?list.map(s=>{const k=st(s.qty),p=Math.max(4,Math.min(100,Math.round((Number(s.qty)||0)/mx*100)));
+    return `<div class="stk-c"><div class="stk-av" style="background:${C[k]}1a;color:${C[k]}">${esc(String(s.products?.name||"؟").trim().charAt(0))}</div>
+     <div class="stk-m"><b>${esc(s.products?.name)}</b><div class="stk-bar"><i style="width:${k==="out"?0:p}%;background:${C[k]}"></i></div></div>
+     <div class="stk-r"><div class="stk-q2" style="color:${C[k]}">${s.qty}</div><span class="stk-b" style="background:${C[k]}1a;color:${C[k]}">${L[k]}</span></div></div>`}).join("")
+   :`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>${(D.stock||[]).length?"لا نتائج مطابقة":"لا يوجد جرد مسجَّل"}</b><span>${(D.stock||[]).length?"جرّب تغيير البحث أو الفلتر":"سيضيف الإداري بضاعتك قريباً"}</span></div>`;
 }
 function vAcc(){
   const b=D.balance||{};
-  $("main").innerHTML = `<div class="bal"><div style="opacity:.85">المتبقي عليّ تسليمه للإدارة</div><div class="big">${money(b.balance)}</div><div style="opacity:.85;font-size:14px">${b.delivered_count||0} طلب مُسلَّم</div></div>
+  const sq=(D.stock||[]).reduce((a,x)=>a+Math.max(0,Number(x.qty)||0),0);
+  $("main").innerHTML = `<button class="stk-go" onclick="go('stock')"><span class="stk-gi">${ic("store")}</span><span style="flex:1;text-align:start"><b>جرد المستودع</b><small>${(D.stock||[]).length} صنف · ${sq} قطعة</small></span><span>‹</span></button><div class="bal"><div style="opacity:.85">المتبقي عليّ تسليمه للإدارة</div><div class="big">${money(b.balance)}</div><div style="opacity:.85;font-size:14px">${b.delivered_count||0} طلب مُسلَّم</div></div>
    <div class="stats">
     <div class="stat"><div class="ico" style="background:#2563eb">${ic("box")}</div><div class="mut">قيمة المنتجات المُسلَّمة</div><div class="v">${money(b.delivered_total)}</div></div>
     <div class="stat"><div class="ico" style="background:#16a34a">${ic("cash")}</div><div class="mut">ما سلّمتُه</div><div class="v">${money(b.paid_total)}</div></div>
@@ -699,7 +742,7 @@ $("i_mail").innerHTML=ic("mail"); $("i_lock").innerHTML=ic("lock"); $("eye").inn
 $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"password" };
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });
 $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
-$("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"; $("t_stock").innerHTML=ic("store")+"<span>جردي</span>"; $("t_acc").innerHTML=ic("wallet")+"<span>حسابي</span>";
+$("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"; $("t_stock").innerHTML=ic("store")+"<span>جرد المستودع</span>"; $("t_acc").innerHTML=ic("wallet")+"<span>حسابي</span>";
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 boot();
 </script>
