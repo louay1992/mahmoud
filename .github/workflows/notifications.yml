@@ -1,0 +1,27 @@
+name: Check notification flow
+on:
+  push:
+    branches: [main]
+    paths: ['push-client.js', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'tests/**', '.github/workflows/notifications.yml']
+  pull_request:
+    paths: ['push-client.js', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'tests/**', '.github/workflows/notifications.yml']
+permissions:
+  contents: read
+jobs:
+  notifications:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: node --test tests/push-client.test.cjs tests/sw.test.cjs
+      - run: python3 tests/check_android_notifications.py
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install --no-save --package-lock=false playwright@1.61.1
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/notifications-browser.cjs
