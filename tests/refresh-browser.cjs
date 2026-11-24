@@ -37,6 +37,9 @@ const sdk=`window.fixtureApi={counts:{},fail:false,hold:false};window.supabase={
    async function pull(x=190,y=330,dx=0,dy=185,cancel=false){
     await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
     for(let i=1;i<=5;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*i/5,y:y+dy*i/5}]});
+    // Release a settled finger; otherwise the ignored native scroll can keep
+    // flinging during the next independent scroll-preservation assertion.
+    await page.waitForTimeout(130);
     await cdp.send('Input.dispatchTouchEvent',{type:cancel?'touchCancel':'touchEnd',touchPoints:[]});
    }
    let before=await page.evaluate(()=>fixtureApi.counts.orders||0);await pull();
@@ -48,7 +51,7 @@ const sdk=`window.fixtureApi={counts:{},fail:false,hold:false};window.supabase={
    await page.evaluate(()=>{document.querySelector('#main').style.minHeight='2000px';scrollTo(0,240)});await pull();assert.equal(await page.evaluate(()=>fixtureApi.counts.orders),before);await page.evaluate(()=>scrollTo(0,0));
    // Concurrent manual requests share one real page data load.
    before=await page.evaluate(()=>fixtureApi.counts.orders);await page.evaluate(()=>Promise.all([manualRefresh(),manualRefresh()]));assert.equal(await page.evaluate(()=>fixtureApi.counts.orders),before+1);
-   await page.evaluate(async()=>{fixtureApi.delay=60;const task=manualRefresh();scrollTo(0,240);await task;fixtureApi.delay=0});assert.ok(Math.abs(await page.evaluate(()=>scrollY)-240)<=1,'scrolling during refresh must not jump back');await page.evaluate(()=>scrollTo(0,0));
+   const scroll=await page.evaluate(async()=>{fixtureApi.delay=60;const task=manualRefresh();scrollTo({top:240,behavior:'instant'});const before=scrollY;await task;fixtureApi.delay=0;return {before,after:scrollY}});assert.ok(scroll.before>100&&Math.abs(scroll.after-scroll.before)<=1,'scrolling during refresh must not jump back: '+JSON.stringify(scroll));await page.evaluate(()=>scrollTo(0,0));
    await page.evaluate(()=>{fixtureApi.fail=true});await page.evaluate(()=>manualRefresh());
    assert.equal(await page.evaluate(()=>D.orders.length),1);assert.equal(await page.locator('#rf').evaluate(el=>el.classList.contains('sp')),false);assert.match(await page.locator('#toast').innerText(),/تعذّر التحديث/);
    await page.evaluate(()=>{fixtureApi.fail=false;fixtureApi.hold=true;appRefresh.timeout=40});await page.evaluate(()=>manualRefresh());assert.equal(await page.evaluate(()=>appRefresh.flight),null);
