@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1e3a8a">
+<meta name="delivery-build" content="__APP_BUILD__">
 <title>كابتن التوصيل</title>
 <link rel="manifest" href="/manifest-captain.json">
 <link rel="icon" href="/icons/captain-192.png">
@@ -15,6 +16,7 @@
 <script src="/auth-session.js"></script>
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
+<script src="/app-refresh.js"></script>
 <script src="/push-diagnostics.js"></script>
 <script src="/mobile-ui.js" defer></script>
 <style>
@@ -73,8 +75,6 @@ main{max-width:760px;margin:0 auto;padding:16px 14px calc(96px + var(--bot))}
 #bar{position:fixed;top:0;inset-inline:0;height:3px;z-index:99;background:linear-gradient(90deg,transparent,#fbbf24,transparent);background-size:50% 100%;background-repeat:no-repeat;opacity:0;transition:opacity .2s}
 #bar.on{opacity:1;animation:bar 1s linear infinite}
 @keyframes bar{from{background-position:-50% 0}to{background-position:150% 0}}
-#ptr{position:fixed;top:calc(var(--top) + 70px);left:50%;margin-left:-20px;width:40px;height:40px;border-radius:50%;background:#fff;box-shadow:var(--sh);display:grid;place-items:center;color:var(--p);z-index:40;transform:translateY(-120px);transition:transform .2s}
-#ptr.ready{color:var(--grn)}#ptr.spin svg{animation:rot .8s linear infinite}
 
 /* شريط التنقل السفلي */
 nav{position:fixed;bottom:0;inset-inline:0;z-index:30;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);border-top:1px solid var(--bd);display:flex;justify-content:center;padding:6px 8px calc(6px + var(--bot));box-shadow:0 -6px 24px rgba(15,23,42,.06)}
@@ -293,11 +293,12 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .nf{display:flex;justify-content:space-between;align-items:center}.ncat{font-size:11.5px;background:#eef2f7;color:#475569;padding:2px 9px;border-radius:99px;font-weight:700}.nlk{font-size:12.5px;color:var(--p);font-weight:700}
 </style>
 <link rel="stylesheet" href="/mobile.css">
+<link rel="stylesheet" href="/app-refresh.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/></svg></div><b>كابتن التوصيل</b><div class="spin"></div></div>
 <div id="bar"></div><div id="offline">لا يوجد اتصال بالإنترنت — سيتم التحديث عند عودته</div>
-<div id="ptr"></div>
+
 
 <div id="login">
   <div class="hero">
@@ -422,7 +423,7 @@ async function boot(){
   me = data[0];
   $("login").style.display="none"; $("app").style.display="block";
   $("av").textContent=(me.name||"ك").trim().charAt(0); $("hn").textContent=me.name;
-  await load(true); if(authGate.blocked) return; go("orders"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
+  await load(true); if(authGate.blocked) return; go("orders"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
 const loginId=v=>{ v=String(v||"").trim(); if(v.includes("@")) return v.toLowerCase();
@@ -452,7 +453,7 @@ async function logout(){
 /* ===== تحميل البيانات + كشف الجديد ===== */
 let firstLoad=true;
 let LSEQ=0;
-async function load(initial){
+async function load(initial,{signal}={}){
   const seq=++LSEQ, who=me&&me.id;
   const r = await Promise.all([
     sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("captain_id",me.id).order("created_at",{ascending:false}).limit(200),
@@ -463,9 +464,9 @@ async function load(initial){
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(1000),
     sb.from("price_requests").select("*").order("created_at",{ascending:false}).limit(300),
     sb.from("notifications").select("*").order("created_at",{ascending:false}).limit(150),
-  ]);
-  if(seq!==LSEQ||!me||me.id!==who) return;
-  const bad=r.find(x=>x.error); if(bad){ if(!initial) return; toast("خطأ تحميل: "+bad.error.message,"err") }
+  ].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
+  if(signal?.aborted||seq!==LSEQ||!me||me.id!==who||authGate.blocked) return false;
+  const bad=r.find(x=>x.error); if(bad){ if(!initial) throw new Error('تعذّر تحميل البيانات'); toast('تعذّر تحميل البيانات. حاول مجددًا.','err'); return false; }
   const prev=D.orders;
   D.orders=r[0].data||[]; D.stock=(r[1].data||[]).sort((a,b)=>(a.products?.name||"").localeCompare(b.products?.name||"","ar"));
   D.payments=r[2].data||[]; D.balance=(r[3].data||[])[0]||null;
@@ -503,8 +504,8 @@ function detect(prev){
   try{ localStorage.setItem(key,JSON.stringify(cur)) }catch(e){}
 }
 function render_if_idle(){ if($("modal").style.display==="flex"||document.querySelector(".dlg")) return; if(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; const y=scrollY; render(); scrollTo(0,y) }
-async function refresh(){ await load(); render_if_idle() }
-async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await load(); render(); b.classList.remove("sp"); toast("تم التحديث","ok") }
+async function refresh(){ return appRefresh.refresh({reason:'live'}); }
+async function manualRefresh(){ return appRefresh.manual(); }
 function go(t){ tab=t; if(t==="acc")ASUB="";["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc,notifs:vNotifs})[tab]() }
 
@@ -616,23 +617,9 @@ function startLive(){
       .on("postgres_changes",{event:"*",schema:"public",table:"captain_payments"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"price_requests"},kick).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},kick).subscribe() }catch(e){}
 }
-setInterval(()=>{ if(me && !document.hidden) refresh() }, 20000);
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&me){ refresh(); checkUpdate() } });
+function checkUpdate(){ return appRefresh.checkUpdate(); }
+function applyUpdate(){ return appRefresh.applyUpdate(true); }
 
-/* ===== التحديث التلقائي للتطبيق ===== */
-let selfHash=null;
-async function pageHash(){ try{ const r=await fetch(location.pathname,{cache:"no-store"}); if(!r.ok) return null; const t=await r.text(); let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; return h+":"+t.length }catch(e){ return null } }
-async function checkUpdate(){
-  try{ const reg=await navigator.serviceWorker.getRegistration(); reg&&reg.update() }catch(e){}
-  const h=await pageHash(); if(!h) return; if(selfHash===null){ selfHash=h; return }
-  if(h!==selfHash){ const u=$("upd"); u.style.display="block";
-    u.innerHTML=`<div class="banner u">${ic("sparkle")}<div><b>يتوفر إصدار جديد</b><span>حدّث التطبيق للحصول على آخر التحسينات</span></div><button class="btn" onclick="applyUpdate()">تحديث الآن</button></div>` }
-}
-async function applyUpdate(){ try{ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.update())) }catch(e){} location.reload() }
-setInterval(checkUpdate, 5*60*1000);
-addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عاد الاتصال","ok"); if(me) refresh() });
-addEventListener("offline",()=>$("offline").classList.add("on"));
-if(!navigator.onLine) $("offline").classList.add("on");
 
 /* ===== واجهة الطلبات ===== */
 const GROUPS=[
@@ -868,13 +855,6 @@ function vAcc(){
    <div class="card"><h2>${ic("wallet")} الدفعات المسددة</h2>${D.payments.length?D.payments.map(p=>`<div class="row2"><div class="ri" style="background:#16a34a">${ic("check")}</div><div class="m"><b>${dt(p.created_at)}</b>${p.note?`<div class="mut">${esc(p.note)}</div>`:""}</div><b class="v">${money(p.amount)}</b></div>`).join(""):`<div class="empty" style="box-shadow:none">${EMPTY_SVG}<b>لا توجد دفعات بعد</b></div>`}</div>`;
 }
 
-/* ===== سحب للتحديث ===== */
-let ptr=null;
-addEventListener("touchstart",e=>{ if(scrollY<=0&&me&&$("modal").style.display!=="flex") ptr={y:e.touches[0].clientY} },{passive:true});
-addEventListener("touchmove",e=>{ if(!ptr) return; const d=e.touches[0].clientY-ptr.y; const p=$("ptr"); if(d>10&&scrollY<=0){ p.style.transform=`translateY(${Math.min(d,100)-80}px) rotate(${d*3}deg)`; p.classList.toggle("ready",d>80) } },{passive:true});
-addEventListener("touchend",async()=>{ if(!ptr) return; ptr=null; const p=$("ptr"), ready=p.classList.contains("ready"); p.style.transform=""; p.classList.remove("ready");
-  if(ready){ p.style.transform="translateY(-10px)"; p.classList.add("spin"); await load(); render(); p.classList.remove("spin"); p.style.transform="" } });
-
 /* ===== تهيئة ===== */
 $("i_mail").innerHTML=ic("mail"); $("i_lock").innerHTML=ic("lock"); $("eye").innerHTML=ic("eye");
 $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"password" };
@@ -882,6 +862,27 @@ $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").
 $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
 $("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"; $("t_stock").innerHTML=ic("store")+"<span>جرد المستودع</span>"; $("t_acc").innerHTML=ic("wallet")+"<span>حسابي</span>";
 if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
+
+const appRefresh=new DeliveryRefresh({
+  role:'captain',interval:20000,
+  active:()=>!!me&&!authGate.blocked&&$('app').style.display!=='none'&&$('splash').classList.contains('off'),
+  safe:()=>busy===0&&!(pushClient.native?.pending?.size)&&!$('pdg')&&$('modal').style.display!=='flex'&&!document.querySelector('.dlg')&&!(document.activeElement&&document.activeElement.matches('input,textarea,select,[contenteditable]')),
+  toast,
+  fetchData:async({signal})=>{
+    const result=await load(false,{signal});
+    if(result===false||signal.aborted||!me||authGate.blocked)return false;
+    if(!appRefresh.safe())return false;
+    const y=scrollY;render_if_idle();scrollTo({top:y,behavior:'instant'});return true;
+  },
+  captureView:()=>({owner:me?.id,tab,q,TF,SF,SQ,y:scrollY}),
+  restoreView:v=>{
+    if(v.owner!==me?.id)return;
+    if(typeof v.q==='string')q=v.q.slice(0,200);if(SBAR.some(x=>x[0]===v.TF))TF=v.TF;
+    if(['all','low','out'].includes(v.SF))SF=v.SF;if(typeof v.SQ==='string')SQ=v.SQ.slice(0,200);
+    if(['orders','stock','acc','notifs'].includes(v.tab))go(v.tab);
+    requestAnimationFrame(()=>scrollTo({top:Math.max(0,Number(v.y)||0),behavior:'instant'}));
+  }
+});
 boot();
 </script>
 </body>

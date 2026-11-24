@@ -12,7 +12,8 @@
     "test:auth": "node tests/auth-browser.cjs",
     "test:diagnostics": "node tests/diagnostics-browser.cjs",
     "test:native-host": "node tests/native-host-browser.cjs",
-    "test:admin-mobile": "node tests/admin-mobile-browser.cjs"
+    "test:admin-mobile": "node tests/admin-mobile-browser.cjs",
+    "test:refresh": "node tests/refresh-browser.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.6.0",

@@ -34,6 +34,8 @@ async function populate(page, role, screen) {
     $('login').style.display = 'none'; $('app').style.display = 'block'; hideSplash();
   }, { role, screen, orderId });
   await page.addStyleTag({ content: '*{animation:none!important;transition:none!important;caret-color:transparent!important}' });
+  // The retired off-screen pull badge cast a faint shadow above the desktop header.
+  await page.addStyleTag({ content: '#ptr{display:none!important}' });
   await page.evaluate(() => scrollTo(0, 0));
   await page.waitForTimeout(80);
 }
