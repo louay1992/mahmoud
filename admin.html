@@ -386,7 +386,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","رأس مال المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
@@ -401,7 +401,7 @@ function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
 async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
 /* ===== الإشعارات ===== */
@@ -485,22 +485,23 @@ const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.fi
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
 /* ================= المنتجات ================= */
+let PSV="list";
 function vProducts(){
-  $("main").innerHTML = `
+  if(PSV==="add"){
+    $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="PSV='list';vProducts();scrollTo({top:0})">→ رجوع للمنتجات</button>
   <div class="card"><h2>إضافة منتج</h2><p class="mut" style="margin:0 0 8px">السعر هنا هو <b>رأس مال المسوّقة</b>. أي زيادة عليه عند تسجيل الطلب تُضاف لرصيدها.</p>
     <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="رأس المال"></div>
-    <button class="b" onclick="addProduct()">إضافة</button></div>
-  <div class="card"><h2>المنتجات ورأس المال (${D.products.length})</h2><div class="tw"><table>
-   <tr><th>المنتج</th><th>رأس المال</th><th></th></tr>
-   ${D.products.map(p=>`<tr style="${p.active?"":"opacity:.45"}"><td>${esc(p.name)}</td><td>${money(p.price)}</td>
-     <td><button class="b s o" onclick="editProduct('${p.id}')">تعديل</button>
-     <button class="b s o" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"إيقاف":"تفعيل"}</button></td></tr>`).join("")}
-  </table></div></div>`;
+    <button class="b" onclick="addProduct()">إضافة</button></div>`; return }
+  $("main").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0">المنتجات (${D.products.length})</h2><button class="b s" onclick="PSV='add';vProducts();scrollTo({top:0})">＋ إضافة منتج</button></div>
+  ${D.products.length?D.products.map(p=>`<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;${p.active?"":"opacity:.5"}">
+    <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="mut" style="font-size:13px">رأس المال: <b>${money(p.price)}</b>${p.active?"":" · موقوف"}</div></div>
+    <button class="b s o" onclick="editProduct('${p.id}')">تعديل</button>
+    <button class="b s o" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"إيقاف":"تفعيل"}</button></div>`).join(""):`<div class="card mut" style="text-align:center">لا توجد منتجات بعد. اضغط "إضافة منتج".</div>`}`;
 }
 async function addProduct(){
   const name=$("pn").value.trim(), price=parseFloat($("pp").value);
   if(!name||isNaN(price)) return toast("أدخل الاسم والسعر");
-  if(await run(sb.from("products").insert({name,price}),"تمت الإضافة")) refresh();
+  if(await run(sb.from("products").insert({name,price}),"تمت الإضافة")){ PSV="list"; refresh() }
 }
 async function editProduct(id){
   const p=D.products.find(x=>x.id===id);
