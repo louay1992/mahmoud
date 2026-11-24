@@ -33,7 +33,7 @@ th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;vertica
 th{color:var(--mut);font-weight:600;font-size:13px}
 .tw{overflow-x:auto}
 .tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff;white-space:nowrap}
-.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}
+.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.no_answer{background:#ea580c}.closed{background:#475569}.other{background:#0891b2}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .stat{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;cursor:pointer}
 .neg{color:var(--red);font-weight:700}
@@ -42,6 +42,23 @@ th{color:var(--mut);font-weight:600;font-size:13px}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:9}
 .big{font-size:20px;font-weight:700}
 .items .row{align-items:center}
+#modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:90vh;overflow:auto}
+.sh-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.x{border:0;background:#f1f5f9;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.opt{display:flex;align-items:center;gap:8px;padding:12px;border:2px solid var(--bd);border-radius:12px;background:#fff;font:inherit;cursor:pointer;text-align:right}
+.opt span{font-size:20px}.opt.sel{border-color:var(--p);background:#f0fdfa;font-weight:700}
+button:disabled{opacity:.5;cursor:not-allowed}
+.grp{background:#fff;border:1px solid var(--bd);border-radius:12px;margin-bottom:12px}
+.grp>summary{padding:12px 14px;cursor:pointer;font-weight:700;display:flex;align-items:center;gap:8px;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .n{margin-inline-start:auto;background:#f1f5f9;border-radius:12px;padding:1px 10px;font-size:13px}
+.grp .inner{padding:0 10px 4px}
+.grp .card{background:#fafbfc}
+.note{margin-top:6px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:14px}
+.tl{margin-top:6px;font-size:13px;color:var(--mut)}.tl summary{cursor:pointer}
+.tl div{padding:3px 0;border-top:1px dashed var(--bd)}
 </style>
 </head>
 <body>
@@ -60,6 +77,7 @@ th{color:var(--mut);font-weight:600;font-size:13px}
   <nav id="nav"></nav>
   <main id="main"></main>
 </div>
+<div id="modal" onclick="if(event.target===this)closeStatus()"></div>
 <div id="toast"></div>
 
 <script>
@@ -73,12 +91,13 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 let CUR = "", ME = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
-const ST = {new: "جديد", assigned: "مُسند", delivered: "مُسلَّم", cancelled: "ملغي", returned: "مُرجَع"};
+const ST = {new: "جديد", assigned: "قيد التوصيل", no_answer: "لم يتم الرد", closed: "مغلق", other: "ملاحظة أخرى", delivered: "مُسلَّم", cancelled: "ملغي", returned: "مُرجَع"};
+const OPEN = ["assigned","no_answer","closed","other"];
 const MK = {invoice:"إدخال بضاعة", sale:"بيع", return:"مرتجع", adjust:"تسوية جرد", transfer_in:"نقل وارد", transfer_out:"نقل صادر"};
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
 async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
 
-let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[], movements:[], admins:[], settings:{}, stats:null};
+let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[], movements:[], admins:[], settings:{}, stats:null, ev:{}};
 let tab = "home", orderFilter = "all", orderQuery = "";
 
 async function boot(){
@@ -111,12 +130,14 @@ async function loadAll(){
     sb.from("admins").select("email").order("email"),
     sb.from("settings").select("*"),
     sb.rpc("dashboard_stats"),
+    sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(2000),
   ];
   const r = await Promise.all(q);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
   [D.products,D.captains,D.warehouses,D.stock,D.orders,D.balances,D.payments,D.invoices,D.movements,D.admins] = r.slice(0,10).map(x => x.data || []);
   D.settings = Object.fromEntries((r[10].data || []).map(x => [x.key, x.value]));
   D.stats = r[11].data || null;
+  D.ev = {}; (r[12].data || []).forEach(e => (D.ev[e.order_id] = D.ev[e.order_id] || []).push(e));
   CUR = D.settings.currency || "";
   const biz = D.settings.business_name || "إدارة كباتن التوصيل";
   $("hbiz").textContent = "📦 " + biz; document.title = biz;
@@ -278,22 +299,28 @@ function vOrders(){
     <button class="b o" style="flex:0 0 auto" onclick="refresh()">تحديث</button></div></div><div id="olist"></div>`;
   renderOrderList();
 }
-function renderOrderList(){
-  const q=orderQuery.trim().toLowerCase();
-  const list=D.orders.filter(o=>(orderFilter==="all"||o.status===orderFilter)&&(!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id)].some(v=>String(v||"").toLowerCase().includes(q))));
-  $("olist").innerHTML = list.map(o=>`<div class="card">
+function orderCard(o){
+  const evs=D.ev[o.id]||[];
+  return `<div class="card">
     <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
     <div>${o.order_items.map(i=>`${esc(i.products?.name)} × ${i.qty}`).join("، ")}</div>
     <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
-    ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}${o.captain_note?`<div class="mut">🗒️ ملاحظة الكابتن: ${esc(o.captain_note)}</div>`:""}
-    ${["new","assigned"].includes(o.status)?`<div class="row" style="margin:8px 0 0">
+    ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
+    ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}</div>`:""}
+    ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><span class="tag ${e.status}">${ST[e.status]||e.status}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
+    ${o.status==="new"||OPEN.includes(o.status)?`<div class="row" style="margin:8px 0 0">
       <select id="as_${o.id}">${capOptions(o.captain_id,"— اختر كابتن —")}</select>
       <button class="b s" style="flex:0 0 auto" onclick="assign('${o.id}')">${o.status==="new"?"إسناد":"تغيير الكابتن"}</button>
-      ${o.status==="assigned"?`<button class="b s g" style="flex:0 0 auto" onclick="deliver('${o.id}')">تم التسليم</button>`:""}
-      <button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button></div>`:""}
+      ${OPEN.includes(o.status)?`<button class="b s g" style="flex:0 0 auto" onclick="openStatus('${o.id}')">تحديث الحالة</button>`:""}
+      ${o.status==="new"?`<button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button>`:""}</div>`:""}
     ${o.status==="delivered"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="returnO('${o.id}')">إرجاع الطلب</button></div>`:""}
-  </div>`).join("")||'<p class="mut">لا توجد طلبات</p>';
+  </div>`;
+}
+function renderOrderList(){
+  const q=orderQuery.trim().toLowerCase();
+  const list=D.orders.filter(o=>(orderFilter==="all"||o.status===orderFilter)&&(!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id)].some(v=>String(v||"").toLowerCase().includes(q))));
+  $("olist").innerHTML = list.map(orderCard).join("")||'<p class="mut">لا توجد طلبات</p>';
 }
 async function returnO(id){
   if(!confirm("إرجاع هذا الطلب؟ ستُلغى قيمته من رصيد الكابتن.")) return;
@@ -361,17 +388,48 @@ function statement(cid){
 }
 
 /* ================= الرئيسية ================= */
+const GROUPS=[["new","📥","طلبات بلا كابتن",true],["assigned","🚚","قيد التوصيل",true],["no_answer","📵","لم يتم الرد",true],["closed","🔒","مغلق",true],["other","📝","ملاحظة أخرى",true],["delivered","✅","مُسلَّمة",false],["cancelled","❌","ملغية",false],["returned","↩️","مرتجعة",false]];
 function vHome(){
-  const s=D.stats||{}, low=s.low_stock||[];
+  const s=D.stats||{}, low=s.low_stock||[], bs=s.by_status||{};
+  const cnt=k=>bs[k]??D.orders.filter(o=>o.status===k).length;
   $("main").innerHTML = `<div class="stats">
-    <div class="stat" onclick="orderFilter='new';go('orders')"><div class="mut">طلبات بلا كابتن</div><div class="big">${s.new_orders??0}</div></div>
-    <div class="stat" onclick="orderFilter='assigned';go('orders')"><div class="mut">قيد التوصيل</div><div class="big">${s.in_delivery??0}</div></div>
     <div class="stat"><div class="mut">سُلِّم اليوم</div><div class="big">${s.delivered_today??0}</div><div class="mut">مبيعات: ${money(s.sales_today)}</div></div>
-    <div class="stat" onclick="go('accounts')"><div class="mut">مستحق على الكباتن</div><div class="big">${money(s.owed_total)}</div></div></div>
+    <div class="stat" onclick="go('accounts')"><div class="mut">مستحق على الكباتن</div><div class="big">${money(s.owed_total)}</div></div>
+    <div class="stat" onclick="go('new')"><div class="mut">＋ طلب جديد</div><div class="big">&nbsp;</div></div></div>
+  ${GROUPS.map(([k,ic,l,open])=>{const list=D.orders.filter(o=>o.status===k);const n=cnt(k);
+    if(!n&&!list.length&&open===false) return "";
+    return `<details class="grp" ${open&&list.length?"open":""}><summary><span>${ic}</span>${l}<span class="n">${n}</span></summary>
+      <div class="inner">${list.length?list.slice(0,open?100:30).map(orderCard).join(""):'<p class="mut" style="padding:0 6px">لا توجد طلبات</p>'}${!open&&list.length>30?'<p class="mut" style="padding:0 6px">يُعرض آخر 30 فقط، والباقي في تبويب الطلبات.</p>':""}</div></details>`}).join("")}
   <div class="card"><h2>⚠️ مخزون منخفض (${D.settings.low_stock||3} أو أقل)</h2>
     ${low.length?`<table><tr><th>المستودع</th><th>المنتج</th><th>الكمية</th></tr>${low.map(x=>`<tr><td>${esc(x.warehouse)}</td><td>${esc(x.product)}</td><td class="${x.qty<=0?"neg":""}">${x.qty}</td></tr>`).join("")}</table>`:'<p class="mut">لا يوجد</p>'}</div>
   <div class="card"><h2>المتبقي على كل كابتن</h2><table><tr><th>الكابتن</th><th>المتبقي</th></tr>
     ${D.balances.map(b=>`<tr><td>${esc(b.name)}</td><td>${money(b.balance)}</td></tr>`).join("")}</table></div>`;
+}
+
+/* ================= نافذة تحديث حالة الطلب ================= */
+const SOPTS=[{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
+let SM=null;
+function openStatus(id){ const o=D.orders.find(x=>x.id===id); SM={id,k:SOPTS.some(x=>x.k===o.status)?o.status:null,note:o.captain_note||""}; drawStatus() }
+function closeStatus(){ SM=null; $("modal").style.display="none"; $("modal").innerHTML="" }
+function pickStatus(k){ SM.note=$("sm_note").value; SM.k=k; drawStatus() }
+function drawStatus(){
+  const o=D.orders.find(x=>x.id===SM.id);
+  const ph=SM.k==="other"?"اكتب الملاحظة (مطلوبة)":SM.k==="cancelled"?"سبب الإلغاء (اختياري)":"ملاحظة (اختياري)";
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>#${o.order_no} — ${esc(o.customer_name)}</b><button class="x" onclick="closeStatus()">✕</button></div>
+    <div class="opts">${SOPTS.map(x=>`<button class="opt ${SM.k===x.k?"sel":""}" onclick="pickStatus('${x.k}')"><span>${x.i}</span>${x.l}</button>`).join("")}</div>
+    <textarea id="sm_note" rows="3" placeholder="${ph}">${esc(SM.note)}</textarea>
+    <button class="b" style="width:100%" onclick="submitStatus()" ${SM.k?"":"disabled"}>حفظ</button></div>`;
+  $("modal").style.display="flex";
+}
+async function submitStatus(){
+  const note=$("sm_note").value.trim(), k=SM.k, id=SM.id;
+  if(k==="other"&&!note) return toast("اكتب الملاحظة");
+  if(k==="cancelled"&&!confirm("إلغاء الطلب؟")) return;
+  if(k==="delivered"&&!confirm("تأكيد التسليم؟ سيُخصم الجرد وتُسجَّل القيمة على الكابتن.")) return;
+  const call = k==="delivered" ? sb.rpc("deliver_order",{p_order:id,p_note:note||null})
+             : k==="cancelled" ? sb.rpc("cancel_order",{p_order:id,p_note:note||null})
+             : sb.rpc("set_order_status",{p_order:id,p_status:k,p_note:note||null});
+  if(await run(call,"تم الحفظ")){ closeStatus(); refresh() }
 }
 
 /* ================= الإعدادات ================= */

@@ -30,12 +30,23 @@ table{width:100%;border-collapse:collapse}
 th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right}
 th{color:var(--mut);font-size:13px}
 .tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff}
-.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.new{background:#64748b}
+.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.returned{background:#7c3aed}.no_answer{background:#ea580c}.closed{background:#475569}.other{background:#0891b2}.new{background:#64748b}
 .mut{color:var(--mut);font-size:14px}.neg{color:var(--red);font-weight:700}
 .big{font-size:30px;font-weight:700}
 a.call{color:var(--p);text-decoration:none;font-weight:600}
 #login{max-width:340px;margin:12vh auto;padding:0 14px}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:9}
+#modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-end;justify-content:center;z-index:20}
+.sheet{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:16px;max-height:90vh;overflow:auto}
+.sh-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.x{border:0;background:#f1f5f9;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.opt{display:flex;align-items:center;gap:8px;padding:14px 12px;border:2px solid var(--bd);border-radius:12px;background:#fff;font:inherit;cursor:pointer;text-align:right}
+.opt span{font-size:22px}.opt.sel{border-color:var(--p);background:#eff6ff;font-weight:700}
+button:disabled{opacity:.5;cursor:not-allowed}
+.note{margin-top:6px;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:14px}
+.tl{margin-top:6px;font-size:13px;color:var(--mut)}.tl summary{cursor:pointer}
+.tl div{padding:3px 0;border-top:1px dashed var(--bd)}
 </style>
 </head>
 <body>
@@ -48,6 +59,7 @@ a.call{color:var(--p);text-decoration:none;font-weight:600}
   <nav><button id="t_orders" onclick="go('orders')">طلباتي</button><button id="t_stock" onclick="go('stock')">جردي</button><button id="t_acc" onclick="go('acc')">حسابي</button></nav>
   <main id="main"></main>
 </div>
+<div id="modal" onclick="if(event.target===this)closeStatus()"></div>
 <div id="toast"></div>
 <script>
 // ====== نفس بيانات مشروع Supabase المستخدمة في التطبيق الإداري ======
@@ -60,11 +72,12 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 let CUR = "", BIZ = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
 const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
-const ST = {new:"جديد", assigned:"قيد التوصيل", delivered:"مُسلَّم", cancelled:"ملغي", returned:"مُرجَع"};
+const ST = {new:"جديد", assigned:"قيد التوصيل", no_answer:"لم يتم الرد", closed:"مغلق", other:"ملاحظة أخرى", delivered:"مُسلَّم", cancelled:"ملغي", returned:"مُرجَع"};
+const OPEN = ["assigned","no_answer","closed","other"];
 function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
 async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
 
-let me=null, D={orders:[],stock:[],payments:[],balance:null}, tab="orders", filter="assigned";
+let me=null, D={orders:[],stock:[],payments:[],balance:null,ev:{}}, tab="orders", filter="open";
 
 async function boot(){
   const {data:{session}} = await sb.auth.getSession();
@@ -88,44 +101,64 @@ async function load(){
     sb.from("captain_payments").select("*").order("created_at",{ascending:false}),
     sb.from("captain_balances").select("*").limit(1),
     sb.from("settings").select("*"),
+    sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(1000),
   ]);
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
   D.orders=r[0].data||[]; D.stock=(r[1].data||[]).sort((a,b)=>(a.products?.name||"").localeCompare(b.products?.name||"","ar"));
   D.payments=r[2].data||[]; D.balance=(r[3].data||[])[0]||null;
   const st=Object.fromEntries((r[4].data||[]).map(x=>[x.key,x.value])); CUR=st.currency||""; BIZ=st.business_name||"";
   $("hname").textContent="🚚 "+me.name+(BIZ?" — "+BIZ:"");
-  const n=D.orders.filter(o=>o.status==="assigned").length; $("t_orders").textContent="طلباتي"+(n?" ("+n+")":"");
+  D.ev={}; (r[5].data||[]).forEach(e=>(D.ev[e.order_id]=D.ev[e.order_id]||[]).push(e));
+  const n=D.orders.filter(o=>OPEN.includes(o.status)).length; $("t_orders").textContent="طلباتي"+(n?" ("+n+")":"");
 }
 function go(t){ tab=t; ["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t)); render() }
 async function refresh(){ await load(); render() }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
 
 function vOrders(){
-  const f=[["assigned","قيد التوصيل"],["delivered","مُسلَّمة"],["cancelled","ملغية"],["all","الكل"]];
-  const list=D.orders.filter(o=>filter==="all"||o.status===filter);
+  const f=[["open","قيد التوصيل"],["delivered","مُسلَّمة"],["cancelled","ملغية"],["all","الكل"]];
+  const list=D.orders.filter(o=>filter==="all"||(filter==="open"?OPEN.includes(o.status):o.status===filter));
   $("main").innerHTML = `<div style="display:flex;gap:6px;margin-bottom:10px">
     <select style="margin:0" onchange="filter=this.value;vOrders()">${f.map(([k,l])=>`<option value="${k}" ${filter===k?"selected":""}>${l}</option>`).join("")}</select>
     <button class="b o" onclick="refresh()">تحديث</button></div>
-  ${list.map(o=>`<div class="card">
-    <div style="display:flex;justify-content:space-between"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
+  ${list.map(o=>{const evs=D.ev[o.id]||[];return `<div class="card">
+    <div style="display:flex;justify-content:space-between"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]||o.status}</span></div>
     <div style="margin:6px 0"><a class="call" href="tel:${esc(o.customer_phone)}" dir="ltr">📞 ${esc(o.customer_phone)}</a></div>
     <div>${o.order_items.map(i=>`${esc(i.products?.name)} × ${i.qty}`).join("، ")}</div>
     <div style="margin-top:6px">المطلوب من الزبون: <b>${money(o.total)}</b> <span class="mut">(منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)})</span></div>
     ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
-    ${o.captain_note?`<div class="mut">🗒️ ملاحظتي: ${esc(o.captain_note)}</div>`:""}
-    ${o.status==="assigned"?`<div class="acts">
-      <button class="b g" onclick="deliver('${o.id}')">تم التسليم</button>
-      <button class="b o" onclick="note('${o.id}')">ملاحظة</button>
-      <button class="b r" onclick="cancelO('${o.id}')">إلغاء</button></div>`:""}
+    ${o.captain_note?`<div class="note">🗒️ ${esc(o.captain_note)}</div>`:""}
+    ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><span class="tag ${e.status}">${ST[e.status]||e.status}</span> ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
+    ${OPEN.includes(o.status)?`<div class="acts"><button class="b" onclick="openStatus('${o.id}')">تحديث حالة الطلب</button></div>`:""}
     ${o.status==="delivered"?`<div class="mut">سُلِّم ${dt(o.delivered_at)}</div>`:""}
-  </div>`).join("")||'<p class="mut">لا توجد طلبات</p>'}`;
+  </div>`}).join("")||'<p class="mut">لا توجد طلبات</p>'}`;
 }
-async function deliver(id){ if(!confirm("تأكيد تسليم الطلب للزبون؟")) return;
-  if(await run(sb.rpc("deliver_order",{p_order:id}),"تم التسليم")) refresh() }
-async function note(id){ const o=D.orders.find(x=>x.id===id); const n=prompt("ملاحظة على الطلب",o.captain_note||""); if(n===null) return;
-  if(await run(sb.rpc("set_captain_note",{p_order:id,p_note:n}),"تم الحفظ")) refresh() }
-async function cancelO(id){ const n=prompt("سبب الإلغاء"); if(n===null) return;
-  if(await run(sb.rpc("cancel_order",{p_order:id,p_note:n||null}),"تم الإلغاء")) refresh() }
+
+/* ===== نافذة تحديث الحالة ===== */
+const SOPTS=[{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
+let SM=null;
+function openStatus(id){ const o=D.orders.find(x=>x.id===id); SM={id,k:SOPTS.some(x=>x.k===o.status)?o.status:null,note:o.captain_note||""}; drawStatus() }
+function closeStatus(){ SM=null; $("modal").style.display="none"; $("modal").innerHTML="" }
+function pickStatus(k){ SM.note=$("sm_note").value; SM.k=k; drawStatus() }
+function drawStatus(){
+  const o=D.orders.find(x=>x.id===SM.id);
+  const ph=SM.k==="other"?"اكتب الملاحظة (مطلوبة)":SM.k==="cancelled"?"سبب الإلغاء (اختياري)":"ملاحظة (اختياري)";
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>#${o.order_no} — ${esc(o.customer_name)}</b><button class="x" onclick="closeStatus()">✕</button></div>
+    <div class="opts">${SOPTS.map(x=>`<button class="opt ${SM.k===x.k?"sel":""}" onclick="pickStatus('${x.k}')"><span>${x.i}</span>${x.l}</button>`).join("")}</div>
+    <textarea id="sm_note" rows="3" placeholder="${ph}">${esc(SM.note)}</textarea>
+    <button class="b" style="width:100%" onclick="submitStatus()" ${SM.k?"":"disabled"}>حفظ</button></div>`;
+  $("modal").style.display="flex";
+}
+async function submitStatus(){
+  const note=$("sm_note").value.trim(), k=SM.k, id=SM.id;
+  if(k==="other"&&!note) return toast("اكتب الملاحظة");
+  if(k==="cancelled"&&!confirm("إلغاء الطلب؟")) return;
+  if(k==="delivered"&&!confirm("تأكيد تسليم الطلب للزبون؟")) return;
+  const call = k==="delivered" ? sb.rpc("deliver_order",{p_order:id,p_note:note||null})
+             : k==="cancelled" ? sb.rpc("cancel_order",{p_order:id,p_note:note||null})
+             : sb.rpc("set_order_status",{p_order:id,p_status:k,p_note:note||null});
+  if(await run(call,"تم الحفظ")){ closeStatus(); refresh() }
+}
 
 function vStock(){
   $("main").innerHTML = `<div class="card"><h2>الجرد الموجود معي</h2>
@@ -137,7 +170,7 @@ function vAcc(){
    <div class="mut">طلبات مُسلَّمة: ${b.delivered_count||0} · قيمة المنتجات ${money(b.delivered_total)} · سلّمتُه: ${money(b.paid_total)}<br>أجور التوصيل التي لي: ${money(b.fees_total)}</div></div>
    <div class="card"><h2>الدفعات التي سلّمتُها</h2>${D.payments.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th></tr>${D.payments.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td></tr>`).join("")}</table>`:'<p class="mut">لا توجد دفعات</p>'}</div>`;
 }
-setInterval(()=>{ if(me && !document.hidden && tab==="orders") refresh() }, 30000);
+setInterval(()=>{ if(me && !document.hidden && tab==="orders" && !SM) refresh() }, 30000);
 if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
 boot();
 </script>
