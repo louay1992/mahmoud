@@ -59,6 +59,7 @@ const sdk=`window.fixtureApi={counts:{},fail:false,hold:false};window.supabase={
    await page.evaluate(()=>{const draft=document.createElement('textarea');draft.id='refresh-draft';document.querySelector('#main').appendChild(draft)});
    await page.locator('#refresh-draft').fill('ملاحظة غير محفوظة');await page.locator('#refresh-draft').blur();versions[role]='b'.repeat(64);
    await page.evaluate(()=>checkUpdate());assert.equal(await page.locator('meta[name="delivery-build"]').getAttribute('content'),'a'.repeat(64));assert.equal(await page.locator('#refresh-draft').inputValue(),'ملاحظة غير محفوظة');
+   assert.equal(await page.locator('#upd').isVisible(),false,'a deferred update must not cover the form or its save action');
    before=await page.evaluate(()=>fixtureApi.counts.orders);await page.evaluate(()=>appRefresh.refresh());assert.equal(await page.evaluate(()=>fixtureApi.counts.orders),before);
    await page.evaluate(async role=>{
     document.querySelector('#refresh-draft').remove();

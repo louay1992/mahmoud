@@ -62,9 +62,11 @@ class DeliveryRefresh {
     })();return this.versionFlight;
   }
   updateNotice(){
-    const box=document.getElementById('upd');if(!box)return;box.style.display='block';
-    box.innerHTML='<div class="delivery-update-note" role="status"><span>تحديث جديد جاهز؛ سيُطبّق تلقائيًا بعد الانتهاء من العمل الحالي.</span><button type="button" id="delivery-update-now">تحديث الآن</button></div>';
-    box.querySelector('button').onclick=()=>this.applyUpdate(true);
+    const box=document.getElementById('upd');if(!box)return;box.style.display=this.safe()?'block':'none';
+    if(!box.querySelector('#delivery-update-now')){
+      box.innerHTML='<div class="delivery-update-note" role="status"><span>تحديث جديد جاهز؛ سيُطبّق تلقائيًا بعد الانتهاء من العمل الحالي.</span><button type="button" id="delivery-update-now">تحديث الآن</button></div>';
+      box.querySelector('button').onclick=()=>this.applyUpdate(true);
+    }
   }
   async applyUpdate(manual=false){
     if(!this.pendingVersion||this.applying)return;
@@ -93,7 +95,7 @@ class DeliveryRefresh {
   tick(){
     if(!this.active())return;
     if(this.pending&&this.safe())void this.refresh({reason:'idle'});
-    if(this.pendingVersion)void this.applyUpdate(false);
+    if(this.pendingVersion){const box=document.getElementById('upd');if(box)box.style.display=this.safe()?'block':'none';void this.applyUpdate(false);}
   }
   resume(){if(this.active()){void this.refresh({reason:'resume'});void this.checkUpdate();}}
   paint(state){
