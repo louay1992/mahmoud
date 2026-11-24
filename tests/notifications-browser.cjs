@@ -26,7 +26,8 @@ const { chromium } = require('playwright');
   const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'delivery-notifications-'));
   try {
     // Use a regular profile for persistent notifications, rather than an incognito context.
-    context = await chromium.launchPersistentContext(profile, { headless: true,
+    // Chrome Headless Shell has no platform notification service. Use full Chromium.
+    context = await chromium.launchPersistentContext(profile, { headless: true, channel: 'chromium',
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: ['--no-sandbox'],
       viewport: { width: 390, height: 844 } });
     await context.grantPermissions(['notifications']);
@@ -46,6 +47,7 @@ const { chromium } = require('playwright');
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(origin + '/' + role);
       await page.evaluate(() => pushClient.registration());
+      console.log(role + ' initial native permission:', await page.evaluate(() => Notification.permission));
       assert.deepEqual(errors, [], role + ' page must load without script errors');
       assert.equal(await page.evaluate(() => pushClient.registration().then(r => new URL(r.scope).pathname)), '/' + role);
 
