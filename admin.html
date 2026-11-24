@@ -342,7 +342,7 @@ let toastT;
 function toast(m, kind){ const t=$("toast"); if(!kind&&/^(خطأ|فشل|غير|اكتب|أدخل|اختر|سعر غير|كمية غير|مبلغ غير|كلمة المرور قصيرة|لم تغيّر|أضف)/.test(m)) kind="err";
   t.className=kind||""; t.innerHTML=(kind==="err"?ic("xc"):kind==="ok"?ic("checkc"):kind==="bell"?ic("bell"):"")+`<span>${esc(m)}</span>`; requestAnimationFrame(()=>t.classList.add("on")); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),3400) }
 let busy=0, lastSelf=0;
-async function timedRead(query,ms=15000){const controller=new AbortController();let timer;try{if(query?.abortSignal)query=query.abortSignal(controller.signal);return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('انتهت مهلة قراءة البيانات'));},ms);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
+async function timedRead(query,ms=15000,signal){const controller=new AbortController();let timer;try{if(query?.abortSignal)query=query.abortSignal(signal&&AbortSignal.any?AbortSignal.any([signal,controller.signal]):controller.signal);return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('انتهت مهلة قراءة البيانات'));},ms);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
 async function run(p, ok){ busy++; $("bar").classList.add("on"); lastSelf=Date.now();
   try{ const {error}=await p; if(error){toast("خطأ: "+error.message,"err");return false} if(ok)toast(ok,"ok"); return true }
   catch(e){toast("تعذّر تأكيد العملية. تحقق من الاتصال والبيانات قبل إعادة المحاولة.","err");return false}
@@ -1379,15 +1379,17 @@ function setPre(k){ const n=new Date(), t=new Date(n.getFullYear(),n.getMonth(),
   else if(k==="lmonth"){ PF.from=iso(new Date(n.getFullYear(),n.getMonth()-1,1)); PF.to=iso(new Date(n.getFullYear(),n.getMonth(),0)) }
   else if(k==="year") PF.from=iso(new Date(n.getFullYear(),0,1)); else { PF.from=""; PF.to="" }
   drawProfit() }
-async function vProfit(){
+async function vProfit({quiet=false,signal}={}){
+  quiet=quiet&&!!$("pbody");
   if(!PF.from&&PF.preset==="30") setPre("30");
-  $("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">الربحية</h2><div id="pfbar"></div></div><div id="pbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
-  globalThis.AdminWorkspace?.prepare('الربحية','pbody');
+  if(!quiet)$("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">الربحية</h2><div id="pfbar"></div></div><div id="pbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
+  if(!quiet)globalThis.AdminWorkspace?.prepare('الربحية','pbody');
   const my=++PLOAD,who=ME;
-  const {data,error}=await timedRead(sb.rpc("admin_profit_items"));
-  if(my!==PLOAD||who!==ME||tab!=="profit"||authGate.blocked||!ME) return;
-  if(error){ if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('الربحية','profit'); $("pbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
-  PDATA=data.map(r=>({...r,qty:Number(r.qty),unit_price:Number(r.unit_price),capital:Number(r.capital),cost:Number(r.cost),delivery_fee:Number(r.delivery_fee)})); drawProfit();
+  const {data,error}=await timedRead(sb.rpc("admin_profit_items"),15000,signal);
+  if(signal?.aborted||my!==PLOAD||who!==ME||tab!=="profit"||authGate.blocked||!ME) return false;
+  if(quiet&&!appRefresh.safe())return false;
+  if(error){ if(quiet)throw error; if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('الربحية','profit'); $("pbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
+  PDATA=data.map(r=>({...r,qty:Number(r.qty),unit_price:Number(r.unit_price),capital:Number(r.capital),cost:Number(r.cost),delivery_fee:Number(r.delivery_fee)})); const y=scrollY;drawProfit();if(quiet)scrollTo({top:y,behavior:"instant"});return true;
 }
 function pfBar(){
   const opt=(arr,sel,empty)=>`<option value="">${empty}</option>`+arr.map(([v,l])=>`<option value="${esc(v)}" ${sel===v?"selected":""}>${esc(l)}</option>`).join("");
@@ -1467,18 +1469,20 @@ const SPER=[["today","اليوم"],["7","7 أيام"],["30","30 يوماً"],["m
 const WD=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
 const pct=(a,b)=>b?Math.round(a/b*100):0;
 const dayK=d=>{const x=new Date(d);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
-async function vStats(){
-  $("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">إحصائيات عامة</h2><div class="chips" id="spc"></div><div class="mut" id="sinfo" style="font-size:12px"></div></div><div id="sbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
-  globalThis.AdminWorkspace?.prepare('إحصائيات عامة','sbody');
+async function vStats({quiet=false,signal}={}){
+  quiet=quiet&&!!$("sbody");
+  if(!quiet)$("main").innerHTML=`<div class="card"><h2 style="margin:0 0 8px">إحصائيات عامة</h2><div class="chips" id="spc"></div><div class="mut" id="sinfo" style="font-size:12px"></div></div><div id="sbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
+  if(!quiet)globalThis.AdminWorkspace?.prepare('إحصائيات عامة','sbody');
   const my=++SLOAD,who=ME;
   const [o,p,st]=await Promise.all([
     sb.from("orders").select("id,order_no,status,created_at,delivered_at,total,items_total,list_total,delivery_fee,governorate,marketer_id,captain_id,customer_name,customer_phone,order_items(qty,unit_price,list_price,products(name))").order("created_at",{ascending:false}).limit(5000),
     sb.from("order_profits").select("order_id,marketer_id,capital,profit").limit(5000),
-    sb.from("stock").select("qty,warehouse_id,product_id,products(name)")].map(q=>timedRead(q)));
-  if(my!==SLOAD||who!==ME||tab!=="stats"||authGate.blocked||!ME) return;
-  if(o.error){if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('إحصائيات عامة','stats'); $("sbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
+    sb.from("stock").select("qty,warehouse_id,product_id,products(name)")].map(q=>timedRead(q,15000,signal)));
+  if(signal?.aborted||my!==SLOAD||who!==ME||tab!=="stats"||authGate.blocked||!ME) return false;
+  if(quiet&&!appRefresh.safe())return false;
+  if(o.error){if(quiet)throw o.error;if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('إحصائيات عامة','stats'); $("sbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
   const pf={}; (p.data||[]).forEach(x=>pf[x.order_id]=x);
-  SDATA={orders:o.data,pf,stock:st.data||[],pfAvailable:!p.error,stockAvailable:!st.error}; drawStats();
+  SDATA={orders:o.data,pf,stock:st.data||[],pfAvailable:!p.error,stockAvailable:!st.error};const y=scrollY; drawStats();if(quiet)scrollTo({top:y,behavior:"instant"});return true;
 }
 function drawStats(){
   if(globalThis.AdminWorkspace?.full()&&SDATA&&$('sbody'))return AdminWorkspace.stats();
@@ -1553,18 +1557,20 @@ function drawStats(){
 const normPh=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/[۰-۹]/g,c=>"۰۱۲۳۴۵۶۷۸۹".indexOf(c)).replace(/\D/g,"");
   if(!d) return ""; if(d.startsWith("00963")) return "0"+d.slice(5); if(d.startsWith("963")) return "0"+d.slice(3); if(d.length===9&&d[0]==="9") return "0"+d; return d };
 let CUS={rows:null,q:""}, CLOAD=0;
-async function vCustomers(){
-  $("main").innerHTML=`<div class="card"><h2>العملاء</h2><input id="cq" placeholder="بحث: الاسم أو رقم الموبايل أو المسوّقة" value="${esc(CUS.q)}" oninput="CUS.q=this.value;drawCustomers()"><div id="csum" class="mut" style="margin:8px 0"></div></div><div id="clist"><p class="mut" style="text-align:center">جارٍ التحميل…</p></div>`;
+async function vCustomers({quiet=false,signal}={}){
+  quiet=quiet&&!!$("clist");
+  if(!quiet)$("main").innerHTML=`<div class="card"><h2>العملاء</h2><input id="cq" placeholder="بحث: الاسم أو رقم الموبايل أو المسوّقة" value="${esc(CUS.q)}" oninput="CUS.q=this.value;drawCustomers()"><div id="csum" class="mut" style="margin:8px 0"></div></div><div id="clist"><p class="mut" style="text-align:center">جارٍ التحميل…</p></div>`;
   const my=++CLOAD,who=ME;
-  const {data,error}=await timedRead(sb.from("orders").select("id,order_no,customer_name,customer_phone,marketer_id,status,total,created_at,governorate,order_items(qty,products(name))").order("created_at",{ascending:false}).limit(5000));
-  if(my!==CLOAD||who!==ME||tab!=="customers"||authGate.blocked||!ME) return;
-  if(error){ if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('العملاء','customers'); $("clist").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
+  const {data,error}=await timedRead(sb.from("orders").select("id,order_no,customer_name,customer_phone,marketer_id,status,total,created_at,governorate,order_items(qty,products(name))").order("created_at",{ascending:false}).limit(5000),15000,signal);
+  if(signal?.aborted||my!==CLOAD||who!==ME||tab!=="customers"||authGate.blocked||!ME) return false;
+  if(quiet&&!appRefresh.safe())return false;
+  if(error){ if(quiet)throw error; if(globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError('العملاء','customers'); $("clist").innerHTML=`<div class="card" style="color:#b91c1c">${esc(error.message)}</div>`; return }
   const g={};
   data.forEach(o=>{ const k=normPh(o.customer_phone); if(!k) return; (g[k]=g[k]||{phone:k,name:o.customer_name,orders:[]}).orders.push(o) });
   CUS.rows=Object.values(g).map(c=>{ const mk={}; c.orders.forEach(o=>{ const id=o.marketer_id||"-"; mk[id]=(mk[id]||0)+1 });
     return {...c,mk,last:c.orders[0].created_at,done:c.orders.filter(o=>o.status==="delivered"),open:c.orders.filter(o=>!["delivered","cancelled","returned"].includes(o.status)).length} })
     .sort((a,b)=>new Date(b.last)-new Date(a.last));
-  drawCustomers();
+  const y=scrollY;drawCustomers();if(quiet)scrollTo({top:y,behavior:"instant"});return true;
 }
 function drawCustomers(){
   if(globalThis.AdminWorkspace?.full()&&CUS.rows&&$('clist'))return AdminWorkspace.customers();
@@ -2038,6 +2044,7 @@ $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").
 $("hav").innerHTML=ic("box"); $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
 if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
 
+let lastReportRefresh=0;
 const appRefresh=new DeliveryRefresh({
   role:'admin',interval:25000,
   active:()=>!!ME&&!authGate.blocked&&$('app').style.display!=='none'&&$('splash').classList.contains('off'),
@@ -2050,10 +2057,12 @@ const appRefresh=new DeliveryRefresh({
     if(tab!==screen)return false;
     renderNav();
     if(tab==='ship'||tab==='carriers'){const result=await vShip(tab,{quiet:true,signal});return result!==false;}
+    if(globalThis.AdminWorkspace?.full()&&['profit','stats','customers'].includes(tab)){if(force||appRefresh.foreground||Date.now()-lastReportRefresh>60000){const result=await ({profit:vProfit,stats:vStats,customers:vCustomers})[tab]({quiet:true,signal});if(result!==false)lastReportRefresh=Date.now();return result!==false;}return true;}
     const y=scrollY,anchor=globalThis.AdminWorkspace?.captureAnchor();
     if(force||appRefresh.foreground||['home','orders','captains','marketers','products','notifs'].includes(tab)||(tab==='stock'&&['list','wh'].includes(SV.v))){
       await render();if(force&&OD&&$('modal').style.display==='flex')openOrder(OD);
     }
+    if(globalThis.AdminWorkspace?.full()&&tab==='stock'&&SV.v==='wh'&&(force||appRefresh.foreground)){const result=await AdminWorkspace.refreshWarehouse();if(tab!==screen||signal.aborted||authGate.blocked||!ME)return false;if(result===false)throw new Error('تعذّر تحديث سجلات المستودع');}
     if(globalThis.AdminWorkspace?.full())AdminWorkspace.restoreAnchor(anchor,y);else scrollTo({top:y,behavior:'instant'});return true;
   },
   captureView:()=>({owner:ME,tab,orderFilter,orderQuery,orderCap,orderMk,orderPer,orderGrp,shipping:{...SHF},home:{...HF},phone:globalThis.AdminMobile?.viewState(),workspace:globalThis.AdminWorkspace?.viewState(),y:scrollY}),

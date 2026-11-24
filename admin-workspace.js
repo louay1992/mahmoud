@@ -74,25 +74,27 @@
     if(isInv&&f.source)q=q.eq('deducted_from_main',f.source==='main');
     const offset=reset?0:f.rows.length;return q.range(offset,offset+30);
   }
-  async function loadWarehouse(reset=true){
-    const f=state.wh;if(f.loading&&!reset)return;const seq=++f.seq,owner=ME,id=f.id,section=f.tab;f.loading=true;f.error='';if(reset)f.rows=[];drawWarehouseRecords();
+  async function loadWarehouse(reset=true,keep=false){
+    const f=state.wh;if(f.loading&&!reset)return;const seq=++f.seq,owner=ME,id=f.id,section=f.tab;f.loading=true;f.error='';if(reset&&!keep)f.rows=[];drawWarehouseRecords();
     const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),12000);
     try{let query=recordQuery(reset);if(query.abortSignal)query=query.abortSignal(abort.signal);const r=await query;if(r.error)throw r.error;
-      if(seq!==f.seq||ME!==owner||authGate.blocked||f.id!==id||f.tab!==section)return;
-      const rows=r.data||[];f.more=rows.length>30;f.rows=reset?rows.slice(0,30):[...f.rows,...rows.slice(0,30)];
-    }catch(e){if(seq===f.seq&&ME===owner)f.error='تعذّر تحميل السجلات. تحقق من الاتصال ثم حاول مجددًا.';}
+      if(seq!==f.seq||ME!==owner||authGate.blocked||f.id!==id||f.tab!==section)return false;
+      const rows=r.data||[];f.more=rows.length>30;f.rows=reset?rows.slice(0,30):[...f.rows,...rows.slice(0,30)];return true;
+    }catch(e){if(seq===f.seq&&ME===owner)f.error='تعذّر تحميل السجلات. تحقق من الاتصال ثم حاول مجددًا.';return false;}
     finally{clearTimeout(timer);if(seq===f.seq){f.loading=false;if(tab==='stock'&&SV.v==='wh'&&f.id===id&&f.tab===section&&ME===owner&&!authGate.blocked)drawWarehouseRecords();}}
   }
+  async function refreshWarehouse(){if(state.wh.tab==='stock')return true;return loadWarehouse(true,true);}
   function drawWarehouseRecords(){
     if(!$('aw-wh-body'))return;const f=state.wh,isInv=f.tab==='invoices';
     const tags=[f.from&&'من '+f.from,f.to&&'إلى '+f.to,f.kind&&MK[f.kind],f.product&&pname(f.product),f.recordQ&&'بحث: '+f.recordQ,f.source&&(f.source==='main'?'من الرئيسي':'إدخال مباشر')].filter(Boolean);
     let body=`<div class="aw-tools" style="margin-bottom:14px">${search('aw-record-q','بحث بالملاحظة أو المرجع الكامل',f.recordQ)}${btn(icon('search'),'warehouse-search','','aw-icon-btn','aria-label="بحث السجلات"')}</div><div class="aw-count" style="margin-bottom:12px"><span>${f.rows.length} ${isInv?'فاتورة':'حركة'} محمّلة</span>${link('فلترة السجلات','warehouse-filters')}</div>${tags.length?`<div class="aw-applied" style="margin-bottom:14px">${tags.map(t=>'<span>'+esc(t)+'</span>').join('')}${link('مسح','warehouse-reset')}</div>`:''}`;
+    if(f.error&&f.rows.length)body+=`<div class="aw-note error" role="alert">تعذّر التحديث؛ المعروض من القراءة السابقة.${btn('إعادة المحاولة','warehouse-retry','','secondary')}</div>`;
     if(isInv)body+=`<div class="aw-list">${f.rows.map(i=>`<article class="aw-record"><div class="aw-record-header"><div class="aw-avatar">${icon('box')}</div><div class="aw-record-info"><h3>فاتورة إدخال بضاعة</h3><p>${esc(dt(i.created_at))}</p></div><span class="aw-status muted">إدخال</span></div><p class="aw-sub">${esc(i.note||'دون ملاحظة')}</p><div class="aw-count" style="margin-top:12px"><span>${(i.stock_invoice_items||[]).length} بند · ${i.deducted_from_main?'من الرئيسي':'إدخال مباشر'}</span>${link('التفاصيل','invoice-detail',i.id)}</div></article>`).join('')}</div>`;
     else body+=`<div class="aw-timeline">${f.rows.map(m=>{const out=Number(m.qty)<0;return `<article class="aw-move ${out?'out':''}"><div class="aw-move-icon">${icon(out?'undo':'plus')}</div><div class="aw-move-title"><div><h3>${esc(MK[m.kind]||m.kind)} · ${esc(m.products?.name||pname(m.product_id))}</h3><time>${esc(dt(m.created_at))}</time></div><strong>${out?'': '+'}${Number(m.qty)} قطعة</strong></div>${m.note?'<p>'+esc(m.note)+'</p>':''}${m.created_by?'<p>المنفّذ: <bdi dir="ltr">'+esc(m.created_by)+'</bdi></p>':''}${m.order_id?`<button class="aw-move-reference" data-aw="open-order" data-value="${esc(m.order_id)}">فتح الطلب المرتبط ←</button>`:''}</article>`;}).join('')}</div>`;
     if(f.loading)body+=loading('جارٍ تحميل '+(isInv?'الفواتير':'الحركات')+'…');
-    else if(f.error)body+=empty('لم تكتمل القراءة',f.error,btn('إعادة المحاولة','warehouse-retry','','secondary'));
+    else if(f.error&&!f.rows.length)body+=empty('لم تكتمل القراءة',f.error,btn('إعادة المحاولة','warehouse-retry','','secondary'));
     else if(!f.rows.length)body+=empty('لا سجلات ضمن هذه الفترة','جرّب تغيير الفلاتر أو راجع المستودع المحدد.');
-    else if(f.more)body+=btn('تحميل سجلات أقدم','warehouse-more','','secondary full');
+    else if(f.more&&!f.error)body+=btn('تحميل سجلات أقدم','warehouse-more','','secondary full');
     body+=`<p class="aw-footnote" style="margin-top:14px">${isInv?'فواتير الإدخال توثّق الكميات المضافة للجرد. مرجع الفاتورة متاح في التفاصيل.':'الكميات بالإشارة: + وارد، − صادر. اضغط مرجع الطلب لفتح العملية المرتبطة.'}</p>`;
     $('aw-wh-body').innerHTML=body;
   }
@@ -401,5 +403,5 @@
   function viewState(){return {stock:{...state.stock},wh:{id:tab==='stock'&&SV.v==='wh'?state.wh.id:'',tab:state.wh.tab,q:state.wh.q,recordQ:state.wh.recordQ,product:state.wh.product,kind:state.wh.kind,from:state.wh.from,to:state.wh.to,source:state.wh.source},people:state.people,profit:{...PF},stats:{...finance.stats,period:STP},group:finance.group};}
   function restoreView(v){if(!v||!full())return;for(const [target,data] of [[state.stock,v.stock],[state.wh,v.wh],[state.people.marketers,v.people?.marketers],[state.people.captains,v.people?.captains],[finance.stats,v.stats]])if(data)for(const k of Object.keys(target))if(typeof data[k]==='string')target[k]=data[k].slice(0,200);if(v.profit)for(const k of Object.keys(PF))if(typeof v.profit[k]==='string')PF[k]=v.profit[k].slice(0,200);if(v.stats?.period)STP=v.stats.period;if(['product','order','marketer','captain','governorate','month'].includes(v.group))finance.group=v.group;if(state.wh.id&&D.warehouses.some(w=>w.id===state.wh.id)){SV={v:'wh',wh:state.wh.id};}}
   function afterNavigation(k){state.dirty=false;if(mobile())AdminMotion.enter(k);}
-  globalThis.AdminWorkspace={full,mobile,dispatch,newOrder,decorateNew,people,person,profit,stats,products,customers,carriers,settings,more,notifications,prepare,loadError,stock,warehouse,warehouses,loadWarehouse,announce,realtimeNotification,observeOrders,decorateEvents,needsGuard,confirmLeave,hasDraft,back,reset,afterNavigation,viewState,restoreView,captureAnchor,restoreAnchor,openAnyOrder,saveNewOrder,profitSummary};
+  globalThis.AdminWorkspace={full,mobile,dispatch,newOrder,decorateNew,people,person,profit,stats,products,customers,carriers,settings,more,notifications,prepare,loadError,stock,warehouse,warehouses,loadWarehouse,refreshWarehouse,announce,realtimeNotification,observeOrders,decorateEvents,needsGuard,confirmLeave,hasDraft,back,reset,afterNavigation,viewState,restoreView,captureAnchor,restoreAnchor,openAnyOrder,saveNewOrder,profitSummary};
 })();
