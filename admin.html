@@ -834,8 +834,8 @@ function oc2(o){
   const prq=(D.pr[o.id]||[]).some(x=>x.status==="pending");
   const items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
   return `<div class="card oc s-${o.status}" style="padding:12px 14px;margin-bottom:10px;cursor:pointer" onclick="openOrder('${o.id}')">
-    <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
-    ${stLine(o)}<div class="mut" style="margin-bottom:4px">${items}</div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b><div style="text-align:end;flex:0 0 auto"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
+    <div class="mut" style="margin-bottom:4px">${items}</div>
     <div class="row" style="justify-content:space-between;align-items:center;margin:0;gap:6px">
       <span class="mut">🚚 ${o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد</b>'}${o.marketer_id?" · 🛍️ "+esc(mname(o.marketer_id)):""} · ${dt(o.created_at)}</span>
       <b>${money(o.total)}</b></div>
@@ -847,8 +847,8 @@ const itemsLine=o=>o.order_items.map(i=>{const d=Number(i.unit_price)-Number(i.l
 function orderCard(o){
   const evs=D.ev[o.id]||[];
   return `<div class="card oc s-${o.status}">
-    <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
-    ${stLine(o)}
+    <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><div style="text-align:end;flex:0 0 auto"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
+    
     <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
     ${o.customer_address?`<div>📍 ${esc(o.customer_address)}</div>`:""}
     ${o.marketer_id?`<div class="mut">🛍️ المسوّقة: <b>${esc(mname(o.marketer_id))}</b> · ربحها: <b class="up">${money((D.prof[o.id]||{}).profit||0)}</b>${o.status==="delivered"?"":" (بعد التسليم)"}</div>`:""}

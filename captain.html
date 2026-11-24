@@ -492,7 +492,7 @@ function oCard(o){
    : k==="cancelled" ? `<button class="btn btn-p" onclick="restore('${o.id}')">${ic("undo")} استرجاع الطلب</button>` : "";
   const priceBtns=OPEN.includes(k)?`<div class="acts2">${!prPending(o)?`<button class="btn btn-t btn-sm" onclick="openPriceReq('${o.id}')">${ic("tag")} طلب تعديل السعر</button>`:""}${D.settings.captain_can_edit_price==="true"?`<button class="btn btn-t btn-sm" onclick="openPrices('${o.id}')">${ic("cash")} تعديل مباشر</button>`:""}</div>`:"";
   return `<article class="card oc s-${k}">
-    <div class="oc-h"><span class="no">#${o.order_no}</span><div class="who"><b>${esc(o.customer_name)}</b><span class="mut">${ST[k]||k} بتاريخ ${when(o.status_at||o.created_at)}</span></div><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span></div>
+    <div class="oc-h"><span class="no">#${o.order_no}</span><div class="who"><b>${esc(o.customer_name)}</b><span class="mut">${dt(o.created_at)}</span></div><div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
     <a class="call" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
     <div class="qa"><a class="qb wa" href="${waUrl(o)}" target="_blank" rel="noopener">${ic("wa")} واتساب</a>${mapUrl(o)?`<a class="qb mp" href="${mapUrl(o)}" target="_blank" rel="noopener">${ic("pin")} الخريطة</a>`:""}</div>
     ${o.customer_address?`<div class="addr">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}
