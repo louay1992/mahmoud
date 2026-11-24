@@ -403,6 +403,7 @@ function orderCard(o){
       <select id="as_${o.id}">${capOptions(o.captain_id,"— اختر كابتن —")}</select>
       <button class="b s" style="flex:0 0 auto" onclick="assign('${o.id}')">${o.status==="new"?"إسناد":"تغيير الكابتن"}</button>
       <button class="b s o" style="flex:0 0 auto" onclick="openPrices('${o.id}')">تعديل الأسعار</button>
+      <button class="b s o" style="flex:0 0 auto" onclick="openNote('${o.id}')">💬 ملاحظة للكابتن</button>
       ${OPEN.includes(o.status)?`<button class="b s g" style="flex:0 0 auto" onclick="openStatus('${o.id}')">تحديث الحالة</button>`:""}
       ${o.status==="new"?`<button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button>`:""}</div>`:""}
     ${o.status==="delivered"?`<div class="row" style="margin:8px 0 0"><button class="b s o" style="flex:0 0 auto" onclick="returnO('${o.id}')">إرجاع الطلب</button></div>`:""}
@@ -535,6 +536,17 @@ function drawHome(){
     +(body||`<tr><td colspan="${cols}" class="mut">لا توجد طلبات مطابقة</td></tr>`);
 }
 let OD=null;
+function openNote(id){
+  const o=D.orders.find(x=>x.id===id);
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>ملاحظة للكابتن — طلب #${o.order_no}</b><button class="x" onclick="closeStatus()">✕</button></div>
+   <p class="mut" style="margin:0 0 8px">تظهر للكابتن على الطلب ويصله إشعار بها. اتركها فارغة لحذف الملاحظة.</p>
+   <textarea id="nt_text" rows="4" placeholder="اكتب الملاحظة...">${esc(o.note||"")}</textarea>
+   <button class="b" style="width:100%" onclick="saveNote('${id}')">حفظ وإرسال للكابتن</button></div>`;
+  $("modal").style.display="flex"; OD=null;
+}
+async function saveNote(id){
+  if(await run(sb.rpc("set_order_note",{p_order:id,p_note:$("nt_text").value}),"تم إرسال الملاحظة")){ closeStatus(); refresh() }
+}
 function prItem(x){
   const o=D.orders.find(z=>z.id===x.order_id)||{};
   return `<div style="background:#fff7e0;border:1px solid #f0d78a;border-radius:8px;padding:8px;margin:8px 0">
