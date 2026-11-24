@@ -2,9 +2,9 @@ name: Check notification flow
 on:
   push:
     branches: [main]
-    paths: ['auth-session.js', 'push*.js', 'native-push.js', 'mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
   pull_request:
-    paths: ['auth-session.js', 'push*.js', 'native-push.js', 'mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
 permissions:
   contents: read
 jobs:
@@ -28,6 +28,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node tests/notifications-browser.cjs
       - run: node tests/mobile-browser.cjs
+      - run: node tests/admin-mobile-browser.cjs
       - run: node tests/auth-browser.cjs
       - run: node tests/diagnostics-browser.cjs
       - run: node tests/native-host-browser.cjs

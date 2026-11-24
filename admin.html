@@ -15,6 +15,7 @@
 <script src="/auth-session.js"></script>
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
+<script src="/admin-mobile.js"></script>
 <script src="/mobile-ui.js" defer></script>
 <style>
 :root{
@@ -244,6 +245,7 @@ tr:last-child td{border-bottom:0}
 .setf{margin:0 0 14px}.setf label{display:block;font-weight:700;margin-bottom:4px}.setf input{width:100%}.setf small{display:block;color:#64748b;font-size:12px;margin-top:3px}
 </style>
 <link rel="stylesheet" href="/mobile.css">
+<link rel="stylesheet" href="/admin-mobile.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><b>إدارة كباتن التوصيل</b><div class="spin"></div></div>
@@ -479,10 +481,12 @@ function renderNav(){
     ?`<button class="fab ${tab===k?"on":""}" onclick="go('new')" aria-label="${l}"><span class="pl">${ic("plus")}</span></button>`
     :`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
   $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_TABS.includes(tab)?"":"on"}" onclick="openMore()">${ic("menu")}<span>المزيد</span></button>`;
+  globalThis.AdminMobile?.navigation();
 }
 function openMore(){
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${visTabs().filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
+  globalThis.AdminMobile?.more();
 }
 function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
@@ -1253,10 +1257,11 @@ async function vCarriers(){ return vShip("carriers") }
 async function vShip(mode){
   mode=mode==="carriers"?"carriers":"ship";
   $("main").innerHTML=`<div id="shbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
+  if(mode==="ship"&&globalThis.AdminMobile?.enabled()) AdminMobile.shippingLoading();
   const my=++SHLOAD;
   const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)]);
   if(my!==SHLOAD||tab!==mode) return;
-  if(o.error){ $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
+  if(o.error){ if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
   SHIPS=o.data; CPAYS=p.data||[]; if(mode==="carriers") drawCarriers(); else drawShip();
 }
 const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.filter(x=>x.carrier_id===cid);
@@ -1278,6 +1283,7 @@ function drawCarriers(){
 }
 function drawShip(){
   if(!$("shbody")||!SHIPS) return;
+  if(globalThis.AdminMobile?.enabled()) return AdminMobile.shipping();
   const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing");
   const cnt={open:SHIPS.filter(isOpen).length}; SHS.forEach(([k])=>cnt[k]=SHIPS.filter(o=>NS(o.ship_status)===k).length);
   const tot=D.carriers.reduce((a,c)=>{const b=carBal(c.id);a.owed+=b.owed;a.pend+=b.pend;return a},{owed:0,pend:0});
@@ -1297,6 +1303,7 @@ function drawShip(){
 }
 function drawShipList(){
   if(!$("shlist")||!SHIPS) return;
+  if(globalThis.AdminMobile?.enabled()) return AdminMobile.shippingList();
   const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), list=shFilt();
   if($("shcnt")) $("shcnt").textContent=list.length;
   $("shlist").innerHTML=list.length?list.map(o=>{ const st=shl(o.ship_status), age=Math.floor((Date.now()-new Date(o.status_at||o.created_at).getTime())/864e5), net=Number(o.delivery_fee||0)-Number(o.shipping_cost||0), its=o.order_items||[], late=isOpen(o)&&NS(o.ship_status)==="handed"&&age>=5;
@@ -1567,6 +1574,7 @@ function ordBase(skipStatus){
     (!q||[o.customer_name,o.customer_phone,String(o.order_no),cname(o.captain_id),mname(o.marketer_id)].some(v=>String(v||"").toLowerCase().includes(q))));
 }
 function vOrders(){
+  if(globalThis.AdminMobile?.enabled()) return AdminMobile.orders();
   $("main").innerHTML = `<div class="card"><h2 style="margin:0 0 10px">🚚 طلبات التوصيل</h2>
     <div class="row" style="margin-bottom:8px"><input id="oq" placeholder="بحث: اسم الزبون، الموبايل، رقم الطلب، الكابتن، المسوّقة" value="${esc(orderQuery)}" oninput="orderQuery=this.value;renderOrderList()"></div>
     <div class="chips" id="ochips"></div>
@@ -1670,6 +1678,7 @@ function orderDetail(o){
   +dsec("⚙️ الإجراءات",orderActions(o));
 }
 function renderOrderList(){
+  if(globalThis.AdminMobile?.enabled()) return AdminMobile.orderList();
   const base=ordBase(true), cnt={all:base.length}; base.forEach(o=>cnt[o.status]=(cnt[o.status]||0)+1);
   $("ochips").innerHTML=[["all","الكل"],...ORD_STATUS.map(k=>[k,ST[k]])].filter(([k])=>k==="all"||cnt[k]||orderFilter===k).map(([k,l])=>`<button class="chip ${orderFilter===k?"on":""}" onclick="orderFilter='${k}';renderOrderList()">${k==="all"?"":`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${SCOL[k]};margin-inline-end:6px"></span>`}${l}<b>${cnt[k]||0}</b></button>`).join("");
   const list=ordBase(false), tot=list.reduce((a,o)=>a+Number(o.total),0);
@@ -1775,6 +1784,7 @@ function statement(cid){
 const GROUPS=[["new","📥","طلبات بلا كابتن",true],["assigned","🆕","مُسندة (بانتظار استلام الكابتن)",true],["in_delivery","🚚","قيد التوصيل",true],["no_answer","📵","لم يتم الرد",true],["closed","🔒","مغلق",true],["other","📝","ملاحظة أخرى",true],["delivered","✅","مُسلَّمة",false],["cancelled","❌","ملغية",false],["returned","↩️","مرتجعة",false]];
 let HF={status:"all",cap:"all",q:"",group:true};
 function vHome(){
+  if(globalThis.AdminMobile?.enabled()) return AdminMobile.home();
   const s=D.stats||{}, low=s.low_stock||[], bs=s.by_status||{};
   const cnt=k=>bs[k]??D.orders.filter(o=>o.status===k).length;
   const total=Object.values(bs).reduce((a,b)=>a+Number(b),0)||D.orders.length;
