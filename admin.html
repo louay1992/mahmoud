@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f766e">
+<title>الإدارة - كباتن التوصيل</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--p:#0f766e;--bg:#f4f6f8;--card:#fff;--bd:#e2e8f0;--tx:#1e293b;--mut:#64748b;--red:#dc2626;--grn:#16a34a;--amb:#d97706}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--tx);font-size:15px}
+header{background:var(--p);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:17px;margin:0}
+nav{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+nav button{white-space:nowrap;border:1px solid var(--bd);background:#fff;padding:8px 14px;border-radius:20px;font:inherit;cursor:pointer}
+nav button.on{background:var(--p);color:#fff;border-color:var(--p)}
+main{max-width:980px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.row>*{flex:1 1 140px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:8px;font:inherit;background:#fff}
+button.b{background:var(--p);color:#fff;border:0;padding:9px 16px;border-radius:8px;font:inherit;cursor:pointer}
+button.b.s{padding:5px 10px;font-size:13px}
+button.b.r{background:var(--red)}button.b.g{background:var(--grn)}button.b.o{background:#fff;color:var(--p);border:1px solid var(--p)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right;vertical-align:middle}
+th{color:var(--mut);font-weight:600;font-size:13px}
+.tw{overflow-x:auto}
+.tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff;white-space:nowrap}
+.new{background:#64748b}.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}
+.neg{color:var(--red);font-weight:700}
+.mut{color:var(--mut);font-size:13px}
+#login{max-width:340px;margin:12vh auto;padding:0 14px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:9}
+.big{font-size:20px;font-weight:700}
+.items .row{align-items:center}
+</style>
+</head>
+<body>
+
+<div id="login" style="display:none">
+  <div class="card">
+    <h2>تسجيل دخول الإداري</h2>
+    <div class="row"><input id="em" type="email" placeholder="البريد الإلكتروني" dir="ltr"></div>
+    <div class="row"><input id="pw" type="password" placeholder="كلمة المرور" dir="ltr"></div>
+    <button class="b" style="width:100%" onclick="login()">دخول</button>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <header><h1>📦 إدارة كباتن التوصيل</h1><button class="b s o" onclick="logout()">خروج</button></header>
+  <nav id="nav"></nav>
+  <main id="main"></main>
+</div>
+<div id="toast"></div>
+
+<script>
+// ====== ضع بيانات مشروع Supabase هنا (Project Settings > API) ======
+const SUPABASE_URL = "https://jabapvnmfdflysxfxwwf.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYmFwdm5tZmRmbHlzeGZ4d3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTg2OTQsImV4cCI6MjExMTA5NDY5NH0.V-Axtg4cGwiSYNhcefmks0MP4iOn2DW5Ai74Ji8cv9I";
+// ===================================================================
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => Number(n || 0).toLocaleString("en-US", {minimumFractionDigits: 0, maximumFractionDigits: 2});
+const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
+const ST = {new: "جديد", assigned: "مُسند", delivered: "مُسلَّم", cancelled: "ملغي"};
+function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
+async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
+
+let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[]};
+let tab = "orders", orderFilter = "all";
+
+async function boot(){
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session){ $("login").style.display="block"; $("app").style.display="none"; return }
+  const {data} = await sb.from("admins").select("email"); // يظهر فقط إن كان المستخدم إدارياً
+  if(!data || !data.length){ toast("هذا الحساب ليس إدارياً"); await sb.auth.signOut(); $("login").style.display="block"; return }
+  $("login").style.display="none"; $("app").style.display="block";
+  await loadAll(); renderNav(); render();
+}
+async function login(){
+  const {error} = await sb.auth.signInWithPassword({email:$("em").value.trim(), password:$("pw").value});
+  if(error) return toast("فشل الدخول: "+error.message);
+  boot();
+}
+async function logout(){ await sb.auth.signOut(); location.reload() }
+
+async function loadAll(){
+  const q = [
+    sb.from("products").select("*").order("name"),
+    sb.from("captains").select("*").order("name"),
+    sb.from("warehouses").select("*").order("name"),
+    sb.from("stock").select("*"),
+    sb.from("orders").select("*, order_items(qty, unit_price, products(name))").order("created_at",{ascending:false}).limit(300),
+    sb.from("captain_balances").select("*"),
+    sb.from("captain_payments").select("*").order("created_at",{ascending:false}).limit(100),
+    sb.from("stock_invoices").select("*, stock_invoice_items(qty, products(name))").order("created_at",{ascending:false}).limit(50),
+  ];
+  const r = await Promise.all(q);
+  r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
+  [D.products,D.captains,D.warehouses,D.stock,D.orders,D.balances,D.payments,D.invoices] = r.map(x => x.data || []);
+}
+const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
+const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
+const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
+
+const TABS = [["orders","الطلبات"],["new","طلب جديد"],["stock","المخزون"],["accounts","المستحقات"],["captains","الكباتن والمستودعات"],["products","المنتجات"]];
+function renderNav(){ $("nav").innerHTML = TABS.map(([k,l])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${l}</button>`).join("") }
+function go(k){ tab=k; renderNav(); render() }
+async function refresh(){ await loadAll(); render() }
+function render(){ ({orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,products:vProducts})[tab]() }
+const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
+
+/* ================= المنتجات ================= */
+function vProducts(){
+  $("main").innerHTML = `
+  <div class="card"><h2>إضافة منتج</h2>
+    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="سعر البيع"></div>
+    <button class="b" onclick="addProduct()">إضافة</button></div>
+  <div class="card"><h2>المنتجات (${D.products.length})</h2><div class="tw"><table>
+   <tr><th>المنتج</th><th>سعر البيع</th><th></th></tr>
+   ${D.products.map(p=>`<tr style="${p.active?"":"opacity:.45"}"><td>${esc(p.name)}</td><td>${money(p.price)}</td>
+     <td><button class="b s o" onclick="editProduct('${p.id}')">تعديل</button>
+     <button class="b s o" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"إيقاف":"تفعيل"}</button></td></tr>`).join("")}
+  </table></div></div>`;
+}
+async function addProduct(){
+  const name=$("pn").value.trim(), price=parseFloat($("pp").value);
+  if(!name||isNaN(price)) return toast("أدخل الاسم والسعر");
+  if(await run(sb.from("products").insert({name,price}),"تمت الإضافة")) refresh();
+}
+async function editProduct(id){
+  const p=D.products.find(x=>x.id===id);
+  const name=prompt("اسم المنتج",p.name); if(name===null) return;
+  const price=prompt("سعر البيع",p.price); if(price===null||isNaN(parseFloat(price))) return;
+  if(await run(sb.from("products").update({name:name.trim(),price:parseFloat(price)}).eq("id",id),"تم الحفظ")) refresh();
+}
+async function toggleProduct(id,v){ if(await run(sb.from("products").update({active:v}).eq("id",id))) refresh() }
+
+/* ================= الكباتن والمستودعات ================= */
+function vCaptains(){
+  $("main").innerHTML = `
+  <div class="card"><h2>إضافة كابتن توصيل</h2>
+    <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="الموبايل" dir="ltr">
+      <input id="cem" type="email" placeholder="بريد دخوله (اختياري الآن)" dir="ltr"><input id="cf" type="number" min="0" step="0.01" placeholder="أجور التوصيل"></div>
+    <button class="b" onclick="addCaptain()">إضافة</button>
+    <p class="mut">لتمكين الكابتن من الدخول لاحقاً: أنشئ له مستخدماً بنفس البريد من Supabase > Authentication > Users.</p></div>
+  <div class="card"><h2>الكباتن</h2><div class="tw"><table>
+   <tr><th>الاسم</th><th>الموبايل</th><th>البريد</th><th>أجور التوصيل</th><th>المستودع</th><th></th></tr>
+   ${D.captains.map(c=>{const w=D.warehouses.find(w=>w.captain_id===c.id);return `<tr style="${c.active?"":"opacity:.45"}">
+     <td>${esc(c.name)}</td><td dir="ltr">${esc(c.phone)}</td><td dir="ltr">${esc(c.email)}</td><td>${money(c.delivery_fee)}</td>
+     <td>${w?esc(w.name):'<span class="neg">غير مرتبط</span>'}</td>
+     <td><button class="b s o" onclick="editCaptain('${c.id}')">تعديل</button>
+     <button class="b s o" onclick="toggleCaptain('${c.id}',${!c.active})">${c.active?"إيقاف":"تفعيل"}</button></td></tr>`}).join("")}
+  </table></div></div>
+  <div class="card"><h2>إضافة مستودع</h2>
+    <div class="row"><input id="wn" placeholder="اسم المستودع (مثال: مستودع إربد)"><select id="wc">${capOptions("","— بدون كابتن —")}</select></div>
+    <button class="b" onclick="addWarehouse()">إضافة</button></div>
+  <div class="card"><h2>المستودعات</h2><div class="tw"><table>
+   <tr><th>المستودع</th><th>الكابتن المرتبط</th></tr>
+   ${D.warehouses.map(w=>`<tr><td>${esc(w.name)}</td><td><select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select></td></tr>`).join("")}
+  </table></div></div>`;
+}
+async function addCaptain(){
+  const name=$("cn").value.trim(); if(!name) return toast("أدخل الاسم");
+  const rec={name, phone:$("cph").value.trim()||null, email:$("cem").value.trim().toLowerCase()||null, delivery_fee:parseFloat($("cf").value)||0};
+  if(await run(sb.from("captains").insert(rec),"تمت الإضافة")) refresh();
+}
+async function editCaptain(id){
+  const c=D.captains.find(x=>x.id===id);
+  const name=prompt("الاسم",c.name); if(name===null) return;
+  const phone=prompt("الموبايل",c.phone||""); if(phone===null) return;
+  const email=prompt("البريد",c.email||""); if(email===null) return;
+  const fee=prompt("أجور التوصيل (تؤثر على الطلبات الجديدة فقط)",c.delivery_fee); if(fee===null||isNaN(parseFloat(fee))) return;
+  if(await run(sb.from("captains").update({name:name.trim(),phone:phone.trim()||null,email:email.trim().toLowerCase()||null,delivery_fee:parseFloat(fee)}).eq("id",id),"تم الحفظ")) refresh();
+}
+async function toggleCaptain(id,v){ if(await run(sb.from("captains").update({active:v}).eq("id",id))) refresh() }
+async function addWarehouse(){
+  const name=$("wn").value.trim(); if(!name) return toast("أدخل اسم المستودع");
+  if(await run(sb.from("warehouses").insert({name,captain_id:$("wc").value||null}),"تمت الإضافة")) refresh();
+}
+async function linkWarehouse(id,cap){
+  if(cap){ const other=D.warehouses.find(w=>w.captain_id===cap&&w.id!==id);
+    if(other){ if(!await run(sb.from("warehouses").update({captain_id:null}).eq("id",other.id))) return } }
+  if(await run(sb.from("warehouses").update({captain_id:cap||null}).eq("id",id),"تم الربط")) refresh();
+}
+
+/* ================= المخزون ================= */
+function itemRows(id){ return `<div class="items" id="${id}"></div><button class="b s o" onclick="addRow('${id}')">+ منتج</button>` }
+function addRow(id,qtyDefault){
+  const d=document.createElement("div"); d.className="row";
+  d.innerHTML=`<select>${D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)} (${money(p.price)})</option>`).join("")}</select>
+    <input type="number" min="1" step="1" value="1" style="max-width:90px" placeholder="العدد">
+    <button class="b s r" style="flex:0 0 auto" onclick="this.parentNode.remove()">✕</button>`;
+  $(id).appendChild(d);
+}
+const readRows = id => [...$(id).children].map(r=>({product_id:r.querySelector("select").value, qty:parseInt(r.querySelector("input").value)})).filter(x=>x.product_id&&x.qty>0);
+
+function vStock(){
+  const byW = D.warehouses.map(w=>{
+    const rows=D.stock.filter(s=>s.warehouse_id===w.id);
+    return `<div class="card"><h2>${esc(w.name)} <span class="mut">— ${esc(cname(w.captain_id))}</span></h2>
+      ${rows.length?`<table><tr><th>المنتج</th><th>الكمية</th></tr>${rows.map(s=>`<tr><td>${esc(pname(s.product_id))}</td><td class="${s.qty<0?"neg":""}">${s.qty}</td></tr>`).join("")}</table>`:'<p class="mut">لا يوجد جرد</p>'}</div>`}).join("");
+  $("main").innerHTML = `
+  <div class="card"><h2>فاتورة إدخال بضاعة لمستودع</h2>
+    <div class="row"><select id="iw">${D.warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join("")}</select><input id="inote" placeholder="ملاحظة (رقم الفاتورة...)"></div>
+    ${itemRows("irows")}<br><br><button class="b" onclick="saveInvoice()">حفظ الفاتورة وإضافتها للجرد</button></div>
+  ${byW}
+  <div class="card"><h2>آخر الفواتير</h2><div class="tw"><table><tr><th>التاريخ</th><th>المستودع</th><th>الأصناف</th><th>ملاحظة</th></tr>
+  ${D.invoices.map(i=>`<tr><td>${dt(i.created_at)}</td><td>${esc(wname(i.warehouse_id))}</td>
+   <td>${i.stock_invoice_items.map(x=>`${esc(x.products?.name)} × ${x.qty}`).join("، ")}</td><td>${esc(i.note)}</td></tr>`).join("")}</table></div></div>`;
+  addRow("irows");
+}
+async function saveInvoice(){
+  const items=readRows("irows"); if(!items.length) return toast("أضف منتجاً");
+  const {data,error}=await sb.from("stock_invoices").insert({warehouse_id:$("iw").value,note:$("inote").value.trim()||null}).select().single();
+  if(error) return toast("خطأ: "+error.message);
+  if(await run(sb.from("stock_invoice_items").insert(items.map(i=>({...i,invoice_id:data.id}))),"تمت إضافة البضاعة للجرد")) refresh();
+}
+
+/* ================= طلب جديد ================= */
+function vNew(){
+  $("main").innerHTML = `<div class="card"><h2>طلب بيع جديد</h2>
+    <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
+    <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
+    <div class="row"><select id="oc">${capOptions("","— إسناد لاحقاً —")}</select></div>
+    ${itemRows("orows")}<br><br>
+    <div class="mut" id="otot"></div><br>
+    <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
+  addRow("orows");
+  const upd=()=>{const items=readRows("orows");const sub=items.reduce((s,i)=>s+i.qty*((D.products.find(p=>p.id===i.product_id)||{}).price||0),0);
+    const c=D.captains.find(c=>c.id===$("oc").value);const fee=c?Number(c.delivery_fee):0;
+    $("otot").innerHTML=`المنتجات: <b>${money(sub)}</b> + التوصيل: <b>${money(fee)}</b> = <span class="big">${money(sub+fee)}</span>`};
+  $("main").addEventListener("input",upd); $("main").addEventListener("click",()=>setTimeout(upd,0)); upd();
+}
+async function saveOrder(){
+  const name=$("on").value.trim(), phone=$("op").value.trim(), items=readRows("orows");
+  if(!name||!phone) return toast("أدخل اسم الزبون ورقم الموبايل");
+  if(!items.length) return toast("أضف منتجاً");
+  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:$("oc").value||null,p_items:items}),"تم إنشاء الطلب")){ tab="orders"; renderNav(); refresh() }
+}
+
+/* ================= الطلبات ================= */
+function vOrders(){
+  const list=D.orders.filter(o=>orderFilter==="all"||o.status===orderFilter);
+  $("main").innerHTML = `<div class="card"><div class="row">
+    <select onchange="orderFilter=this.value;vOrders()">${[["all","كل الطلبات"],...Object.entries(ST)].map(([k,l])=>`<option value="${k}" ${orderFilter===k?"selected":""}>${l}</option>`).join("")}</select>
+    <button class="b o" style="flex:0 0 auto" onclick="refresh()">تحديث</button></div></div>
+  ${list.map(o=>`<div class="card">
+    <div class="row" style="justify-content:space-between;margin:0"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
+    <div class="mut">📞 <span dir="ltr">${esc(o.customer_phone)}</span> · ${dt(o.created_at)} · الكابتن: ${esc(cname(o.captain_id))}</div>
+    <div>${o.order_items.map(i=>`${esc(i.products?.name)} × ${i.qty}`).join("، ")}</div>
+    <div class="mut">منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)} = <b>${money(o.total)}</b></div>
+    ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}${o.captain_note?`<div class="mut">🗒️ ملاحظة الكابتن: ${esc(o.captain_note)}</div>`:""}
+    ${["new","assigned"].includes(o.status)?`<div class="row" style="margin:8px 0 0">
+      <select id="as_${o.id}">${capOptions(o.captain_id,"— اختر كابتن —")}</select>
+      <button class="b s" style="flex:0 0 auto" onclick="assign('${o.id}')">${o.status==="new"?"إسناد":"تغيير الكابتن"}</button>
+      ${o.status==="assigned"?`<button class="b s g" style="flex:0 0 auto" onclick="deliver('${o.id}')">تم التسليم</button>`:""}
+      <button class="b s r" style="flex:0 0 auto" onclick="cancelO('${o.id}')">إلغاء</button></div>`:""}
+  </div>`).join("")||'<p class="mut">لا توجد طلبات</p>'}`;
+}
+async function assign(id){ const c=$("as_"+id).value; if(!c) return toast("اختر كابتن");
+  if(await run(sb.rpc("assign_order",{p_order:id,p_captain:c}),"تم الإسناد")) refresh() }
+async function deliver(id){ if(!confirm("تأكيد التسليم؟ سيُخصم الجرد وتُسجَّل القيمة على الكابتن.")) return;
+  if(await run(sb.rpc("deliver_order",{p_order:id}),"تم التسليم")) refresh() }
+async function cancelO(id){ const n=prompt("سبب الإلغاء (اختياري)"); if(n===null) return;
+  if(await run(sb.rpc("cancel_order",{p_order:id,p_note:n||null}),"تم الإلغاء")) refresh() }
+
+/* ================= المستحقات ================= */
+function vAccounts(){
+  $("main").innerHTML = `<div class="card"><h2>أرصدة الكباتن</h2><div class="tw"><table>
+   <tr><th>الكابتن</th><th>طلبات مُسلَّمة</th><th>قيمة المنتجات</th><th>المستلَم منه</th><th>المتبقي عليه</th><th></th></tr>
+   ${D.balances.map(b=>`<tr><td>${esc(b.name)}</td><td>${b.delivered_count}</td><td>${money(b.delivered_total)}</td><td>${money(b.paid_total)}</td>
+     <td class="big ${b.balance<0?"neg":""}">${money(b.balance)}</td>
+     <td><button class="b s" onclick="addPayment('${b.captain_id}')">استلام دفعة</button></td></tr>`).join("")}
+  </table></div><p class="mut">المتبقي = قيمة منتجات الطلبات المُسلَّمة − الدفعات التي استلمتها من الكابتن. أجور التوصيل تبقى مع الكابتن ولا تدخل في المبلغ المطلوب منه.</p></div>
+  <div class="card"><h2>آخر الدفعات المستلمة</h2><div class="tw"><table><tr><th>التاريخ</th><th>الكابتن</th><th>المبلغ</th><th>ملاحظة</th></tr>
+   ${D.payments.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${esc(cname(p.captain_id))}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td></tr>`).join("")}</table></div></div>
+  <div class="card"><h2>أجور التوصيل التي يحتفظ بها الكابتن</h2><table><tr><th>الكابتن</th><th>مجموع الأجور</th></tr>
+   ${D.balances.map(b=>`<tr><td>${esc(b.name)}</td><td>${money(b.fees_total)}</td></tr>`).join("")}</table></div>`;
+}
+async function addPayment(id){
+  const a=prompt("المبلغ الذي استلمته من "+cname(id)); if(a===null) return; const amount=parseFloat(a);
+  if(isNaN(amount)||amount<=0) return toast("مبلغ غير صحيح");
+  const note=prompt("ملاحظة (اختياري)")||null;
+  if(await run(sb.from("captain_payments").insert({captain_id:id,amount,note}),"تم تسجيل الدفعة")) refresh();
+}
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d4ed8">
+<title>كابتن التوصيل</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--p:#1d4ed8;--bg:#f4f6f8;--bd:#e2e8f0;--tx:#1e293b;--mut:#64748b;--red:#dc2626;--grn:#16a34a;--amb:#d97706}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--tx);font-size:16px}
+header{background:var(--p);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:17px;margin:0}
+nav{display:flex;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+nav button{flex:1;border:0;border-bottom:3px solid transparent;background:#fff;padding:12px 4px;font:inherit;cursor:pointer}
+nav button.on{border-color:var(--p);color:var(--p);font-weight:700}
+main{max-width:640px;margin:0 auto;padding:12px}
+.card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h2{font-size:16px;margin:0 0 8px}
+input,select,textarea{width:100%;padding:11px;border:1px solid var(--bd);border-radius:8px;font:inherit;margin-bottom:8px}
+button.b{background:var(--p);color:#fff;border:0;padding:11px 16px;border-radius:8px;font:inherit;cursor:pointer}
+button.g{background:var(--grn)}button.r{background:var(--red)}button.o{background:#fff;color:var(--p);border:1px solid var(--p)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.acts button{flex:1 1 90px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 6px;border-bottom:1px solid var(--bd);text-align:right}
+th{color:var(--mut);font-size:13px}
+.tag{padding:2px 9px;border-radius:12px;font-size:12px;color:#fff}
+.assigned{background:var(--amb)}.delivered{background:var(--grn)}.cancelled{background:var(--red)}.new{background:#64748b}
+.mut{color:var(--mut);font-size:14px}.neg{color:var(--red);font-weight:700}
+.big{font-size:30px;font-weight:700}
+a.call{color:var(--p);text-decoration:none;font-weight:600}
+#login{max-width:340px;margin:12vh auto;padding:0 14px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 18px;border-radius:8px;display:none;z-index:9}
+</style>
+</head>
+<body>
+<div id="login" style="display:none"><div class="card"><h2>تسجيل دخول الكابتن</h2>
+  <input id="em" type="email" placeholder="البريد الإلكتروني" dir="ltr">
+  <input id="pw" type="password" placeholder="كلمة المرور" dir="ltr">
+  <button class="b" style="width:100%" onclick="login()">دخول</button></div></div>
+<div id="app" style="display:none">
+  <header><h1 id="hname">🚚 كابتن التوصيل</h1><button class="b o" style="padding:6px 12px" onclick="logout()">خروج</button></header>
+  <nav><button id="t_orders" onclick="go('orders')">طلباتي</button><button id="t_stock" onclick="go('stock')">جردي</button><button id="t_acc" onclick="go('acc')">حسابي</button></nav>
+  <main id="main"></main>
+</div>
+<div id="toast"></div>
+<script>
+// ====== نفس بيانات مشروع Supabase المستخدمة في التطبيق الإداري ======
+const SUPABASE_URL = "https://jabapvnmfdflysxfxwwf.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYmFwdm5tZmRmbHlzeGZ4d3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTg2OTQsImV4cCI6MjExMTA5NDY5NH0.V-Axtg4cGwiSYNhcefmks0MP4iOn2DW5Ai74Ji8cv9I";
+// ===================================================================
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => Number(n || 0).toLocaleString("en-US", {maximumFractionDigits: 2});
+const dt = s => s ? new Date(s).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}) : "";
+const ST = {new:"جديد", assigned:"قيد التوصيل", delivered:"مُسلَّم", cancelled:"ملغي"};
+function toast(m){const t=$("toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2800)}
+async function run(p, ok){const {error}=await p; if(error){toast("خطأ: "+error.message);return false} if(ok)toast(ok); return true}
+
+let me=null, D={orders:[],stock:[],payments:[],balance:null}, tab="orders", filter="assigned";
+
+async function boot(){
+  const {data:{session}} = await sb.auth.getSession();
+  if(!session){ $("login").style.display="block"; $("app").style.display="none"; return }
+  const {data} = await sb.from("captains").select("*").limit(1);
+  if(!data || !data.length){ toast("هذا الحساب غير مرتبط بكابتن"); await sb.auth.signOut(); $("login").style.display="block"; return }
+  me = data[0]; $("hname").textContent = "🚚 " + me.name;
+  $("login").style.display="none"; $("app").style.display="block";
+  await load(); go("orders");
+}
+async function login(){
+  const {error} = await sb.auth.signInWithPassword({email:$("em").value.trim(), password:$("pw").value});
+  if(error) return toast("فشل الدخول: "+error.message); boot();
+}
+async function logout(){ await sb.auth.signOut(); location.reload() }
+
+async function load(){
+  const r = await Promise.all([
+    sb.from("orders").select("*, order_items(qty, products(name))").order("created_at",{ascending:false}).limit(200),
+    sb.from("stock").select("qty, products(name)"),
+    sb.from("captain_payments").select("*").order("created_at",{ascending:false}),
+    sb.from("captain_balances").select("*").limit(1),
+  ]);
+  r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
+  D.orders=r[0].data||[]; D.stock=(r[1].data||[]).sort((a,b)=>(a.products?.name||"").localeCompare(b.products?.name||"","ar"));
+  D.payments=r[2].data||[]; D.balance=(r[3].data||[])[0]||null;
+}
+function go(t){ tab=t; ["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t)); render() }
+async function refresh(){ await load(); render() }
+function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
+
+function vOrders(){
+  const f=[["assigned","قيد التوصيل"],["delivered","مُسلَّمة"],["cancelled","ملغية"],["all","الكل"]];
+  const list=D.orders.filter(o=>filter==="all"||o.status===filter);
+  $("main").innerHTML = `<div style="display:flex;gap:6px;margin-bottom:10px">
+    <select style="margin:0" onchange="filter=this.value;vOrders()">${f.map(([k,l])=>`<option value="${k}" ${filter===k?"selected":""}>${l}</option>`).join("")}</select>
+    <button class="b o" onclick="refresh()">تحديث</button></div>
+  ${list.map(o=>`<div class="card">
+    <div style="display:flex;justify-content:space-between"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag ${o.status}">${ST[o.status]}</span></div>
+    <div style="margin:6px 0"><a class="call" href="tel:${esc(o.customer_phone)}" dir="ltr">📞 ${esc(o.customer_phone)}</a></div>
+    <div>${o.order_items.map(i=>`${esc(i.products?.name)} × ${i.qty}`).join("، ")}</div>
+    <div style="margin-top:6px">المطلوب من الزبون: <b>${money(o.total)}</b> <span class="mut">(منتجات ${money(o.items_total)} + توصيل ${money(o.delivery_fee)})</span></div>
+    ${o.note?`<div class="mut">📝 ${esc(o.note)}</div>`:""}
+    ${o.captain_note?`<div class="mut">🗒️ ملاحظتي: ${esc(o.captain_note)}</div>`:""}
+    ${o.status==="assigned"?`<div class="acts">
+      <button class="b g" onclick="deliver('${o.id}')">تم التسليم</button>
+      <button class="b o" onclick="note('${o.id}')">ملاحظة</button>
+      <button class="b r" onclick="cancelO('${o.id}')">إلغاء</button></div>`:""}
+    ${o.status==="delivered"?`<div class="mut">سُلِّم ${dt(o.delivered_at)}</div>`:""}
+  </div>`).join("")||'<p class="mut">لا توجد طلبات</p>'}`;
+}
+async function deliver(id){ if(!confirm("تأكيد تسليم الطلب للزبون؟")) return;
+  if(await run(sb.rpc("deliver_order",{p_order:id}),"تم التسليم")) refresh() }
+async function note(id){ const o=D.orders.find(x=>x.id===id); const n=prompt("ملاحظة على الطلب",o.captain_note||""); if(n===null) return;
+  if(await run(sb.rpc("set_captain_note",{p_order:id,p_note:n}),"تم الحفظ")) refresh() }
+async function cancelO(id){ const n=prompt("سبب الإلغاء"); if(n===null) return;
+  if(await run(sb.rpc("cancel_order",{p_order:id,p_note:n||null}),"تم الإلغاء")) refresh() }
+
+function vStock(){
+  $("main").innerHTML = `<div class="card"><h2>الجرد الموجود معي</h2>
+   ${D.stock.length?`<table><tr><th>المنتج</th><th>الكمية</th></tr>${D.stock.map(s=>`<tr><td>${esc(s.products?.name)}</td><td class="${s.qty<0?"neg":""}">${s.qty}</td></tr>`).join("")}</table>`:'<p class="mut">لا يوجد جرد مسجَّل</p>'}</div>`;
+}
+function vAcc(){
+  const b=D.balance||{};
+  $("main").innerHTML = `<div class="card"><div class="mut">المتبقي عليّ تسليمه</div><div class="big ${b.balance<0?"neg":""}">${money(b.balance)}</div>
+   <div class="mut">طلبات مُسلَّمة: ${b.delivered_count||0} · قيمة المنتجات ${money(b.delivered_total)} · سلّمتُه: ${money(b.paid_total)}<br>أجور التوصيل التي لي: ${money(b.fees_total)}</div></div>
+   <div class="card"><h2>الدفعات التي سلّمتُها</h2>${D.payments.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th></tr>${D.payments.map(p=>`<tr><td>${dt(p.created_at)}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td></tr>`).join("")}</table>`:'<p class="mut">لا توجد دفعات</p>'}</div>`;
+}
+boot();
+</script>
+</body>
+</html>
