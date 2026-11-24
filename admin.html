@@ -213,6 +213,7 @@ tr:last-child td{border-bottom:0}
 .chk{display:flex;flex-wrap:wrap;gap:8px 14px}.chk label{display:flex;align-items:center;gap:6px;font-size:14px;background:#f1f5f9;padding:6px 10px;border-radius:10px}
 .pk{max-height:55vh;overflow:auto;margin:8px 0;display:flex;flex-direction:column;gap:6px}.pk label{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f1f5f9;border-radius:12px;cursor:pointer}.pk label.on{background:#ccfbf1}.pk label.dis{opacity:.45}.pk .sb{margin-right:auto;font-size:12px;color:#64748b}.pk input{width:auto}.pksearch{width:100%;margin-bottom:4px}.pkbtn{width:100%;text-align:right;background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:11px 12px;font:inherit;cursor:pointer}
 .pkr{background:#f1f5f9;border-radius:12px;padding:8px 10px}.pkr.on{background:#ccfbf1}.pkr label{display:flex;align-items:center;gap:10px;background:none;padding:2px;cursor:pointer}.pkr input[type=checkbox]{width:auto}.pkd{gap:8px;margin-top:8px}.pkd>div{flex:1}.pkd small{display:block;color:#475569;margin-bottom:2px}.pkd input{width:100%}
+.ocinfo{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.ocinfo>div{background:#f1f5f9;border-radius:10px;padding:6px 8px;min-width:0}.ocinfo small{display:block;color:#64748b;font-size:11px}.ocinfo b{font-size:13px;word-break:break-word}.ocb{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.ocb .b{flex:0 0 auto;text-decoration:none;display:inline-flex;align-items:center}
 </style>
 </head>
 <body>
@@ -1104,10 +1105,26 @@ function oc2(o){
   const items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
   return `<div class="card oc s-${o.status}" style="padding:12px 14px;margin-bottom:10px;cursor:pointer" onclick="openOrder('${o.id}')">
     <div class="row" style="justify-content:space-between;align-items:flex-start;margin:0 0 4px;flex-wrap:nowrap"><b>#${o.order_no} — ${esc(o.customer_name)}</b><div style="text-align:end;flex:0 0 auto"><span class="tag ${o.status}">${ST[o.status]}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
-    <div class="mut" style="margin-bottom:4px">${items}</div>
-    <div class="row" style="justify-content:space-between;align-items:center;margin:0;gap:6px">
-      <span class="mut">🚚 ${o.captain_id?esc(cname(o.captain_id)):'<b style="color:#ea580c">لم يُسنَد</b>'}${o.marketer_id?" · 🛍️ "+esc(mname(o.marketer_id)):""} · ${dt(o.created_at)}</span>
-      <b>${money(o.total)}</b></div>
+    <div class="mut" style="font-size:13px">📞 <span dir="ltr">${esc(o.customer_phone||"")}</span>${o.governorate||o.customer_address?" · 📍 "+esc(o.governorate||"")+(o.governorate&&o.customer_address?" — ":"")+esc(o.customer_address||""):""}</div>
+    <div style="margin:4px 0">${items}</div>
+    <div class="ocinfo">
+      <div><small>الكابتن</small><b>${o.captain_id?esc(cname(o.captain_id)):'<span style="color:#ea580c">لم يُسنَد</span>'}</b></div>
+      <div><small>المسوّقة</small><b>${o.marketer_id?esc(mname(o.marketer_id)):"—"}</b></div>
+      ${o.marketer_id&&D.prof[o.id]?`<div><small>نسبة المسوّقة</small><b class="${Number(D.prof[o.id].profit)>0?"up":""}">${money(D.prof[o.id].profit||0)}</b></div>`:""}
+      <div><small>المنتجات</small><b>${money(o.items_total)}</b></div>
+      <div><small>أجور التوصيل</small><b>${money(o.delivery_fee)}</b></div>
+      <div><small>المجموع النهائي</small><b style="color:var(--p);font-size:16px">${money(o.total)}</b></div>
+    </div>
+    <div class="mut" style="font-size:12px;margin-top:4px">${dt(o.created_at)}${o.marketer_id&&o.status!=="delivered"&&o.status!=="cancelled"&&o.status!=="returned"?" · النسبة تُحتسب بعد التسليم":""}</div>
+    ${o.note?`<div class="mut" style="font-size:13px;margin-top:4px">📝 ${esc(o.note)}</div>`:""}
+    <div class="ocb" onclick="event.stopPropagation()">
+      <button class="b s" onclick="openOrder('${o.id}')">التفاصيل</button>
+      ${OPEN.includes(o.status)?`<button class="b s g" onclick="openStatus('${o.id}')">تحديث الحالة</button>`:""}
+      ${o.status==="new"||OPEN.includes(o.status)?`<button class="b s o" onclick="openEdit('${o.id}')">✏️ تعديل</button>`:""}
+      <a class="b s o" href="tel:${esc(o.customer_phone||"")}">📞 اتصال</a>
+      <a class="b s o" target="_blank" rel="noopener" href="${waUrl(o,waText(o))}">واتساب</a>
+      ${mapUrl(o)?`<a class="b s o" target="_blank" rel="noopener" href="${mapUrl(o)}">🗺 الخريطة</a>`:""}
+    </div>
     ${prq?`<div style="color:#b45309;font-weight:700;margin-top:6px">📝 بانتظار قرارك: طلب تعديل سعر</div>`:""}
     ${o.captain_note?`<div class="note" style="margin-top:6px">🗒️ ${esc(o.captain_note)}<div class="mut" style="font-size:12px">كُتبت بتاريخ ${when(o.captain_note_at||o.status_at)}</div></div>`:""}
   </div>`;
