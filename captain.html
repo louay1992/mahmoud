@@ -134,7 +134,7 @@ nav .bd{position:absolute;top:2px;inset-inline-end:calc(50% - 26px);min-width:19
 .oc2 .pi{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--bd,#e5eaf3)}
 .oc2 .pi .q{background:#eef3ff;color:var(--p);font-weight:800;border-radius:8px;padding:1px 8px;font-size:13px}.oc2 .pi .pn{flex:1;font-weight:600}.oc2 .pi .pv{font-weight:700;white-space:nowrap}
 .oc2 .sum{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:9px 0 6px;font-size:13px;color:var(--mut);flex-wrap:wrap}.oc2 .sum .tt{font-size:15px;color:#0f172a}.oc2 .sum .tt b{font-size:20px}
-.oc2 .ib.d{flex:1.4;font-size:14px}
+.oc2 .ib.d{flex:1.6;font-size:14px;gap:6px}
 .dsec{background:#f7f9fd;border-radius:14px;padding:12px 14px;margin:10px 0}.dsec .dh{font-weight:800;color:var(--p);margin-bottom:6px}
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .tile{border:0;background:var(--card);border-radius:var(--r);padding:12px 4px;text-align:center;cursor:pointer;box-shadow:var(--sh);transition:transform .15s;position:relative;overflow:hidden}
@@ -524,7 +524,7 @@ function oActs(o){
 function oc2(o){
   const k=o.status, pp=prPending(o);
   const items=o.order_items.map(i=>`<div class="pi"><span class="q">×${i.qty}</span><span class="pn">${esc(i.products?.name)}</span><span class="pv">${money(Number(i.unit_price)*i.qty)}</span></div>`).join("");
-  return `<article class="oc2 s-${k}">
+  return `<article class="oc2 s-${k}" style="cursor:pointer" onclick="if(!event.target.closest('a,button'))openOrder('${o.id}')">
     <div class="r1"><span class="no">#${o.order_no}</span><div class="nm"><b>${esc(o.customer_name)}</b><span>أُنشئ ${when(o.created_at)}</span></div>
       <div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
     <div class="info">
@@ -536,7 +536,7 @@ function oc2(o){
     ${o.note?`<div class="flag a">${ic("msg")}<div><b>ملاحظة الإداري</b> <span class="mut">· ${when(admNoteAt(o))}</span><br>${esc(o.note)}</div></div>`:""}
     ${o.captain_note&&k!=="delivered"?`<div class="flag">${ic("note")}<div><b>ملاحظتك</b> <span class="mut">· ${when(o.captain_note_at||o.status_at)}</span><br>${esc(o.captain_note)}</div></div>`:""}
     ${pp?`<div class="flag">${ic("hourglass")}<div>بانتظار موافقة الإداري على تعديل السعر (${money(pp.old_total)} ← ${money(pp.new_total)})</div></div>`:""}
-    <div class="bar"><div class="ac">${oActs(o)}</div><div class="ic"><a class="ib w" href="${waUrl(o)}" target="_blank" rel="noopener" aria-label="واتساب">${ic("wa")}</a>${mapUrl(o)?`<a class="ib m" href="${mapUrl(o)}" target="_blank" rel="noopener" aria-label="الخريطة">${ic("pin")}</a>`:""}<button class="ib d" onclick="openOrder('${o.id}')" aria-label="تفاصيل">التفاصيل</button></div></div>
+    <div class="bar"><div class="ac">${oActs(o)}</div><div class="ic"><a class="ib w" href="${waUrl(o)}" target="_blank" rel="noopener" aria-label="واتساب">${ic("wa")}</a>${mapUrl(o)?`<a class="ib m" href="${mapUrl(o)}" target="_blank" rel="noopener" aria-label="الخريطة">${ic("pin")}</a>`:""}${OPEN.includes(k)?`<button class="ib d" onclick="openStatus('${o.id}')" aria-label="تغيير الحالة">${ic("note")} تغيير الحالة</button>`:""}</div></div>
   </article>`;
 }
 function oDetail(o){
