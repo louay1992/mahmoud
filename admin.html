@@ -781,7 +781,7 @@ async function transferStock(){
 }
 
 /* ================= طلب جديد ================= */
-const WA_TPL="الاسم: \nالهاتف: \nالعنوان: \nالموقع: \nالمسوقة: \nالكابتن: \nالمنتجات:\n- اسم المنتج × العدد = سعر البيع\n- اسم منتج آخر × العدد = سعر البيع\nملاحظة: ";
+const WA_TPL="الاسم: \nالهاتف: \nالعنوان: \nالموقع: \nالمسوقة: \nملاحظة: ";
 const nrm=t=>String(t||"").replace(/[\u064B-\u0652\u0640\u200e\u200f]/g,"").replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[۰-۹]/g,d=>"۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/\*/g,"").replace(/\s+/g," ").trim().toLowerCase();
 function pickBy(list,name,key="name"){ const n=nrm(name); if(!n) return null;
   let m=list.filter(x=>nrm(x[key])===n); if(m.length===1) return m[0];
@@ -811,12 +811,14 @@ function fillFromWa(){
   if(!r.name) warn.push("لم أجد الاسم"); if(!r.phone) warn.push("لم أجد رقم الهاتف");
   if(r.mk){ const m=pickBy(D.marketers.filter(x=>x.active!==false),r.mk); if(m) $("omk").value=m.id; else warn.push("المسوقة غير معروفة: "+r.mk) }
   if(r.cap){ const c=pickBy(D.captains.filter(x=>x.active!==false),r.cap); if(c) $("oc").value=c.id; else warn.push("الكابتن غير معروف: "+r.cap) }
-  $("orows").innerHTML=""; let n=0; const act=D.products.filter(p=>p.active);
-  r.items.forEach(i=>{ const p=pickBy(act,i.name); if(!p||!(i.qty>0)){ warn.push("منتج غير معروف: "+i.name); return }
-    addRow("orows"); const row=$("orows").lastChild; row.querySelector("select").value=p.id; row.querySelector(".q").value=i.qty;
-    row.querySelector(".pr").value=(i.price!==undefined&&!isNaN(i.price))?i.price:p.price; n++ });
-  if(!n) warn.push("لم تُضاف أي منتجات"); if(!n) addRow("orows"); upd();
-  $("wares").innerHTML=warn.length?`<div style="color:#b45309;margin-top:8px">⚠ راجع قبل الإنشاء:<br>${warn.map(esc).join("<br>")}</div>`:`<div style="color:#16a34a;margin-top:8px">✓ تمت التعبئة (${n} منتج). راجع البيانات ثم اضغط إنشاء الطلب.</div>`;
+  let n=0;
+  if(r.items.length){ $("orows").innerHTML=""; const act=D.products.filter(p=>p.active);
+    r.items.forEach(i=>{ const p=pickBy(act,i.name); if(!p||!(i.qty>0)){ warn.push("منتج غير معروف: "+i.name); return }
+      addRow("orows"); const row=$("orows").lastChild; row.querySelector("select").value=p.id; row.querySelector(".q").value=i.qty;
+      row.querySelector(".pr").value=(i.price!==undefined&&!isNaN(i.price))?i.price:p.price; n++ });
+    if(!n) addRow("orows") }
+  upd();
+  $("wares").innerHTML=warn.length?`<div style="color:#b45309;margin-top:8px">⚠ راجع قبل الإنشاء:<br>${warn.map(esc).join("<br>")}</div>`:`<div style="color:#16a34a;margin-top:8px">✓ تمت تعبئة بيانات الزبون. اختر الكابتن والمنتجات ثم اضغط إنشاء الطلب.</div>`;
 }
 function copyWaTpl(){ (navigator.clipboard?navigator.clipboard.writeText(WA_TPL):Promise.reject()).then(()=>toast("تم نسخ الكلاشة","ok")).catch(()=>{ $("watpl").select(); toast("انسخها يدوياً") }) }
 function vNew(){
@@ -825,7 +827,7 @@ function vNew(){
     <textarea id="wapaste" rows="6" placeholder="الصق هنا رسالة الواتساب" style="width:100%"></textarea>
     <div class="row" style="margin-top:8px"><button class="b" onclick="fillFromWa()">تعبئة الطلب تلقائياً</button><button class="b o" onclick="copyWaTpl()">نسخ الكلاشة المطلوبة</button></div>
     <div id="wares"></div>
-    <details style="margin-top:8px"><summary class="mut">عرض الكلاشة</summary><textarea id="watpl" rows="10" readonly style="width:100%;margin-top:6px">${WA_TPL}</textarea></details></div>
+    <details style="margin-top:8px"><summary class="mut">عرض الكلاشة</summary><textarea id="watpl" rows="7" readonly style="width:100%;margin-top:6px">${WA_TPL}</textarea></details></div>
    <div class="card"><h2>طلب بيع جديد</h2>
     <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
     <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
