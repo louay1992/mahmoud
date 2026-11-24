@@ -720,7 +720,7 @@ function vWarehouses(){
     <button class="b s" style="flex:0 0 auto" onclick="CV='addw';vWarehouses();scrollTo({top:0})">+ إضافة مستودع</button></div>
   ${D.warehouses.length?`<div class="tw"><table>
    <tr><th>المستودع</th><th>الكابتن المرتبط</th></tr>
-   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td>${w.is_main?'<span class="mut">—</span>':`<select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select>`}</td></tr>`).join("")}
+   ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td><select onchange="linkWarehouse('${w.id}',this.value)">${capOptions(w.captain_id,"— بدون —")}</select></td></tr>`).join("")}
   </table></div>`:'<p class="mut">لا توجد مستودعات بعد</p>'}</div>`;
 }
 async function addCaptain(){
@@ -746,7 +746,8 @@ async function addWarehouse(){
 }
 async function linkWarehouse(id,cap){
   if(cap){ const other=D.warehouses.find(w=>w.captain_id===cap&&w.id!==id);
-    if(other){ if(!await run(sb.from("warehouses").update({captain_id:null}).eq("id",other.id))) return } }
+    if(other){ if(!await askc("الكابتن <b>"+esc(cname(cap))+"</b> مرتبط حالياً بمستودع «"+esc(other.name)+"». سيُفصل عنه ويُربط بهذا المستودع، وبعدها تُخصم مبيعاته من هنا. متابعة؟",{title:"نقل ربط الكابتن",ok:"نعم، انقله"})){ refresh(); return }
+      if(!await run(sb.from("warehouses").update({captain_id:null}).eq("id",other.id))) return } }
   if(await run(sb.from("warehouses").update({captain_id:cap||null}).eq("id",id),"تم الربط")) refresh();
 }
 
@@ -783,7 +784,7 @@ function vStock(){ ({list:vStockList,wh:vWarehouse,invoice:vInvoice,transfer:vTr
 function vStockList(){
   $("main").innerHTML = `<div class="row" style="margin-bottom:12px"><button class="b" onclick="sv('invoice')">＋ فاتورة إدخال بضاعة</button><button class="b o" onclick="sv('transfer')">⇄ نقل بين مستودعين</button></div>
   <div class="whgrid">${D.warehouses.map(w=>{const s=whStats(w);return `<div class="whcard" onclick="sv('wh','${w.id}')" style="${w.is_main?"border:2px solid var(--p)":""}">
-    <div class="whn">${w.is_main?"🏢":"🏬"} ${esc(w.name)}${w.is_main?' <span class="tag assigned" style="background:var(--p)">رئيسي</span>':""}</div><div class="mut">${w.is_main?"مصدر البضاعة للمستودعات الثانوية":w.captain_id?"👤 "+esc(cname(w.captain_id)):"مستودع ثانوي — بدون كابتن"}</div>
+    <div class="whn">${w.is_main?"🏢":"🏬"} ${esc(w.name)}${w.is_main?' <span class="tag assigned" style="background:var(--p)">رئيسي</span>':""}</div><div class="mut">${w.is_main?"مصدر البضاعة للمستودعات الثانوية"+(w.captain_id?" · 👤 "+esc(cname(w.captain_id))+" (تُخصم مبيعاته من هنا)":""):w.captain_id?"👤 "+esc(cname(w.captain_id)):"مستودع ثانوي — بدون كابتن"}</div>
     <div class="whs"><div><b>${s.types}</b><span>صنف</span></div><div><b>${s.units}</b><span>قطعة</span></div><div class="${s.low?"neg":""}"><b>${s.low}</b><span>منخفض</span></div></div></div>`}).join("")
     ||'<p class="mut">لا توجد مستودعات. أضفها من تبويب «المستودعات».</p>'}</div>`;
 }
@@ -794,7 +795,7 @@ function vWarehouse(){
   const low=Number(D.settings.low_stock||3), st=whStats(w);
   const rows=D.products.filter(p=>p.active||by[p.id]).map(p=>({p,q:by[p.id]||0})).sort((a,b)=>(b.q>0)-(a.q>0)||a.p.name.localeCompare(b.p.name,"ar"));
   const mv=D.movements.filter(m=>m.warehouse_id===w.id), inv=D.invoices.filter(i=>i.warehouse_id===w.id);
-  $("main").innerHTML = `<div class="pg"><button class="b s o" onclick="sv('list')">← كل المستودعات</button><h2>${w.is_main?"🏢":"🏬"} ${esc(w.name)}</h2><span class="mut">${w.is_main?"المستودع الرئيسي":w.captain_id?"👤 "+esc(cname(w.captain_id)):"مستودع ثانوي — بدون كابتن"}</span></div>
+  $("main").innerHTML = `<div class="pg"><button class="b s o" onclick="sv('list')">← كل المستودعات</button><h2>${w.is_main?"🏢":"🏬"} ${esc(w.name)}</h2><span class="mut">${w.is_main?"المستودع الرئيسي"+(w.captain_id?" · 👤 "+esc(cname(w.captain_id)):""):w.captain_id?"👤 "+esc(cname(w.captain_id)):"مستودع ثانوي — بدون كابتن"}</span></div>
   <div class="stats"><div class="stat" style="cursor:default"><div class="mut">أصناف متوفرة</div><div class="big">${st.types}</div></div>
     <div class="stat" style="cursor:default"><div class="mut">إجمالي القطع</div><div class="big">${st.units}</div></div>
     <div class="stat" style="cursor:default"><div class="mut">أصناف منخفضة</div><div class="big ${st.low?"neg":""}">${st.low}</div></div></div>

@@ -1377,3 +1377,5 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 -- جدول notifications (audience admin/captain, kind, level, title, body, order_id, read_by[]) + RLS للقراءة فقط.
 -- notify(...) تحفظ الإشعار وترسل push. mark_notifications_read(ids). fmt_money / order_lines.
 -- المشغّلات trg_orders_push / trg_orders_push_admin / trg_pay_push / trg_pr_push / trg_pr_push_admin أعيدت كتابتها لنصوص وافية.
+
+-- v19: حذف قيد main_no_captain؛ يمكن ربط كابتن بالمستودع الرئيسي فتُخصم مبيعاته منه (deliver_order يستخدم مستودع الكابتن).
