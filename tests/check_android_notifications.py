@@ -12,6 +12,10 @@ activity = application.find(f"activity[@{android}name='com.google.androidbrowser
 assert activity is not None, 'The browser must be able to launch the delegated permission activity'
 assert activity.get(android + 'exported') == 'false'
 assert application.find(f"service[@{android}name='com.google.androidbrowserhelper.trusted.DelegationService']") is not None
+assert root.find(f"queries/package[@{android}name='com.android.chrome']") is not None
+launcher = Path('android/app/src/main/java/app/hhyyw/twa/MainActivity.java').read_text()
+assert 'ChromeProvider.isAvailable(getPackageManager())' in launcher
+assert 'new TwaLauncher(this, ChromeProvider.PACKAGE_NAME)' in launcher
 
 gradle = Path('android/app/build.gradle').read_text()
 for role in ['admin', 'captain']:
