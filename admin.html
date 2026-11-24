@@ -211,6 +211,7 @@ tr:last-child td{border-bottom:0}
 .nb{white-space:pre-line;font-size:14px;color:#334155;margin:6px 0 8px;line-height:1.6}
 .nf{display:flex;justify-content:space-between;align-items:center}.ncat{font-size:11.5px;background:#eef2f7;color:#475569;padding:2px 9px;border-radius:99px;font-weight:700}.nlk{font-size:12.5px;color:var(--p);font-weight:700}
 .chk{display:flex;flex-wrap:wrap;gap:8px 14px}.chk label{display:flex;align-items:center;gap:6px;font-size:14px;background:#f1f5f9;padding:6px 10px;border-radius:10px}
+.pk{max-height:55vh;overflow:auto;margin:8px 0;display:flex;flex-direction:column;gap:6px}.pk label{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f1f5f9;border-radius:12px;cursor:pointer}.pk label.on{background:#ccfbf1}.pk label.dis{opacity:.45}.pk .sb{margin-right:auto;font-size:12px;color:#64748b}.pk input{width:auto}.pksearch{width:100%;margin-bottom:4px}.pkbtn{width:100%;text-align:right;background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:11px 12px;font:inherit;cursor:pointer}
 </style>
 </head>
 <body>
@@ -792,7 +793,36 @@ const waUrl=(o,t)=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURICo
 const mapUrl=o=>o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):"");
 const waText=o=>`مرحباً ${o.customer_name}، بخصوص طلبك رقم #${o.order_no}${D.settings.business_name?" من "+D.settings.business_name:""}. المبلغ المطلوب: ${money(o.total)}.`;
 const num2=x=>Number(Number(x).toFixed(2));
-function itemRows(id,priced){ return `<div class="items" id="${id}" data-priced="${priced?1:0}"></div><button class="b s o" onclick="addRow('${id}')">+ منتج</button>` }
+function pickDlg(title,items,o={}){ // items:[{id,label,sub,off}]
+  return new Promise(res=>{
+    const multi=!!o.multi, sel=new Set(o.sel||[]);
+    const d=dlgShell(`<h3>${title}</h3><input class="pksearch" id="pks" placeholder="🔍 ابحث بالاسم..." autocomplete="off"><div class="pk" id="pkl"></div><div class="btns">${multi?'<button class="b" id="pkok">إضافة المحدد</button>':""}<button class="b o" id="pkc">إلغاء</button></div>`);
+    const done=v=>{d.remove();res(v)};
+    const draw=()=>{ const q=nrm($("pks")?d.querySelector("#pks").value:"");
+      const rows=items.filter(i=>!q||nrm(i.label).includes(q));
+      d.querySelector("#pkl").innerHTML=rows.map(i=>`<label class="${sel.has(i.id)?"on":""} ${i.off?"dis":""}"><input type="${multi?"checkbox":"radio"}" name="pk" value="${esc(i.id)}" ${sel.has(i.id)?"checked":""} ${i.off?"disabled":""}> <span>${esc(i.label)}</span><span class="sb">${esc(i.sub||"")}</span></label>`).join("")||'<p class="mut" style="text-align:center">لا نتائج</p>';
+      d.querySelectorAll("#pkl input").forEach(x=>x.onchange=()=>{ if(multi){ x.checked?sel.add(x.value):sel.delete(x.value); x.parentNode.classList.toggle("on",x.checked) } else done([x.value]) }) };
+    d.querySelector("#pks").oninput=draw; draw();
+    if(o.none&&!multi){ const b=document.createElement("button"); b.className="b o"; b.textContent=o.none; b.onclick=()=>done([""]); d.querySelector(".btns").prepend(b) }
+    if(multi) d.querySelector("#pkok").onclick=()=>done([...sel]);
+    d.querySelector("#pkc").onclick=()=>done(null); d.onclick=e=>{if(e.target===d)done(null)};
+    setTimeout(()=>d.querySelector("#pks").focus(),60);
+  });
+}
+async function addProductsDlg(id){
+  const have=new Set([...$(id).children].map(r=>r.querySelector("select").value));
+  const items=D.products.filter(p=>p.active).map(p=>({id:p.id,label:p.name,sub:p.price!==undefined?money(p.price):"",off:have.has(p.id)}));
+  if(!items.length) return toast("لا توجد منتجات");
+  const r=await pickDlg("اختر منتجاً أو أكثر",items,{multi:true}); if(!r||!r.length) return;
+  r.forEach(pid=>{ addRow(id); const row=$(id).lastChild; row.querySelector("select").value=pid; rowPick(row.querySelector("select")) });
+}
+async function pickMarketer(){
+  const cur=$("omk").value;
+  const items=D.marketers.filter(m=>m.active||m.id===cur).map(m=>({id:m.id,label:m.name,sub:m.governorate||""}));
+  const r=await pickDlg("اختيار المسوّقة",items,{sel:[cur],none:"بدون مسوّقة"}); if(r) setMk(r[0]);
+}
+function setMk(id){ const m=D.marketers.find(x=>x.id===id); $("omk").value=m?m.id:""; $("omkb").textContent=m?"👤 "+m.name+(m.governorate?" — "+m.governorate:""):"— اختر المسوّقة (ابحث) —"; upd() }
+function itemRows(id,priced){ const pop=id==="orows"||id==="erows"; return `<div class="items" id="${id}" data-priced="${priced?1:0}"></div>`+(pop?`<button class="b s o" onclick="addProductsDlg('${id}')">+ إضافة منتجات للطلب</button>`:`<button class="b s o" onclick="addRow('${id}')">+ منتج</button>`) }
 function addRow(id){
   const priced=$(id).dataset.priced==="1";
   const d=document.createElement("div"); d.className="row";
@@ -915,7 +945,7 @@ function fillFromWa(){
   $("on").value=r.name; $("op").value=r.phone;
   if(r.gov){ const g=GOVS.find(x=>nrm(x)===nrm(r.gov))||GOVS.find(x=>nrm(r.gov).includes(nrm(x))); if(g){ $("og").value=g } else warn.push("محافظة غير معروفة: "+r.gov) } $("oa").value=r.addr; $("om").value=r.map; $("onote").value=r.note;
   if(!r.name) warn.push("لم أجد الاسم"); if(!r.phone) warn.push("لم أجد رقم الهاتف");
-  if(r.mk&&$("omk")){ const m=pickBy(D.marketers.filter(x=>x.active!==false),r.mk); if(m) $("omk").value=m.id; else warn.push("المسوقة غير معروفة: "+r.mk) }
+  if(r.mk&&$("omk")){ const m=pickBy(D.marketers.filter(x=>x.active!==false),r.mk); if(m) setMk(m.id); else warn.push("المسوقة غير معروفة: "+r.mk) }
   if(r.cap&&$("oc")){ const c=pickBy(D.captains.filter(x=>x.active!==false),r.cap); if(c) $("oc").value=c.id; else warn.push("الكابتن غير معروف: "+r.cap) }
   if($("og").value) autoCap();
   let n=0;
@@ -923,7 +953,7 @@ function fillFromWa(){
     r.items.forEach(i=>{ const p=pickBy(act,i.name); if(!p||!(i.qty>0)){ warn.push("منتج غير معروف: "+i.name); return }
       addRow("orows"); const row=$("orows").lastChild; row.querySelector("select").value=p.id; row.querySelector(".q").value=i.qty;
       row.querySelector(".pr").value=(i.price!==undefined&&!isNaN(i.price))?i.price:p.price; n++ });
-    if(!n) addRow("orows") }
+    }
   upd();
   $("wares").innerHTML=warn.length?`<div style="color:#b45309;margin-top:8px">⚠ راجع قبل الإنشاء:<br>${warn.map(esc).join("<br>")}</div>`:`<div style="color:#16a34a;margin-top:8px">✓ تمت تعبئة بيانات الزبون. اختر الكابتن والمنتجات ثم اضغط إنشاء الطلب.</div>`;
 }
@@ -952,12 +982,11 @@ function vNew(){
     <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
     <div class="row"><select id="og" onchange="autoCap()">${govOptions("","— محافظة الطلب —")}</select></div>
-    ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<select id="omk" onchange="upd()">${mkOptions("","— بدون مسوّقة —")}</select>`:""}</div><div id="ohint" class="mut" style="margin:2px 0 6px;font-size:13px"></div>`:""}
+    ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<input type="hidden" id="omk" value=""><button type="button" class="pkbtn" id="omkb" onclick="pickMarketer()">— اختر المسوّقة (ابحث) —</button>`:""}</div><div id="ohint" class="mut" style="margin:2px 0 6px;font-size:13px"></div>`:""}
     ${ACC.role==="staff"?`<p class="mut" style="margin:4px 0">اكتب <b>سعر البيع</b> لكل منتج.</p>`:`<p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>`}
     ${itemRows("orows",true)}<br><br>
     <div id="otot" class="mut"></div><br>
     <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
-  addRow("orows");
 }
 function upd(){ updFor("orows","otot",()=>{const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)) }
 function updFor(rid,tid,feeFn){
