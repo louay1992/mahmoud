@@ -184,17 +184,18 @@ class DeliveryPush {
   }
 
   async unsubscribe() {
+    this.saved = false;
     if (this.native?.expected) {
       await this.native.unbind();
-      this.saved = false;
       return;
     }
-    const reg = await this.registration();
-    const sub = await reg.pushManager.getSubscription();
+    const reg = await navigator.serviceWorker?.getRegistration(this.scope);
+    const sub = await reg?.pushManager.getSubscription();
     if (sub) {
+      // Disable browser delivery even when the account's RPC is offline or fails.
+      await sub.unsubscribe();
       const result = await this.remove({ p_endpoint: sub.endpoint });
       if (result?.error) throw new Error(result.error.message);
-      await sub.unsubscribe();
     }
     this.saved = false;
     await this.retireLegacyEndpoint(null);

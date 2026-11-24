@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function fixture(scope = 'captain', search = '?native=1') {
+function fixture(scope = 'captain', search = '?native=1', storage = new Map()) {
   const listeners = {}, calls = [];
   const context = vm.createContext({ URLSearchParams, setTimeout, clearTimeout, Map, Event,
     location: { origin: 'https://hhyyw.netlify.app', search }, document: { referrer: '' }, navigator: { userAgent: 'test' },
+    localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
     addEventListener: (name, fn) => listeners[name] = fn, dispatchEvent() {} });
   vm.runInContext(fs.readFileSync('native-push.js', 'utf8'), context);
   const client = new context.NativeDeliveryPush({ role: scope, session: async () => ({ data: { session: { access_token: 'jwt-current', user: { id: 'current-user' } } } }) });
@@ -17,7 +18,7 @@ function fixture(scope = 'captain', search = '?native=1') {
   } };
   const connect = (origin = context.location.origin, role = scope) => listeners.message({ origin, ports: [port],
     data: JSON.stringify({ type: 'delivery.native.ready', version: 1, role, permission: 'granted', configured: true, saved: false }) });
-  return { client, calls, connect, port };
+  return { client, calls, connect, port, storage };
 }
 test('native channel rejects other origins and the other application role', () => {
   const f = fixture(); f.connect('https://evil.example'); assert.equal(f.client.port, undefined);
@@ -42,6 +43,14 @@ test('native errors are preserved rather than reported as successful activation'
   const f = fixture(); f.connect();
   f.port.postMessage = raw => { const { id } = JSON.parse(raw); queueMicrotask(() => f.port.onmessage({ data: { id, ok: false, saved: false, error: 'FCM unavailable' } })); };
   await assert.rejects(f.client.bind(), /FCM unavailable/); assert.equal(f.client.enabled, false);
+});
+
+test('failed native logout is persisted and retried before binding another account',async()=>{
+ const f=fixture();f.connect();
+ f.port.postMessage=raw=>{const {id}=JSON.parse(raw);queueMicrotask(()=>f.port.onmessage({data:{id,ok:false,saved:true,error:'channel failure'}}))};
+ await assert.rejects(f.client.unbind(),/channel failure/);assert.equal(f.storage.get('delivery-native-unbind-captain'),'1');assert.equal(f.client.enabled,false);
+ const next=fixture('captain','?native=1',f.storage);next.connect();await next.client.bind();
+ assert.deepEqual(next.calls.map(x=>x.type),['unbind','bind']);assert.equal(f.storage.has('delivery-native-unbind-captain'),false);
 });
 
 test('FCM endpoint derives ownership and hashes the installation secret', async () => {
