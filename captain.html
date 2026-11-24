@@ -106,6 +106,27 @@ nav .bd{position:absolute;top:2px;inset-inline-end:calc(50% - 26px);min-width:19
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes zoom{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:none}}
 
+
+.sbar{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;margin:0 -4px;scrollbar-width:none}.sbar::-webkit-scrollbar{display:none}
+.sch{flex:0 0 auto;display:flex;align-items:center;gap:7px;border:0;background:#fff;box-shadow:var(--sh);border-radius:24px;padding:9px 14px;font:inherit;font-weight:700;font-size:14.5px;cursor:pointer;color:#334155;transition:transform .12s}
+.sch:active{transform:scale(.95)}.sch .n{background:#eef2f7;border-radius:12px;padding:0 9px;font-size:13px;min-width:24px;text-align:center}
+.sch.on{background:var(--c);color:#fff;box-shadow:0 6px 16px rgba(0,0,0,.18)}.sch.on .n{background:rgba(255,255,255,.28);color:#fff}
+.sch.hot:not(.on) .n{background:#f59e0b;color:#fff;animation:pulse 1.8s infinite}
+.olist{display:grid;gap:12px}
+@media(min-width:760px){.olist{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}}
+.oc2{background:#fff;border-radius:18px;box-shadow:var(--sh);padding:14px;border-inline-start:5px solid var(--sc,#94a3b8);animation:up .35s both}
+.oc2 .r1{display:flex;align-items:flex-start;gap:10px}
+.oc2 .no{background:#eef3ff;color:var(--p);font-weight:800;border-radius:10px;padding:4px 9px;font-size:13px}
+.oc2 .nm{flex:1;min-width:0}.oc2 .nm b{display:block;font-size:17px;line-height:1.3}.oc2 .nm span{font-size:12.5px;color:var(--mut)}
+.oc2 .amt{font-size:21px;font-weight:800;white-space:nowrap;text-align:end;line-height:1.1}.oc2 .amt small{display:block;font-size:11.5px;color:var(--mut);font-weight:600}
+.oc2 .ln{display:flex;gap:8px;align-items:flex-start;margin-top:9px;font-size:14.5px;line-height:1.5;color:#334155}.oc2 .ln svg{flex:0 0 auto;margin-top:3px;color:#94a3b8}
+.oc2 .ln.ad{font-weight:700;color:#0f172a}.oc2 .ln.ad svg{color:#ef4444}
+.oc2 .flag{display:flex;gap:8px;align-items:flex-start;margin-top:9px;border-radius:12px;padding:8px 10px;font-size:13.5px;background:#fff7e0;color:#7a4b00}.oc2 .flag.a{background:#eef3ff;color:#1e3a8a}
+.oc2 .bar{display:flex;gap:8px;margin-top:12px;align-items:stretch;flex-wrap:wrap}.oc2 .bar .ac{flex:1 1 200px;display:flex;gap:8px;min-width:0}.oc2 .bar .ic{display:flex;gap:8px;flex:1 1 100%}
+.oc2 .bar .btn{flex:1 1 0;min-width:0;min-height:50px;font-size:15px;white-space:nowrap;padding:0 8px}
+.oc2 .ib{flex:1;min-height:46px;border-radius:14px;display:grid;place-items:center;border:0;cursor:pointer;text-decoration:none}
+.oc2 .ib.c{background:#e3f8ea;color:#15803d}.oc2 .ib.w{background:#e3f8ea;color:#128c4a}.oc2 .ib.m{background:#e8f0ff;color:#1d4ed8}.oc2 .ib.d{background:#f1f5f9;color:#475569;font-weight:800;font-size:13px}
+.dsec{background:#f7f9fd;border-radius:14px;padding:12px 14px;margin:10px 0}.dsec .dh{font-weight:800;color:var(--p);margin-bottom:6px}
 .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .tile{border:0;background:var(--card);border-radius:var(--r);padding:12px 4px;text-align:center;cursor:pointer;box-shadow:var(--sh);transition:transform .15s;position:relative;overflow:hidden}
 .tile:active{transform:scale(.94)}
@@ -476,7 +497,7 @@ const GROUPS=[
  ["other","ملاحظات أخرى","طلبات عليها ملاحظة خاصة.",true],
  ["cancelled","ملغية","يمكنك استرجاع أي طلب ملغي ليعود «جديداً».",false],
  ["delivered","مُسلَّمة","",false]];
-const itemsLine=o=>`<div class="items">${o.order_items.map(i=>{const d=Number(i.unit_price)-Number(i.list_price);return `<div class="it"><span class="q">×${i.qty}</span><span class="nm">${esc(i.products?.name)}${d?`<small>سعر المنتج ${money(i.list_price)}</small>`:""}</span><span class="pr">${money(i.unit_price)}</span></div>`}).join("")}</div>`;
+const itemsLine=o=>`<div class="items">${o.order_items.map(i=>{const d=Number(i.unit_price)-Number(i.list_price);return `<div class="it"><span class="q">×${i.qty}</span><span class="nm">${esc(i.products?.name)}</span><span class="pr">${money(i.unit_price)}</span></div>`}).join("")}</div>`;
 function prPending(o){ return (D.pr[o.id]||[]).find(x=>x.status==="pending") }
 function prBox(o){
   const l=(D.pr[o.id]||[])[0]; if(!l) return "";
@@ -484,49 +505,64 @@ function prBox(o){
   if(l.status!=="pending"&&(Date.now()-new Date(l.decided_at))>3*864e5) return "";
   return `<div class="pr-box" style="background:${st[1]};color:${st[2]}"><b>${ic(st[3])} ${st[0]}</b><div>الإجمالي: ${money(l.old_total)} ← <b>${money(l.new_total)}</b></div><div style="opacity:.85">السبب: ${esc(l.reason)}</div>${l.admin_note?`<div>ملاحظة الإداري: ${esc(l.admin_note)}</div>`:""}</div>`;
 }
-function oCard(o){
-  const evs=D.ev[o.id]||[], k=o.status;
-  const acts = k==="assigned" ? `<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("truck")} قيد التوصيل</button><button class="btn btn-o" onclick="openStatus('${o.id}')">${ic("note")} الحالة</button>`
-   : k==="in_delivery" ? `<button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button><button class="btn btn-o" onclick="openStatus('${o.id}')">${ic("note")} الحالة</button>`
-   : (k==="no_answer"||k==="closed"||k==="other") ? `<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("refresh")} إعادة المحاولة</button><button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button><button class="btn btn-o" onclick="openStatus('${o.id}')">${ic("note")} الحالة</button>`
+function oActs(o){
+  const k=o.status;
+  return k==="assigned" ? `<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("truck")} قيد التوصيل</button>`
+   : k==="in_delivery" ? `<button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button>`
+   : (k==="no_answer"||k==="closed"||k==="other") ? `<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("refresh")} إعادة المحاولة</button><button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button>`
    : k==="cancelled" ? `<button class="btn btn-p" onclick="restore('${o.id}')">${ic("undo")} استرجاع الطلب</button>` : "";
-  const priceBtns=OPEN.includes(k)?`<div class="acts2">${!prPending(o)?`<button class="btn btn-t btn-sm" onclick="openPriceReq('${o.id}')">${ic("tag")} طلب تعديل السعر</button>`:""}${D.settings.captain_can_edit_price==="true"?`<button class="btn btn-t btn-sm" onclick="openPrices('${o.id}')">${ic("cash")} تعديل مباشر</button>`:""}</div>`:"";
-  return `<article class="card oc s-${k}">
-    <div class="oc-h"><span class="no">#${o.order_no}</span><div class="who"><b>${esc(o.customer_name)}</b><span class="mut">${dt(o.created_at)}</span></div><div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
-    <a class="call" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
-    <div class="qa"><a class="qb wa" href="${waUrl(o)}" target="_blank" rel="noopener">${ic("wa")} واتساب</a>${mapUrl(o)?`<a class="qb mp" href="${mapUrl(o)}" target="_blank" rel="noopener">${ic("pin")} الخريطة</a>`:""}</div>
-    ${o.customer_address?`<div class="addr">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}
-    ${itemsLine(o)}
-    <div class="tot"><div><div class="mut">المطلوب من الزبون</div><div class="amt">${money(o.total)}</div></div><div class="mut" style="text-align:end">منتجات ${money(o.items_total)}<br>توصيل ${money(o.delivery_fee)}</div></div>
-    ${o.note?`<div class="note adm">${ic("msg")}<div><b>من الإداري:</b> ${esc(o.note)}<div class="mut" style="font-size:12px">بتاريخ ${when(admNoteAt(o))}</div></div></div>`:""}
-    ${o.captain_note?`<div class="note">${ic("note")}<div>${esc(o.captain_note)}<div class="mut" style="font-size:12px">كتبتها بتاريخ ${when(o.captain_note_at||o.status_at)}</div></div></div>`:""}
-    ${prBox(o)}
-    ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><b style="color:${SCOL[e.status]||"#64748b"}">${ST[e.status]||e.status}</b> · ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
-    ${acts?`<div class="acts">${acts}</div>`:""}${priceBtns}
-    ${k==="delivered"?`<div class="mut" style="margin-top:6px">${ic("checkc")} سُلِّم ${dt(o.delivered_at)}</div>`:""}
+}
+function oc2(o){
+  const k=o.status, pp=prPending(o), items=o.order_items.map(i=>`${esc(i.products?.name)} ×${i.qty}`).join("، ");
+  return `<article class="oc2 s-${k}">
+    <div class="r1"><span class="no">#${o.order_no}</span><div class="nm"><b>${esc(o.customer_name)}</b><span>${ST[k]} · ${when(o.status_at||o.created_at)}</span></div><div class="amt">${money(o.total)}<small>المطلوب</small></div></div>
+    ${o.customer_address?`<div class="ln ad">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}
+    <div class="ln">${ic("box")}<span>${items}</span></div>
+    ${o.note?`<div class="flag a">${ic("msg")}<div><b>الإداري:</b> ${esc(o.note)}</div></div>`:""}
+    ${o.captain_note&&k!=="delivered"?`<div class="flag">${ic("note")}<div>${esc(o.captain_note)}</div></div>`:""}
+    ${pp?`<div class="flag">${ic("hourglass")}<div>بانتظار موافقة الإداري على تعديل السعر</div></div>`:""}
+    <div class="bar"><div class="ac">${oActs(o)}</div><div class="ic"><a class="ib c" href="tel:${esc(o.customer_phone)}" aria-label="اتصال">${ic("phone")}</a><a class="ib w" href="${waUrl(o)}" target="_blank" rel="noopener" aria-label="واتساب">${ic("wa")}</a>${mapUrl(o)?`<a class="ib m" href="${mapUrl(o)}" target="_blank" rel="noopener" aria-label="الخريطة">${ic("pin")}</a>`:""}<button class="ib d" onclick="openOrder('${o.id}')" aria-label="تفاصيل">⋯</button></div></div>
   </article>`;
 }
+function oDetail(o){
+  const evs=D.ev[o.id]||[], k=o.status;
+  const priceBtns=OPEN.includes(k)?`<div class="acts2" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-o btn-sm" onclick="closeStatus();openStatus('${o.id}')">${ic("note")} تغيير الحالة / ملاحظة</button>${!prPending(o)?`<button class="btn btn-t btn-sm" onclick="closeStatus();openPriceReq('${o.id}')">${ic("tag")} طلب تعديل السعر</button>`:""}${D.settings.captain_can_edit_price==="true"?`<button class="btn btn-t btn-sm" onclick="closeStatus();openPrices('${o.id}')">${ic("cash")} تعديل مباشر</button>`:""}</div>`:"";
+  return `<div class="r1" style="display:flex;justify-content:space-between;gap:10px"><div><b style="font-size:18px">#${o.order_no} — ${esc(o.customer_name)}</b><div class="mut">${dt(o.created_at)}</div></div><div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
+   <div class="dsec"><div class="dh">الزبون</div><a class="call" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
+     <div class="qa"><a class="qb wa" href="${waUrl(o)}" target="_blank" rel="noopener">${ic("wa")} واتساب</a>${mapUrl(o)?`<a class="qb mp" href="${mapUrl(o)}" target="_blank" rel="noopener">${ic("pin")} الخريطة</a>`:""}</div>
+     ${o.customer_address?`<div class="addr">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:""}</div>
+   <div class="dsec"><div class="dh">المنتجات</div>${itemsLine(o)}
+     <div class="tot"><div><div class="mut">المطلوب من الزبون</div><div class="amt">${money(o.total)}</div></div><div class="mut" style="text-align:end">منتجات ${money(o.items_total)}<br>توصيل ${money(o.delivery_fee)}</div></div></div>
+   ${(o.note||o.captain_note||prBox(o))?`<div class="dsec"><div class="dh">الملاحظات</div>
+    ${o.note?`<div class="note adm">${ic("msg")}<div><b>من الإداري:</b> ${esc(o.note)}<div class="mut" style="font-size:12px">بتاريخ ${when(admNoteAt(o))}</div></div></div>`:""}
+    ${o.captain_note?`<div class="note">${ic("note")}<div>${esc(o.captain_note)}<div class="mut" style="font-size:12px">كتبتها بتاريخ ${when(o.captain_note_at||o.status_at)}</div></div></div>`:""}
+    ${prBox(o)}</div>`:""}
+   ${evs.length>1?`<details class="tl"><summary>سجل الطلب (${evs.length})</summary>${evs.map(e=>`<div><b style="color:${SCOL[e.status]||"#64748b"}">${ST[e.status]||e.status}</b> · ${dt(e.created_at)}${e.note?" — "+esc(e.note):""}</div>`).join("")}</details>`:""}
+   ${k==="delivered"?`<div class="mut" style="margin-top:6px">${ic("checkc")} سُلِّم ${dt(o.delivered_at)}</div>`:""}${priceBtns}`;
+}
+function openOrder(id){ const o=D.orders.find(x=>x.id===id); if(o) sheet("تفاصيل الطلب",oDetail(o)) }
 function matches(o){ const t=q.trim().toLowerCase(); return !t||[o.customer_name,o.customer_phone,String(o.order_no)].some(v=>String(v||"").toLowerCase().includes(t)) }
 const EMPTY_SVG='<svg viewBox="0 0 80 80" fill="none"><circle cx="40" cy="40" r="34" fill="#eef3ff"/><path d="M22 34l18-10 18 10v20L40 64 22 54z" fill="#fff" stroke="#93b4f8" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 34l18 10 18-10M40 44v20" stroke="#93b4f8" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+let TF=null;
+const SBAR=[["assigned","جديدة"],["in_delivery","قيد التوصيل"],["no_answer","لم يتم الرد"],["closed","مغلق"],["other","ملاحظات"],["delivered","مُسلَّمة"],["cancelled","ملغية"]];
 function vOrders(){
   const cnt=k=>D.orders.filter(o=>o.status===k).length;
+  if(!TF||!SBAR.some(x=>x[0]===TF)) TF=["assigned","in_delivery","no_answer","closed","other"].find(k=>cnt(k)>0)||"assigned";
   const nb=notifState()==="default"&&!localStorage.getItem("nb_dismiss");
   $("main").innerHTML = `${nb?`<div class="banner n">${ic("bell")}<div><b>فعّل الإشعارات</b><span>لتصلك الطلبات الجديدة وملاحظات الإداري فوراً</span></div><button class="btn" onclick="bellClick().then(()=>render())">تفعيل</button></div>`:""}
-  <div class="tiles">${GROUPS.filter(g=>g[0]!=="delivered").map(([k,l])=>{const n=cnt(k);return `<button class="tile ${n?(k==="assigned"||k==="no_answer"?"hot":""):"z"}" onclick="jump('${k}')"><div class="ico" style="background:${SCOL[k]}">${ic(SICO[k])}</div><div class="c">${n}</div><div class="l">${l}</div></button>`}).join("")}</div>
-  <div style="display:flex;gap:8px;margin-bottom:14px"><div class="search">${ic("search")}<input id="oq" placeholder="بحث بالاسم أو الموبايل أو الرقم" value="${esc(q)}" oninput="q=this.value;drawGroups()"></div></div>
+  <div class="sbar" id="sbar">${SBAR.map(([k,l])=>{const n=cnt(k);return `<button class="sch ${TF===k?"on":""} ${n&&(k==="assigned"||k==="no_answer")?"hot":""}" style="--c:${SCOL[k]}" onclick="TF='${k}';vOrders();scrollTo({top:0})">${l}<span class="n">${n}</span></button>`}).join("")}</div>
+  <div class="search" style="margin-bottom:12px">${ic("search")}<input id="oq" placeholder="بحث بالاسم أو الموبايل أو الرقم" value="${esc(q)}" oninput="q=this.value;drawOrders()"></div>
   <div id="groups"></div>`;
-  drawGroups();
+  drawOrders();
+  const on=document.querySelector("#sbar .on"); on&&on.scrollIntoView({inline:"center",block:"nearest"});
 }
+function drawOrders(){
+  const t=q.trim(), all=D.orders.filter(o=>o.status===TF), hint=(GROUPS.find(g=>g[0]===TF)||[])[2];
+  const list=(t?D.orders.filter(matches):all), lim=100;
+  $("groups").innerHTML=`${!t&&hint?`<div class="hint" style="padding:0 4px 10px;color:var(--mut);font-size:13.5px">${hint}</div>`:""}`+(list.length?`<div class="olist">${list.slice(0,lim).map(oc2).join("")}</div>`:`<div class="empty">${EMPTY_SVG}<b>لا توجد طلبات</b></div>`);
+}
+const jump=k=>{TF=k;vOrders()};
 let GO={};
-function drawGroups(){
-  $("groups").innerHTML = GROUPS.map(([k,l,hint,open])=>{
-    const all=D.orders.filter(o=>o.status===k), list=all.filter(matches), lim=k==="delivered"?20:100;
-    const isOpen = ("g_"+k) in GO ? GO["g_"+k] : (open&&all.length>0);
-    return `<details class="grp" id="g_${k}" ontoggle="GO[this.id]=this.open" ${isOpen||(q.trim()&&list.length)?"open":""}><summary><span class="gi" style="background:${SCOL[k]}">${ic(SICO[k])}</span>${l}<span class="n">${all.length}</span><span class="chev">${ic("chev")}</span></summary>
-      ${hint?`<div class="hint">${hint}</div>`:""}
-      <div class="inner">${list.length?list.slice(0,lim).map(oCard).join(""):`<div class="empty" style="grid-column:1/-1">${EMPTY_SVG}<b>لا توجد طلبات</b></div>`}${list.length>lim?`<p class="mut">يُعرض آخر ${lim} فقط.</p>`:""}</div></details>`}).join("");
-}
-function jump(k){ const d=$("g_"+k); if(!d) return; d.open=true; GO["g_"+k]=true; d.scrollIntoView({behavior:"smooth",block:"start"}) }
 
 /* ===== النوافذ ===== */
 function ask(title,html,ok,cls,icon){
@@ -574,7 +610,7 @@ async function sendPriceReq(id){
 function openPrices(id){
   const o=D.orders.find(x=>x.id===id);
   sheet(`تعديل سعر الطلب #${o.order_no}`,`
-   ${o.order_items.map(i=>`<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><div style="flex:1"><b>${esc(i.products?.name)}</b> × ${i.qty}<div class="mut">سعر المنتج: ${money(i.list_price)}</div></div>
+   ${o.order_items.map(i=>`<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><div style="flex:1"><b>${esc(i.products?.name)}</b> × ${i.qty}</div>
      <input class="tx pp" style="max-width:130px;margin:0" data-id="${i.id}" data-old="${i.unit_price}" data-list="${i.list_price}" data-q="${i.qty}" type="number" min="0" step="0.01" value="${i.unit_price}" oninput="pricesTotal()"></div>`).join("")}
    <div id="pm_t" class="mut" style="margin:6px 0"></div>
    <textarea id="pm_note" rows="2" placeholder="سبب تعديل السعر (مطلوب)"></textarea>
@@ -583,7 +619,7 @@ function openPrices(id){
 }
 function pricesTotal(){
   let sum=0,lst=0; document.querySelectorAll(".pp").forEach(e=>{sum+=(parseFloat(e.value)||0)*e.dataset.q; lst+=e.dataset.list*e.dataset.q});
-  $("pm_t").innerHTML=`إجمالي المنتجات: <b>${money(sum)}</b> · بسعر المنتج: ${money(lst)}`;
+  $("pm_t").innerHTML=`إجمالي المنتجات: <b>${money(sum)}</b>`;
 }
 async function savePrices(id){
   const note=$("pm_note").value.trim(); if(!note) return toast("اكتب سبب تعديل السعر","err");
