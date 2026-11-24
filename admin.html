@@ -689,11 +689,11 @@ const backBtn=(w)=>`<button class="b s o" style="margin-bottom:10px" onclick="CV
 function vCaptains(){
   if(CV==="addc"){
     $("main").innerHTML = backBtn("vCaptains")+`<div class="card"><h2>إضافة كابتن توصيل</h2>
-    <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="الموبايل" dir="ltr">
-      <input id="cem" type="email" placeholder="بريد دخوله (البريد = اسم المستخدم)" dir="ltr"><input id="cf" type="number" min="0" step="0.01" placeholder="أجور التوصيل"></div>
+    <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="رقم الموبايل (هو اسم المستخدم للدخول)" dir="ltr" inputmode="tel">
+      <input id="cf" type="number" min="0" step="0.01" placeholder="أجور التوصيل"></div>
     <div class="row"><input id="cpw" dir="ltr" placeholder="كلمة مرور الدخول (اختياري الآن، 6 أحرف على الأقل)"></div>
     <button class="b" onclick="addCaptain()">حفظ</button>
-    <p class="mut">إذا كتبتَ البريد وكلمة المرور يصبح الكابتن جاهزاً للدخول فوراً. يمكنك تغيير كلمة المرور لاحقاً من زر «كلمة المرور».</p></div>`;
+    <p class="mut">إذا كتبتَ رقم الموبايل وكلمة المرور يصبح الكابتن جاهزاً للدخول فوراً. يمكنك تغيير كلمة المرور لاحقاً من زر «كلمة المرور».</p></div>`;
     return;
   }
   $("main").innerHTML = `
@@ -702,7 +702,7 @@ function vCaptains(){
   ${D.captains.length?D.captains.map(c=>{const w=D.warehouses.find(w=>w.id===c.warehouse_id);return `<div class="card" style="box-shadow:none;border:1px solid #e1ecea;margin:0 0 12px;${c.active?"":"opacity:.55"}">
     <div class="row" style="justify-content:space-between;align-items:center;margin:0 0 6px"><b style="font-size:17px">${esc(c.name)}</b>${c.active?"":'<span class="mut">موقوف</span>'}</div>
     <div class="dr"><span class="dl">الموبايل</span><span class="dv2" dir="ltr">${esc(c.phone)||"—"}</span></div>
-    <div class="dr"><span class="dl">بريد الدخول</span><span class="dv2" dir="ltr">${esc(c.email)||"—"}</span></div>
+    <div class="dr"><span class="dl">اسم الدخول</span><span class="dv2" dir="ltr">${esc(c.email&&!c.email.endsWith("@captain.local")?c.email:c.phone)||"—"}</span></div>
     <div class="dr"><span class="dl">أجور التوصيل</span><span class="dv2">${money(c.delivery_fee)}</span></div>
     <div class="dr"><span class="dl">المستودع</span><span class="dv2">${w?esc(w.name):'<span class="neg">غير مرتبط</span>'}</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="b s o" onclick="editCaptain('${c.id}')">تعديل</button><button class="b s" onclick="setCapPw('${c.id}')">🔑 كلمة المرور</button><button class="b s o" onclick="toggleCaptain('${c.id}',${!c.active})">${c.active?"إيقاف":"تفعيل"}</button></div></div>`}).join(""):'<p class="mut">لا يوجد كباتن بعد</p>'}</div>`;
@@ -714,8 +714,8 @@ async function callSetPw(captain_id,password,email){
 }
 async function setCapPw(id){
   const c=D.captains.find(x=>x.id===id);
-  if(!c.email) return toast("أضف بريد الدخول للكابتن أولاً من «تعديل»","err");
-  const f=await askf("كلمة مرور الكابتن "+c.name,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",ph:"اكتبها هنا وأعطها للكابتن",dir:"ltr"}],"تعيين",{msg:"اسم المستخدم (البريد): <b dir=\"ltr\">"+esc(c.email)+"</b><br>إذا لم يكن له حساب دخول سيُنشأ الآن."}); if(!f) return;
+  if(!c.email) return toast("أضف رقم موبايل الكابتن أولاً من «تعديل»","err");
+  const f=await askf("كلمة مرور الكابتن "+c.name,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",ph:"اكتبها هنا وأعطها للكابتن",dir:"ltr"}],"تعيين",{msg:"اسم المستخدم (رقم الموبايل): <b dir=\"ltr\">"+esc(c.email.endsWith("@captain.local")?c.phone:c.email)+"</b><br>إذا لم يكن له حساب دخول سيُنشأ الآن."}); if(!f) return;
   const p=f.p.trim(); if(p.length<6) return toast("كلمة المرور قصيرة (6 أحرف على الأقل)","err");
   try{ const j=await run2(callSetPw(id,p)); toast(j.created?"تم إنشاء حساب الدخول وتعيين كلمة المرور":"تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
@@ -748,11 +748,12 @@ function vWarehouses(){
    ${D.warehouses.map(w=>`<tr><td>${w.is_main?"🏢 ":""}${esc(w.name)}${w.is_main?' <span class="mut">(رئيسي — مصدر البضاعة)</span>':""}</td><td>${(w.governorates||[]).length?esc(w.governorates.join("، ")):'<span class="mut">—</span>'}</td><td>${whCapNames(w)||'<span class="mut">—</span>'}</td><td><button class="b s o" onclick="EWID='${w.id}';CV='editw';vWarehouses();scrollTo({top:0})">تعديل</button></td></tr>`).join("")}
   </table></div>`:'<p class="mut">لا توجد مستودعات بعد</p>'}</div>`;
 }
+const capEmail=(ph,old)=>{ const k=normPh(ph); const o=String(old||"").toLowerCase(); if(o&&!o.endsWith("@captain.local")) return o; return k?k+"@captain.local":null };
 async function addCaptain(){
   const name=$("cn").value.trim(); if(!name) return toast("أدخل الاسم");
-  const rec={name, phone:$("cph").value.trim()||null, email:$("cem").value.trim().toLowerCase()||null, delivery_fee:parseFloat($("cf").value)||0};
+  const rec={name, phone:$("cph").value.trim()||null, email:capEmail($("cph").value), delivery_fee:parseFloat($("cf").value)||0};
   const pw=($("cpw").value||"").trim();
-  if(pw&&(pw.length<6||!rec.email)) return toast("كلمة المرور 6 أحرف على الأقل وتحتاج بريداً","err");
+  if(pw&&(pw.length<6||!rec.email)) return toast("كلمة المرور 6 أحرف على الأقل، ويلزم رقم موبايل","err");
   const {data,error}=await sb.from("captains").insert(rec).select("id").single();
   if(error) return toast(error.message,"err");
   if(pw){ try{ await callSetPw(data.id,pw); toast("تمت إضافة الكابتن وتعيين كلمة المرور","ok") }catch(e){ toast("أُضيف الكابتن لكن تعذّر تعيين كلمة المرور: "+e.message,"err") } } else toast("تمت الإضافة","ok");
@@ -760,9 +761,9 @@ async function addCaptain(){
 }
 async function editCaptain(id){
   const c=D.captains.find(x=>x.id===id);
-  const f=await askf("تعديل الكابتن",[{k:"name",l:"الاسم",v:c.name},{k:"phone",l:"الموبايل",v:c.phone||"",dir:"ltr"},{k:"email",l:"بريد الدخول",v:c.email||"",dir:"ltr"},{k:"fee",l:"أجور التوصيل (تؤثر على الطلبات الجديدة فقط)",t:"number",v:c.delivery_fee}]); if(!f) return;
+  const f=await askf("تعديل الكابتن",[{k:"name",l:"الاسم",v:c.name},{k:"phone",l:"الموبايل (اسم المستخدم للدخول)",v:c.phone||"",dir:"ltr"},{k:"fee",l:"أجور التوصيل (تؤثر على الطلبات الجديدة فقط)",t:"number",v:c.delivery_fee}]); if(!f) return;
   const fee=parseFloat(f.fee); if(!f.name.trim()||isNaN(fee)||fee<0) return toast("بيانات غير صحيحة","err");
-  if(await run(sb.from("captains").update({name:f.name.trim(),phone:f.phone.trim()||null,email:f.email.trim().toLowerCase()||null,delivery_fee:fee}).eq("id",id),"تم الحفظ")) refresh();
+  if(await run(sb.from("captains").update({name:f.name.trim(),phone:f.phone.trim()||null,email:capEmail(f.phone,c.email),delivery_fee:fee}).eq("id",id),"تم الحفظ")) refresh();
 }
 async function toggleCaptain(id,v){ if(await run(sb.from("captains").update({active:v}).eq("id",id))) refresh() }
 const pickedGovs=()=>[...document.querySelectorAll(".gvc:checked")].map(x=>x.value);

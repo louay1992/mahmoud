@@ -16,11 +16,10 @@ Deno.serve(async (req) => {
   // التحقق من أن المستدعي إداري
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "غير مسموح" }, 401);
-  const { data: u } = await admin.auth.getUser(token);
-  const email = u?.user?.email?.toLowerCase();
-  if (!email) return json({ error: "غير مسموح" }, 401);
-  const { data: a } = await admin.from("admins").select("email,perms").ilike("email", email).maybeSingle();
-  if (!a || a.perms !== null) return json({ error: "غير مسموح" }, 403); // إداري كامل فقط
+  const uc = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, { auth: { persistSession: false }, global: { headers: { Authorization: "Bearer " + token } } });
+  const { data: acc, error: ae } = await uc.rpc("my_access");
+  if (ae) return json({ error: "غير مسموح (تعذّر التحقق من الجلسة، سجّل الخروج ثم الدخول من جديد): " + ae.message }, 401);
+  if (!acc || acc.role !== "full") return json({ error: "غير مسموح: هذا الإجراء للإداري الكامل فقط" }, 403);
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "طلب غير صالح" }, 400); }
   const password = String(body.password || "");

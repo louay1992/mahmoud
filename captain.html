@@ -303,7 +303,7 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
     <h1>كابتن التوصيل</h1><p>سجّل دخولك لتبدأ استلام طلباتك</p>
   </div>
   <div class="panel"><div class="in">
-    <div class="fld"><span id="i_mail"></span><input id="em" type="email" placeholder="البريد الإلكتروني" dir="ltr" autocomplete="username" inputmode="email"></div>
+    <div class="fld"><span id="i_mail"></span><input id="em" type="text" placeholder="رقم الموبايل" dir="ltr" autocomplete="username" inputmode="tel"></div>
     <div class="fld"><span id="i_lock"></span><input id="pw" type="password" placeholder="كلمة المرور" dir="ltr" autocomplete="current-password"><button class="eye" type="button" id="eye" aria-label="إظهار كلمة المرور"></button></div>
     <button class="btn btn-p btn-block" id="lbtn" onclick="login()">دخول</button>
   </div></div>
@@ -415,10 +415,14 @@ async function boot(){
   await load(true); go("orders"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate();
 }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
+const loginId=v=>{ v=String(v||"").trim(); if(v.includes("@")) return v.toLowerCase();
+  let d=v.replace(/[٠-٩]/g,x=>"٠١٢٣٤٥٦٧٨٩".indexOf(x)).replace(/[۰-۹]/g,x=>"۰۱۲۳۴۵۶۷۸۹".indexOf(x)).replace(/\D/g,"");
+  if(d.startsWith("00963")) d="0"+d.slice(5); else if(d.startsWith("963")) d="0"+d.slice(3); else if(d.length===9&&d[0]==="9") d="0"+d;
+  return d+"@captain.local" };
 async function login(){
-  const b=$("lbtn"), em=$("em").value.trim(), pw=$("pw").value; if(!em||!pw) return toast("اكتب البريد وكلمة المرور","err");
+  const b=$("lbtn"), em=$("em").value.trim(), pw=$("pw").value; if(!em||!pw) return toast("اكتب رقم الموبايل وكلمة المرور","err");
   b.disabled=true; b.classList.add("load");
-  const {error} = await sb.auth.signInWithPassword({email:em, password:pw});
+  const {error} = await sb.auth.signInWithPassword({email:loginId(em), password:pw});
   b.disabled=false; b.classList.remove("load");
   if(error) return toast("فشل الدخول: تحقق من البيانات","err");
   $("splash").classList.remove("off"); boot();
