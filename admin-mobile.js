@@ -206,5 +206,7 @@
   });
   compact.addEventListener('change',()=>{if(typeof ACC==='undefined'||ACC.role!=='full'||$('app')?.style.display==='none')return;renderNav();if(['home','orders','ship'].includes(tab))render();});
   function more(){if(enabled())$('modal').querySelector('.sheet')?.insertAdjacentHTML('beforeend',button(icon('logout')+'تسجيل الخروج','logout','','am-option am-logout'));}
-  globalThis.AdminMobile={enabled,navigation,home,orders,orderList,shipping,shippingList,shippingLoading,shippingError,resetLimit,more};
+  function viewState(){return {sort:state.sort};}
+  function restoreView(view){state.deliverySeen=true;state.shippingSeen=true;if(['priority','recent','oldest'].includes(view?.sort))state.sort=view.sort;}
+  globalThis.AdminMobile={enabled,navigation,home,orders,orderList,shipping,shippingList,shippingLoading,shippingError,resetLimit,more,viewState,restoreView};
 })();

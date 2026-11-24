@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f766e">
+<meta name="delivery-build" content="__APP_BUILD__">
 <title>الإدارة - كباتن التوصيل</title>
 <link rel="manifest" href="/manifest-admin.json">
 <link rel="icon" href="/icons/admin-192.png">
@@ -15,6 +16,7 @@
 <script src="/auth-session.js"></script>
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
+<script src="/app-refresh.js"></script>
 <script src="/admin-mobile.js"></script>
 <script src="/mobile-ui.js" defer></script>
 <style>
@@ -246,6 +248,7 @@ tr:last-child td{border-bottom:0}
 </style>
 <link rel="stylesheet" href="/mobile.css">
 <link rel="stylesheet" href="/admin-mobile.css">
+<link rel="stylesheet" href="/app-refresh.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><b>إدارة كباتن التوصيل</b><div class="spin"></div></div>
@@ -394,8 +397,8 @@ async function boot(){
   if(ACC.role==="staff"){
     $("bell").style.display="none";
     if(!visTabs().length){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
-    await loadAll(true); if(authGate.blocked) return; renderNav(); go(visTabs()[0][0]); hideSplash(); checkUpdate(); return }
-  await loadAll(true); if(authGate.blocked) return; renderNav(); go("home"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
+    await loadAll(true); if(authGate.blocked) return; renderNav(); go(visTabs()[0][0]); appRefresh.restoreView(); hideSplash(); checkUpdate(); return }
+  await loadAll(true); if(authGate.blocked) return; renderNav(); go("home"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 async function login(){
   const b=$("lbtn"), em=$("em").value.trim(), pw=$("pw").value; if(!em||!pw) return toast("اكتب البريد وكلمة المرور","err");
@@ -417,18 +420,22 @@ async function logout(){
   }});
 }
 
-let firstLoad=true;
-async function loadStaff(){
+let firstLoad=true, ALOAD=0;
+async function loadStaff(initial,{signal}={}){
+  const seq=++ALOAD,who=ME;
   const [lk,od,st]=await Promise.all([ can("create_orders")?sb.rpc("staff_lookups"):Promise.resolve({data:null}),
     can("view_orders")?sb.from("orders").select("*, order_items(id, qty, unit_price, products(name))").order("created_at",{ascending:false}).limit(200):Promise.resolve({data:[]}),
-    sb.from("settings").select("*") ]);
+    sb.from("settings").select("*") ].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
+  if(signal?.aborted||seq!==ALOAD||who!==ME||authGate.blocked)return false;
+  if([lk,od,st].some(x=>x.error)){if(!initial)throw new Error('تعذّر تحميل البيانات');toast('تعذّر تحميل البيانات. حاول مجددًا.','err');return false;}
   [lk,od].forEach(x=>x.error&&toast("خطأ تحميل: "+x.error.message));
   const L=lk.data||{}; D.products=L.products||[]; D.captains=L.captains||[]; D.marketers=L.marketers||[]; D.warehouses=L.warehouses||[]; D.orders=od.data||[];
   D.settings=Object.fromEntries((st.data||[]).map(x=>[x.key,x.value])); CUR=D.settings.currency||"";
   const biz=D.settings.business_name||"إدارة كباتن التوصيل"; $("hn").textContent=biz; document.title=biz;
 }
-async function loadAll(initial){
-  if(ACC.role==="staff") return loadStaff();
+async function loadAll(initial,{signal}={}){
+  if(ACC.role==="staff") return loadStaff(initial,{signal});
+  const seq=++ALOAD,who=ME;
   const q = [
     sb.rpc("admin_products"),
     sb.from("captains").select("*").order("name"),
@@ -451,7 +458,9 @@ async function loadAll(initial){
     sb.from("notifications").select("*").order("created_at",{ascending:false}).limit(150),
     sb.from("carriers").select("*").order("name"),
   ];
-  const r = await Promise.all(q);
+  const r = await Promise.all(q.map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
+  if(signal?.aborted||seq!==ALOAD||who!==ME||authGate.blocked)return false;
+  if(r.some(x=>x.error)){if(!initial)throw new Error('تعذّر تحميل البيانات');toast('تعذّر تحميل البيانات. حاول مجددًا.','err');return false;}
   r.forEach(x => x.error && toast("خطأ تحميل: "+x.error.message));
   [D.products,D.captains,D.warehouses,D.stock,D.orders,D.balances,D.payments,D.invoices,D.movements,D.admins] = r.slice(0,10).map(x => x.data || []);
   D.warehouses.sort((a,b)=>(b.is_main?1:0)-(a.is_main?1:0)||a.name.localeCompare(b.name,"ar"));
@@ -488,9 +497,9 @@ function openMore(){
   $("modal").style.display="flex";
   globalThis.AdminMobile?.more();
 }
-function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
-async function refresh(){ await loadAll(); renderNav(); render(); if(OD&&$("modal").style.display==="flex") openOrder(OD) }
-async function manualRefresh(){ const b=$("rf"); b.classList.add("sp"); await refresh(); b.classList.remove("sp"); toast("تم التحديث","ok") }
+function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); const result=render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700); return result }
+async function refresh(){ return appRefresh.refresh({force:true,reason:'mutation'}); }
+async function manualRefresh(){ return appRefresh.manual(); }
 /* ===== الإشعارات ===== */
 let actx;
 function beep(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const t=actx.currentTime;
@@ -604,35 +613,18 @@ function detectAdmin(){
 }
 let rt, deb;
 function idle(){ return $("modal").style.display!=="flex"&&!document.querySelector(".dlg")&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) }
-async function autoRefresh(){
-  await loadAll(); renderNav();
-  if(["home","orders","captains","notifs"].includes(tab)&&idle()){ const y=scrollY; render(); scrollTo(0,y) }
-  else if(tab==="stock"&&SV.v==="list"&&idle()){ render() }
-}
+async function autoRefresh(){ return appRefresh.refresh({reason:'live'}); }
 function startLive(){
   const kick=()=>{ clearTimeout(deb); deb=setTimeout(autoRefresh,600) };
   try{ rt=sb.channel("adm-live").on("postgres_changes",{event:"*",schema:"public",table:"orders"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"captain_payments"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"price_requests"},kick).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},kick).subscribe() }catch(e){}
 }
-setInterval(()=>{ if(ME && !document.hidden) autoRefresh() }, 25000);
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&ME){ autoRefresh(); checkUpdate() } });
-/* التحديث التلقائي للتطبيق */
-let selfHash=null;
-async function pageHash(){ try{ const r=await fetch(location.pathname,{cache:"no-store"}); if(!r.ok) return null; const t=await r.text(); let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; return h+":"+t.length }catch(e){ return null } }
-async function checkUpdate(){
-  try{ const reg=await navigator.serviceWorker.getRegistration(); reg&&reg.update() }catch(e){}
-  const h=await pageHash(); if(!h) return; if(selfHash===null){ selfHash=h; return }
-  if(h!==selfHash){ const u=$("upd"); u.style.display="block";
-    u.innerHTML=`<div class="banner u">${ic("sparkle")}<div><b>يتوفر إصدار جديد</b><span>حدّث التطبيق للحصول على آخر التحسينات</span></div><button class="b" onclick="applyUpdate()">تحديث الآن</button></div>` }
-}
-async function applyUpdate(){ try{ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.update())) }catch(e){} location.reload() }
-setInterval(checkUpdate, 5*60*1000);
-addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عاد الاتصال","ok"); if(ME) autoRefresh() });
-addEventListener("offline",()=>$("offline").classList.add("on"));
-if(!navigator.onLine) $("offline").classList.add("on");
+function checkUpdate(){ return appRefresh.checkUpdate(); }
+function applyUpdate(){ return appRefresh.applyUpdate(true); }
 
-function render(){ if(tab==="notifs"&&ACC.role!=="staff"){ vNotifs(); return } if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+
+function render(){ if(tab==="notifs"&&ACC.role!=="staff") return vNotifs(); if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew})[tab](); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -1254,15 +1246,20 @@ async function shipLabel(id){
 /* ===== تبويب الشحن ===== */
 let SHF={st:"open",q:"",car:"",mk:"",gov:"",per:"all"}, SHIPS=null, CPAYS=[], SHLOAD=0;
 async function vCarriers(){ return vShip("carriers") }
-async function vShip(mode){
+async function vShip(mode,{quiet=false,signal}={}){
   mode=mode==="carriers"?"carriers":"ship";
+  const who=ME;
+  if(!quiet){
   $("main").innerHTML=`<div id="shbody"><p class="mut" style="text-align:center">جارٍ تحميل البيانات…</p></div>`;
   if(mode==="ship"&&globalThis.AdminMobile?.enabled()) AdminMobile.shippingLoading();
+  }
   const my=++SHLOAD;
-  const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)]);
-  if(my!==SHLOAD||tab!==mode) return;
+  const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
+  if(signal?.aborted||my!==SHLOAD||tab!==mode||who!==ME||authGate.blocked) return false;
+  if(quiet&&(o.error||p.error))throw new Error('تعذّر تحميل الشحنات');
   if(o.error){ if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc(o.error.message)}</div>`; return }
-  SHIPS=o.data; CPAYS=p.data||[]; if(mode==="carriers") drawCarriers(); else drawShip();
+  SHIPS=o.data; CPAYS=p.data||[]; if(quiet&&!appRefresh.safe())return false;
+  const y=scrollY; if(mode==="carriers") drawCarriers(); else drawShip(); if(quiet)scrollTo({top:y,behavior:'instant'});
 }
 const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.filter(x=>x.carrier_id===cid);
   const col=L.filter(o=>o.status==="delivered").reduce((a,o)=>a+Number(o.total),0), fees=L.filter(o=>["delivered","returned"].includes(o.status)).reduce((a,o)=>a+Number(o.shipping_cost),0), paid=P.reduce((a,x)=>a+Number(x.amount),0);
@@ -2010,6 +2007,38 @@ $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"passw
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });
 $("hav").innerHTML=ic("box"); $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
 if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
+
+const appRefresh=new DeliveryRefresh({
+  role:'admin',interval:25000,
+  active:()=>!!ME&&!authGate.blocked&&$('app').style.display!=='none'&&$('splash').classList.contains('off'),
+  safe:()=>busy===0&&!(pushClient.native?.pending?.size)&&idle()&&tab!=='new'&&!(tab==='settings'&&SSEC),
+  toast,
+  fetchData:async({signal,force})=>{
+    const screen=tab,result=await loadAll(false,{signal});
+    if(result===false||signal.aborted||authGate.blocked||!ME)return false;
+    if(!force&&!appRefresh.safe())return false;
+    if(tab!==screen)return false;
+    renderNav();
+    if(tab==='ship'||tab==='carriers'){const result=await vShip(tab,{quiet:true,signal});return result!==false;}
+    const y=scrollY;
+    if(force||appRefresh.foreground||['home','orders','captains','notifs'].includes(tab)||(tab==='stock'&&SV.v==='list')){
+      await render();if(force&&OD&&$('modal').style.display==='flex')openOrder(OD);
+    }
+    scrollTo({top:y,behavior:'instant'});return true;
+  },
+  captureView:()=>({owner:ME,tab,orderFilter,orderQuery,orderCap,orderMk,orderPer,orderGrp,shipping:{...SHF},home:{...HF},phone:globalThis.AdminMobile?.viewState(),y:scrollY}),
+  restoreView:v=>{
+    if(v.owner!==ME)return;
+    if(v.orderFilter==='all'||Object.hasOwn(ST,v.orderFilter))orderFilter=v.orderFilter;
+    for(const [key,set] of [['orderQuery',x=>orderQuery=x],['orderCap',x=>orderCap=x],['orderMk',x=>orderMk=x]])if(typeof v[key]==='string')set(v[key].slice(0,200));
+    if(['all','today','week','month'].includes(v.orderPer))orderPer=v.orderPer;
+    if(['none','status','captain','marketer','day'].includes(v.orderGrp))orderGrp=v.orderGrp;
+    if(v.shipping&&typeof v.shipping==='object')for(const k of ['st','q','car','mk','gov','per'])if(typeof v.shipping[k]==='string')SHF[k]=v.shipping[k].slice(0,200);
+    if(v.home&&typeof v.home==='object')for(const k of ['status','cap','q'])if(typeof v.home[k]==='string')HF[k]=v.home[k].slice(0,200);
+    globalThis.AdminMobile?.restoreView(v.phone);
+    if(visTabs().some(t=>t[0]===v.tab)||(v.tab==='notifs'&&ACC.role==='full'))Promise.resolve(go(v.tab)).then(()=>{if(ME===v.owner&&tab===v.tab)requestAnimationFrame(()=>scrollTo({top:Math.max(0,Number(v.y)||0),behavior:'instant'}));}).catch(()=>{});
+  }
+});
 boot();
 </script>
 </body>
