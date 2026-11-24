@@ -19,16 +19,23 @@ Deno.serve(async (req) => {
   const { data: u } = await admin.auth.getUser(token);
   const email = u?.user?.email?.toLowerCase();
   if (!email) return json({ error: "غير مسموح" }, 401);
-  const { data: a } = await admin.from("admins").select("email").ilike("email", email).maybeSingle();
-  if (!a) return json({ error: "غير مسموح" }, 403);
+  const { data: a } = await admin.from("admins").select("email,perms").ilike("email", email).maybeSingle();
+  if (!a || a.perms !== null) return json({ error: "غير مسموح" }, 403); // إداري كامل فقط
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "طلب غير صالح" }, 400); }
   const password = String(body.password || "");
   if (password.length < 6) return json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" }, 400);
-  const { data: cap } = await admin.from("captains").select("id,name,email").eq("id", body.captain_id).maybeSingle();
-  if (!cap) return json({ error: "الكابتن غير موجود" }, 404);
-  const cemail = (cap.email || "").trim().toLowerCase();
-  if (!cemail) return json({ error: "أضف بريد الدخول للكابتن أولاً (تعديل الكابتن)" }, 400);
+  let cemail = "";
+  if (body.captain_id) {
+    const { data: cap } = await admin.from("captains").select("id,name,email").eq("id", body.captain_id).maybeSingle();
+    if (!cap) return json({ error: "الكابتن غير موجود" }, 404);
+    cemail = (cap.email || "").trim().toLowerCase();
+    if (!cemail) return json({ error: "أضف بريد الدخول للكابتن أولاً (تعديل الكابتن)" }, 400);
+  } else {
+    cemail = String(body.email || "").trim().toLowerCase();
+    const { data: t } = await admin.from("admins").select("email").ilike("email", cemail).maybeSingle();
+    if (!cemail || !t) return json({ error: "الحساب الإداري غير موجود" }, 404);
+  }
   let found: any = null;
   for (let page = 1; page <= 20 && !found; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });

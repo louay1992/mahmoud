@@ -1364,3 +1364,11 @@ grant execute on function marketer_return_impact(uuid) to authenticated;
 -- trigger trg_dup_guard على captain_payments / marketer_payments / orders (إدراج مكرر خلال 15 ثانية يُرفض).
 -- transfer_stock و create_stock_invoice: guard_once + قفل صفوف الجرد (FOR UPDATE).
 -- (النص الكامل للدوال محفوظ في migration v16_duplicate_guards)
+
+-- ===== v17: حسابات إدارية بصلاحيات محدودة =====
+-- admins.perms (NULL = إداري كامل) + admins.name؛ is_admin() لا تُرجع true إلا للكامل.
+-- has_perm(p), my_access(), staff_lookups() (منتجات بدون أسعار/كباتن/مسوّقات حسب الصلاحية).
+-- الصلاحيات: create_orders, view_orders (طلباته فقط عبر orders.created_by), pick_captain, pick_marketer.
+-- create_order: للموظف يُلزم سعر بيع ≥ رأس المال ولا يرى رأس المال.
+-- إصلاح: مقارنة captain_id = my_captain_id() صارت coalesce(..., false) (كانت تمرّر الطلبات غير المسندة).
+-- admin-set-password: إداري كامل فقط، ويقبل email لحساب في جدول admins.

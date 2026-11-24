@@ -321,6 +321,8 @@ function askf(title,fields,ok="حفظ",o={}){
   });
 }
 
+let ACC={role:"none",perms:[]};
+const can=p=>ACC.role==="full"||(ACC.perms||[]).includes(p);
 let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:[], payments:[], invoices:[], movements:[], admins:[], settings:{}, stats:null, ev:{}};
 let tab = "home", orderFilter = "all", orderQuery = "";
 
@@ -330,9 +332,13 @@ async function boot(){
   const {data:{session}} = await sb.auth.getSession();
   if(!session){ showLogin(); return }
   ME = (session.user.email || "").toLowerCase();
-  const {data} = await sb.from("admins").select("email");
-  if(!data || !data.length){ toast("هذا الحساب ليس إدارياً","err"); await sb.auth.signOut(); showLogin(); return }
+  const {data:acc} = await sb.rpc("my_access");
+  if(!acc || acc.role==="none"){ toast("هذا الحساب ليس إدارياً","err"); await sb.auth.signOut(); showLogin(); return }
+  ACC=acc;
   $("login").style.display="none"; $("app").style.display="block";
+  if(ACC.role==="staff"){
+    if(!visTabs().length){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
+    await loadAll(true); renderNav(); go(visTabs()[0][0]); hideSplash(); checkUpdate(); return }
   await loadAll(true); renderNav(); go("home"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate();
 }
 async function login(){
@@ -346,7 +352,17 @@ async function login(){
 async function logout(){ if(!await askc("هل تريد الخروج من حسابك؟",{title:"تسجيل الخروج",ok:"نعم، خروج",cls:"r"})) return; await dropPush(); await sb.auth.signOut(); location.reload() }
 
 let firstLoad=true;
+async function loadStaff(){
+  const [lk,od,st]=await Promise.all([ can("create_orders")?sb.rpc("staff_lookups"):Promise.resolve({data:null}),
+    can("view_orders")?sb.from("orders").select("*, order_items(id, qty, unit_price, products(name))").order("created_at",{ascending:false}).limit(200):Promise.resolve({data:[]}),
+    sb.from("settings").select("*") ]);
+  [lk,od].forEach(x=>x.error&&toast("خطأ تحميل: "+x.error.message));
+  const L=lk.data||{}; D.products=L.products||[]; D.captains=L.captains||[]; D.marketers=L.marketers||[]; D.orders=od.data||[];
+  D.settings=Object.fromEntries((st.data||[]).map(x=>[x.key,x.value])); CUR=D.settings.currency||"";
+  const biz=D.settings.business_name||"إدارة كباتن التوصيل"; $("hn").textContent=biz; document.title=biz;
+}
 async function loadAll(initial){
+  if(ACC.role==="staff") return loadStaff();
   const q = [
     sb.rpc("admin_products"),
     sb.from("captains").select("*").order("name"),
@@ -357,7 +373,7 @@ async function loadAll(initial){
     sb.from("captain_payments").select("*").order("created_at",{ascending:false}).limit(2000),
     sb.from("stock_invoices").select("*, stock_invoice_items(qty, products(name))").order("created_at",{ascending:false}).limit(50),
     sb.from("stock_movements").select("*, products(name)").order("created_at",{ascending:false}).limit(100),
-    sb.from("admins").select("email").order("email"),
+    sb.from("admins").select("email,name,perms").order("email"),
     sb.from("settings").select("*"),
     sb.rpc("dashboard_stats"),
     sb.from("order_events").select("*").order("created_at",{ascending:true}).limit(2000),
@@ -387,18 +403,19 @@ const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
 const TABS = [["home","الرئيسية","home"],["orders","الطلبات","box"],["new","طلب جديد","plus"],["stock","المخزون","store"],["accounts","المستحقات","wallet"],["captains","الكباتن","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","stock"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
   const n=pendingPR(), bdg=k=>k==="home"&&n?`<i class="bd">${n}</i>`:"";
-  $("side").innerHTML=TABS.map(([k,l,i])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
-  const m=TABS.filter(t=>MAIN_TABS.includes(t[0])).map(([k,l,i])=>k==="new"
+  $("side").innerHTML=visTabs().map(([k,l,i])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
+  const m=visTabs().filter(t=>MAIN_visTabs().includes(t[0])).map(([k,l,i])=>k==="new"
     ?`<button class="fab ${tab===k?"on":""}" onclick="go('new')" aria-label="${l}"><span class="pl">${ic("plus")}</span></button>`
     :`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
-  $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_TABS.includes(tab)?"":"on"}" onclick="openMore()">${ic("menu")}<span>المزيد</span></button>`;
+  $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_visTabs().includes(tab)?"":"on"}" onclick="openMore()">${ic("menu")}<span>المزيد</span></button>`;
 }
 function openMore(){
-  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${TABS.filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
+  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${visTabs().filter(t=>!MAIN_visTabs().includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
 }
 function go(k){ if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
@@ -480,7 +497,7 @@ addEventListener("online",()=>{ $("offline").classList.remove("on"); toast("عا
 addEventListener("offline",()=>$("offline").classList.add("on"));
 if(!navigator.onLine) $("offline").classList.add("on");
 
-function render(){ ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
+function render(){ if(ACC.role==="staff"){ ({orders:vMyOrders,new:vNew})[tab](); return } ({home:vHome,settings:vSettings,orders:vOrders,new:vNew,stock:vStock,accounts:vAccounts,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -623,9 +640,9 @@ function vCaptains(){
     <div class="dr"><span class="dl">المستودع</span><span class="dv2">${w?esc(w.name):'<span class="neg">غير مرتبط</span>'}</span></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="b s o" onclick="editCaptain('${c.id}')">تعديل</button><button class="b s" onclick="setCapPw('${c.id}')">🔑 كلمة المرور</button><button class="b s o" onclick="toggleCaptain('${c.id}',${!c.active})">${c.active?"إيقاف":"تفعيل"}</button></div></div>`}).join(""):'<p class="mut">لا يوجد كباتن بعد</p>'}</div>`;
 }
-async function callSetPw(captain_id,password){
+async function callSetPw(captain_id,password,email){
   const {data:{session}}=await sb.auth.getSession();
-  const r=await fetch(SUPABASE_URL+"/functions/v1/admin-set-password",{method:"POST",headers:{"Content-Type":"application/json",apikey:SUPABASE_KEY,Authorization:"Bearer "+(session?.access_token||"")},body:JSON.stringify({captain_id,password})});
+  const r=await fetch(SUPABASE_URL+"/functions/v1/admin-set-password",{method:"POST",headers:{"Content-Type":"application/json",apikey:SUPABASE_KEY,Authorization:"Bearer "+(session?.access_token||"")},body:JSON.stringify({captain_id,password,email})});
   const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||"تعذّر تنفيذ الطلب"); return j;
 }
 async function setCapPw(id){
@@ -692,13 +709,13 @@ function itemRows(id,priced){ return `<div class="items" id="${id}" data-priced=
 function addRow(id){
   const priced=$(id).dataset.priced==="1";
   const d=document.createElement("div"); d.className="row";
-  d.innerHTML=`<select class="p" onchange="rowPick(this)">${D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)} (${money(p.price)})</option>`).join("")}</select>
+  d.innerHTML=`<select class="p" onchange="rowPick(this)">${D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}${p.price!==undefined?` (${money(p.price)})`:""}</option>`).join("")}</select>
     <input class="q" type="number" min="1" step="1" value="1" style="max-width:90px" placeholder="العدد" oninput="upd()">
     ${priced?`<input class="pr" type="number" min="0" step="0.01" style="max-width:110px" placeholder="السعر" oninput="upd()"><span class="dv" style="flex:0 0 64px;font-weight:700"></span>`:""}
     <button class="b s r" style="flex:0 0 auto" onclick="this.parentNode.remove();upd()">✕</button>`;
   $(id).appendChild(d); rowPick(d.querySelector("select"));
 }
-function rowPick(sel){ const r=sel.parentNode, pr=r.querySelector(".pr"); if(pr){ const p=D.products.find(x=>x.id===sel.value); pr.value=p?p.price:0 } upd() }
+function rowPick(sel){ const r=sel.parentNode, pr=r.querySelector(".pr"); if(pr){ const p=D.products.find(x=>x.id===sel.value); pr.value=(p&&p.price!==undefined)?p.price:"" } upd() }
 const readRows=id=>[...$(id).children].map(r=>{const pr=r.querySelector(".pr");const up=pr?parseFloat(pr.value):NaN;
   return {product_id:r.querySelector("select").value, qty:parseInt(r.querySelector(".q").value), unit_price:isNaN(up)?undefined:up}}).filter(x=>x.product_id&&x.qty>0);
 
@@ -810,8 +827,8 @@ function fillFromWa(){
   const r=parseWa(t), warn=[];
   $("on").value=r.name; $("op").value=r.phone; $("oa").value=r.addr; $("om").value=r.map; $("onote").value=r.note;
   if(!r.name) warn.push("لم أجد الاسم"); if(!r.phone) warn.push("لم أجد رقم الهاتف");
-  if(r.mk){ const m=pickBy(D.marketers.filter(x=>x.active!==false),r.mk); if(m) $("omk").value=m.id; else warn.push("المسوقة غير معروفة: "+r.mk) }
-  if(r.cap){ const c=pickBy(D.captains.filter(x=>x.active!==false),r.cap); if(c) $("oc").value=c.id; else warn.push("الكابتن غير معروف: "+r.cap) }
+  if(r.mk&&$("omk")){ const m=pickBy(D.marketers.filter(x=>x.active!==false),r.mk); if(m) $("omk").value=m.id; else warn.push("المسوقة غير معروفة: "+r.mk) }
+  if(r.cap&&$("oc")){ const c=pickBy(D.captains.filter(x=>x.active!==false),r.cap); if(c) $("oc").value=c.id; else warn.push("الكابتن غير معروف: "+r.cap) }
   let n=0;
   if(r.items.length){ $("orows").innerHTML=""; const act=D.products.filter(p=>p.active);
     r.items.forEach(i=>{ const p=pickBy(act,i.name); if(!p||!(i.qty>0)){ warn.push("منتج غير معروف: "+i.name); return }
@@ -833,8 +850,8 @@ function vNew(){
     <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
     <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
-    <div class="row"><select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select><select id="omk" onchange="upd()">${mkOptions("","— بدون مسوّقة —")}</select></div>
-    <p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>
+    ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<select id="omk" onchange="upd()">${mkOptions("","— بدون مسوّقة —")}</select>`:""}</div>`:""}
+    ${ACC.role==="staff"?`<p class="mut" style="margin:4px 0">اكتب <b>سعر البيع</b> لكل منتج.</p>`:`<p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>`}
     ${itemRows("orows",true)}<br><br>
     <div id="otot" class="mut"></div><br>
     <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
@@ -846,12 +863,21 @@ function updFor(rid,tid,feeFn){
   let sub=0,lst=0;
   [...$(rid).children].forEach(r=>{
     const p=D.products.find(x=>x.id===r.querySelector("select").value), q=parseInt(r.querySelector(".q").value)||0;
-    const lp=p?Number(p.price):0, up=parseFloat(r.querySelector(".pr").value), a=isNaN(up)?lp:up, d=a-lp, dv=r.querySelector(".dv");
+    const lp=p&&p.price!==undefined?Number(p.price):0, up=parseFloat(r.querySelector(".pr").value), a=isNaN(up)?lp:up, d=a-lp, dv=r.querySelector(".dv");
     sub+=a*q; lst+=lp*q; dv.textContent=d?((d>0?"+":"")+num2(d)):""; dv.className="dv "+(d>0?"up":"dn");
   });
   const fee=feeFn(), v=sub-lst;
+  if(ACC.role==="staff"){ $(tid).innerHTML=`المنتجات: <b>${money(sub)}</b> + التوصيل: <b>${money(fee)}</b> = <span class="big">${money(sub+fee)}</span>`; return }
   $(tid).innerHTML=`المنتجات: <b>${money(sub)}</b> + التوصيل: <b>${money(fee)}</b> = <span class="big">${money(sub+fee)}</span>`
     +`<div>رأس المال: ${money(lst)} — ربح المسوّقة: <b class="${v>0?"up":v<0?"dn":""}">${v>0?"+":""}${money(v)}</b></div>`;
+}
+function vMyOrders(){
+  const ST={new:"جديد",assigned:"مُسنَد",in_delivery:"قيد التوصيل",no_answer:"لم يرد",closed:"مغلق",other:"أخرى",delivered:"مسلَّم",cancelled:"ملغى",returned:"مرتجع"};
+  $("main").innerHTML=`<h2 style="margin:0 0 12px">طلباتي (${D.orders.length})</h2>`+(D.orders.length?D.orders.map(o=>`<div class="card" style="padding:12px 14px">
+    <div style="display:flex;justify-content:space-between;gap:8px"><b>#${o.order_no} — ${esc(o.customer_name)}</b><span class="tag">${ST[o.status]||o.status}</span></div>
+    <div class="mut" style="font-size:13px;margin-top:4px">${dt(o.created_at)} · ${esc(o.customer_phone||"")}</div>
+    <div style="margin-top:6px">${(o.order_items||[]).map(i=>esc(i.products?.name)+" ×"+i.qty).join("، ")}</div>
+    <div style="margin-top:6px">الإجمالي: <b>${money(o.total)}</b></div></div>`).join(""):`<div class="card mut" style="text-align:center">لا توجد طلبات بعد.</div>`);
 }
 let EO=null;
 function openEdit(id){
@@ -884,7 +910,8 @@ async function saveOrder(){
   if(!name||!phone) return toast("أدخل اسم الزبون ورقم الموبايل");
   if(!items.length) return toast("أضف منتجاً");
   if(items.some(i=>i.unit_price!==undefined&&i.unit_price<0)) return toast("سعر غير صالح");
-  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:$("oc").value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:$("omk").value||null}),"تم إنشاء الطلب")){ tab="orders"; renderNav(); refresh() }
+  if(ACC.role==="staff"&&items.some(i=>i.unit_price===undefined)) return toast("اكتب سعر البيع لكل منتج");
+  if(await run(sb.rpc("create_order",{p_name:name,p_phone:phone,p_note:$("onote").value.trim()||null,p_captain:($("oc")||{}).value||null,p_items:items,p_address:$("oa").value.trim()||null,p_map:$("om").value.trim()||null,p_marketer:($("omk")||{}).value||null}),"تم إنشاء الطلب")){ if(ACC.role==="staff"){ await refresh(); go(can("view_orders")?"orders":"new") } else { tab="orders"; renderNav(); refresh() } }
 }
 
 /* ================= الطلبات ================= */
@@ -1240,10 +1267,18 @@ function vSettings(){
     <select id="sce"><option value="false" ${st.captain_can_edit_price!=="true"?"selected":""}>الإداري فقط يعدّل أسعار الطلبات</option><option value="true" ${st.captain_can_edit_price==="true"?"selected":""}>يُسمح للكابتن بتعديل السعر (بسبب إلزامي)</option></select></div>
     <p class="mut">يُطبَّق النمط على الطلبات التي تُسلَّم بعد الحفظ فقط؛ أما الطلبات المُسلَّمة سابقاً فيبقى مبلغها المطلوب كما حُسب وقت التسليم.</p>
     <button class="b" onclick="savePriceSettings()">حفظ</button></div>`,
-    admins:`<div class="card"><h2>الإداريون</h2><table>
-    ${D.admins.map(a=>`<tr><td dir="ltr">${esc(a.email)}</td><td>${a.email.toLowerCase()===ME?'<span class="mut">أنت</span>':`<button class="b s r" onclick="delAdmin('${esc(a.email)}')">حذف</button>`}</td></tr>`).join("")}</table>
-    <div class="row" style="margin-top:10px"><input id="nae" type="email" dir="ltr" placeholder="بريد إداري جديد"><button class="b" style="flex:0 0 auto" onclick="addAdmin()">إضافة</button></div>
-    <p class="mut">يجب أن يكون للإداري الجديد مستخدم بنفس البريد في Supabase > Authentication > Users.</p></div>`,
+    admins:`<div class="card"><h2>الحسابات الإدارية</h2>
+    ${D.admins.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #eef2f7"><div style="flex:1;min-width:0"><b>${esc(a.name||a.email)}</b><div class="mut" dir="ltr" style="text-align:start;font-size:12px">${esc(a.email)}</div>
+      <div style="margin-top:4px">${a.perms?a.perms.map(p=>`<span class="tag" style="margin-inline-end:4px">${esc(PERM_L[p]||p)}</span>`).join("")||'<span class="mut">بلا صلاحيات</span>':'<span class="tag">إداري كامل</span>'}</div></div>
+      ${a.email.toLowerCase()===ME?'<span class="mut">أنت</span>':`${a.perms?`<button class="b s o" onclick="editStaff('${esc(a.email)}')">الصلاحيات</button>`:""}<button class="b s o" onclick="staffPw('${esc(a.email)}')">كلمة مرور</button><button class="b s r" onclick="delAdmin('${esc(a.email)}')">حذف</button>`}</div>`).join("")}
+    </div>
+    <div class="card"><h2>إنشاء حساب إداري</h2>
+    <div class="row"><input id="sn" placeholder="الاسم (للتمييز)"><input id="nae" type="email" dir="ltr" placeholder="البريد الإلكتروني"></div>
+    <div class="row"><input id="spw" dir="ltr" placeholder="كلمة المرور (6 أحرف على الأقل)"></div>
+    <div style="margin:8px 0"><label style="display:block;margin:4px 0"><input type="checkbox" id="sfull" onchange="document.getElementById('sperms').style.display=this.checked?'none':'block'"> إداري كامل (كل الصلاحيات)</label>
+    <div id="sperms">${Object.entries(PERM_L).map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" class="sp" value="${k}" ${k==="create_orders"?"checked":""}> ${l}</label>`).join("")}</div></div>
+    <button class="b" onclick="createStaff()">إنشاء الحساب</button>
+    <p class="mut">الحساب بصلاحيات محدودة لا يرى رأس المال ولا الأرصدة ولا بقية الأقسام.</p></div>`,
     pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
     <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
     danger:`<div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
@@ -1265,9 +1300,31 @@ async function saveSettings(){
   const rows=[{key:"business_name",value:$("sb").value.trim()},{key:"currency",value:$("sc").value.trim()},{key:"low_stock",value:String(parseInt($("sl").value)||0)},{key:"phone_country",value:($("spc").value||"").replace(/\D/g,"")}];
   if(await run(sb.from("settings").upsert(rows),"تم الحفظ")) refresh();
 }
-async function addAdmin(){
-  const email=$("nae").value.trim().toLowerCase(); if(!email) return toast("أدخل البريد");
-  if(await run(sb.from("admins").insert({email}),"تمت إضافة الإداري")) refresh();
+const PERM_L={create_orders:"إنشاء طلبات",view_orders:"عرض الطلبات التي أنشأها",pick_captain:"اختيار الكابتن عند الإنشاء",pick_marketer:"اختيار المسوّقة عند الإنشاء"};
+async function createStaff(){
+  const email=$("nae").value.trim().toLowerCase(), name=$("sn").value.trim(), pw=$("spw").value;
+  if(!/^\S+@\S+\.\S+$/.test(email)) return toast("بريد غير صالح","err");
+  if(pw.length<6) return toast("كلمة المرور 6 أحرف على الأقل","err");
+  const full=$("sfull").checked, perms=full?null:[...document.querySelectorAll(".sp:checked")].map(x=>x.value);
+  if(!full&&!perms.length) return toast("اختر صلاحية واحدة على الأقل","err");
+  if(full&&!await askc("سيُنشأ حساب إداري <b>كامل</b> يرى كل شيء بما فيه رأس المال والأرصدة. متأكد؟",{title:"إداري كامل",ok:"نعم",cls:"r"})) return;
+  if(!await run(sb.from("admins").insert({email,name:name||null,perms}))) return;
+  try{ await run2(callSetPw(null,pw,email)); toast("تم إنشاء الحساب. أعطه البريد وكلمة المرور","ok") }catch(e){ toast("أُضيف الحساب لكن تعذّر تعيين كلمة المرور: "+e.message,"err") }
+  refresh();
+}
+function editStaff(email){
+  const a=D.admins.find(x=>x.email===email); if(!a||!a.perms) return;
+  const d=dlgShell(`<h3>صلاحيات ${esc(a.name||email)}</h3><div class="frm">${Object.entries(PERM_L).map(([k,l])=>`<label style="display:block;margin:8px 0"><input type="checkbox" class="ep" value="${k}" ${a.perms.includes(k)?"checked":""}> ${l}</label>`).join("")}</div>
+    <div class="btns"><button class="b" id="dk">حفظ</button><button class="b o" id="dc">إلغاء</button></div>`);
+  d.querySelector("#dc").onclick=()=>d.remove();
+  d.querySelector("#dk").onclick=async()=>{ const perms=[...d.querySelectorAll(".ep:checked")].map(x=>x.value);
+    if(!perms.length) return toast("اختر صلاحية واحدة على الأقل","err");
+    d.remove(); if(await run(sb.from("admins").update({perms}).eq("email",email),"تم الحفظ")) refresh() };
+}
+async function staffPw(email){
+  const f=await askf("كلمة مرور "+email,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",dir:"ltr"}],"تعيين"); if(!f) return;
+  const p=f.p.trim(); if(p.length<6) return toast("كلمة المرور قصيرة","err");
+  try{ await run2(callSetPw(null,p,email)); toast("تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
 async function delAdmin(email){ if(!await askc("حذف الإداري <b dir=\"ltr\">"+esc(email)+"</b>؟",{title:"حذف إداري",ok:"حذف",cls:"r"})) return;
   if(await run(sb.from("admins").delete().eq("email",email),"تم الحذف")) refresh() }
