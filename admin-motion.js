@@ -2,6 +2,7 @@
 (() => {
   const phone=matchMedia('(max-width:719px)'),reduce=matchMedia('(prefers-reduced-motion:reduce)');
   const ease='cubic-bezier(.2,.8,.2,1)',animations=new Set();
+  const itemRowsSeen=new WeakSet();
   let opener=null,overlay=null,panelNode=null,screen='',startY=null,drag=null,backNext=false;
   const enabled=()=>(phone.matches||!!overlay||!!document.querySelector('.aw-page'))&&typeof ACC!=='undefined'&&ACC.role!=='none';
   function play(el,frames,duration=220){
@@ -68,9 +69,11 @@
     document.addEventListener('pointermove',e=>{if(drag&&startY!==null&&e.clientY>startY)drag.style.transform=`translateY(${Math.min((e.clientY-startY)*.65,160)}px)`;},{passive:true});
     document.addEventListener('pointerup',e=>{if(drag){const node=drag,from=node.style.transform;if(startY!==null&&e.clientY-startY>90)closeStatus();else{node.style.transform='';if(from)play(node,[{transform:from},{transform:'translateY(0)'}],180);}}drag=null;startY=null;},{passive:true});
     document.addEventListener('pointercancel',()=>{if(drag)drag.style.transform='';drag=null;startY=null;},{passive:true});decorate();
+    document.addEventListener('toggle',e=>{if(e.target.matches?.('details.aw-details')&&e.target.open)play(e.target.querySelector(':scope > div'),[{opacity:.4,transform:'translateY(4px)'},{opacity:1,transform:'translateY(0)'}],160);},true);
   }
   function decorate(){
     if(!enabled())return;
+    document.querySelectorAll('#aw-order-form #orows>.row').forEach(row=>{if(!itemRowsSeen.has(row)){itemRowsSeen.add(row);play(row,[{opacity:.4,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],160);}});
     document.querySelectorAll('#modal .x').forEach(n=>{if(!n.hasAttribute('aria-label'))n.setAttribute('aria-label','إغلاق');});
     document.querySelectorAll('.dlg .f').forEach(f=>{const l=f.querySelector('label'),i=f.querySelector('input,textarea');if(l&&i&&i.id)l.htmlFor=i.id;});
     document.querySelectorAll('#main input,#main select,#modal input,#modal select,.dlg input,.dlg select').forEach(n=>{
