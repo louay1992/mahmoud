@@ -12,7 +12,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
+<script src="/mobile-ui.js" defer></script>
 <style>
 :root{
   --p:#2563eb;--p2:#1e3a8a;--p3:#3b82f6;--bg:#eef2f9;--card:#fff;--bd:#e3e9f3;--tx:#0f172a;--mut:#64748b;
@@ -288,6 +290,7 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .nb{white-space:pre-line;font-size:14px;color:#334155;margin:6px 0 8px;line-height:1.6}
 .nf{display:flex;justify-content:space-between;align-items:center}.ncat{font-size:11.5px;background:#eef2f7;color:#475569;padding:2px 9px;border-radius:99px;font-weight:700}.nlk{font-size:12.5px;color:var(--p);font-weight:700}
 </style>
+<link rel="stylesheet" href="/mobile.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/></svg></div><b>كابتن التوصيل</b><div class="spin"></div></div>
@@ -347,7 +350,7 @@ let CUR = "", BIZ = "";
 const money = n => Number(n || 0).toLocaleString("en-US", {maximumFractionDigits: 2}) + (CUR ? " " + CUR : "");
 const waNum=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/\D/g,""); const cc=(D.settings.phone_country||"").replace(/\D/g,""); if(d.startsWith("00")) d=d.slice(2); else if(d.startsWith("0")&&cc) d=cc+d.slice(1); return d };
 const waUrl=o=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURIComponent(`السلام عليكم ${o.customer_name}، أنا ${me?me.name:"كابتن التوصيل"}${BIZ?" من "+BIZ:""}، كابتن توصيل طلبك رقم #${o.order_no}. المبلغ المطلوب: ${money(o.total)}.`);
-const mapUrl=o=>o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):"");
+const mapUrl=o=>{try{const u=new URL(o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):""));return /^https?:$/.test(u.protocol)?esc(u.href):""}catch(_){return""}};
 const when = s => { if(!s) return ""; const d=new Date(s), n=new Date(), t=d.toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"});
   const day=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime(), diff=Math.round((day(n)-day(d))/864e5);
   return (diff===0?"اليوم":diff===1?"أمس":d.toLocaleDateString("ar-EG",{day:"numeric",month:"numeric",year:d.getFullYear()===n.getFullYear()?undefined:"numeric"}))+" "+t };
@@ -413,7 +416,7 @@ async function boot(){
   me = data[0];
   $("login").style.display="none"; $("app").style.display="block";
   $("av").textContent=(me.name||"ك").trim().charAt(0); $("hn").textContent=me.name;
-  await load(true); go("orders"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate();
+  await load(true); go("orders"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
 const loginId=v=>{ v=String(v||"").trim(); if(v.includes("@")) return v.toLowerCase();
@@ -496,6 +499,7 @@ function beep(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioCon
     g.gain.setValueAtTime(.0001,t+d); g.gain.exponentialRampToValueAtTime(.3,t+d+.02); g.gain.exponentialRampToValueAtTime(.0001,t+d+.3); o.start(t+d); o.stop(t+d+.32) }) }catch(e){} }
 async function notify(title, body, tag){
   toast(title+(body?" — "+body:""),"bell"); beep(); try{ navigator.vibrate&&navigator.vibrate([200,100,200]) }catch(e){}
+  if(pushClient.native?.expected) return;
   if(document.hidden && "Notification" in window && Notification.permission==="granted"){
     const opt={body,tag,icon:"/icons/captain-192.png",badge:"/icons/captain-192.png",dir:"rtl",lang:"ar",renotify:true,vibrate:[200,100,200],data:{url:"/captain.html"}};
     try{ const reg=await pushClient.registration(); await reg.showNotification(title,opt) }catch(e){ console.warn("notification display",e) } }
@@ -537,6 +541,14 @@ function vNotifs(){
   $("main").innerHTML=h; markRead();
 }
 function openNotif(oid){ if(!(D.orders||[]).some(o=>o.id===oid)) return toast("الطلب غير متاح","err"); openOrder(oid) }
+async function openPushTarget(){
+  const params=new URLSearchParams(location.search), id=params.get("order"), incoming=params.get("notification")==="1";
+  if(!incoming) return;
+  params.delete("notification"); params.delete("order"); history.replaceState(null,"",location.pathname+(params.size?"?"+params:"")+location.hash);
+  if(!id||!/^[0-9a-f-]{36}$/i.test(id)){ go("notifs"); return }
+  if(!D.orders.some(x=>x.id===id)){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).eq("captain_id",me.id).maybeSingle(); if(error||!data){ toast("هذا الطلب غير متاح لحسابك الحالي","err"); return } D.orders.push(data) }
+  openOrder(id);
+}
 function detectNotifs(){
   const key="nseen_"+NME(); let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
   const ids=(D.notifs||[]).map(n=>n.id);
@@ -547,14 +559,15 @@ function detectNotifs(){
 }
 const pushClient=new DeliveryPush({
   scope:"/captain", keyUrl:SUPABASE_URL+"/functions/v1/send-push", apiKey:SUPABASE_KEY,
-  save:args=>sb.rpc("save_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args)
+  save:args=>sb.rpc("save_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args), session:()=>sb.auth.getSession()
 });
+globalThis.addEventListener?.("delivery-native-ready",async()=>{ const {data}=await sb.auth.getSession(); if(data.session) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
 function initNotifUI(){ const b=$("bell"); b.innerHTML=ic("bell")+(pushClient.enabled?"":'<i class="dot"></i>'); b.classList.toggle("on",pushClient.enabled) }
 async function bellClick(){
   const s=notifState();
   if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");
-  if(s==="denied") return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
+  if(s==="denied"&&!pushClient.native?.expected) return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
   try{
     if(s!=="granted" && await pushClient.requestPermission()!=="granted") return pushDiag();
     await ensurePush({strict:true});
@@ -572,7 +585,7 @@ async function pushDiag(initialLog=""){
   function draw(){
     const mode=(matchMedia("(display-mode: standalone)").matches||document.referrer.startsWith("android-app://"))?"تطبيق":"متصفح";
     box.innerHTML=`<div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:16px;max-height:85vh;overflow:auto;direction:rtl;font-size:14px;color:#0f172a">
-      <b style="font-size:16px">🔧 فحص الإشعارات · 1.0.1</b>
+      <b style="font-size:16px">🔧 فحص الإشعارات · 1.1.0 · ${esc(o.transport||"Web Push")}</b>
       <div style="margin:10px 0;line-height:1.9">إذن الموقع الفعلي: <b>${esc(o.permission)}</b><br>نتيجة آخر طلب إذن: <b>${esc(o.requestResult||"لم يُطلب")}</b><br>طريقة التشغيل: <b>${mode}</b><br>دعم Push: <b>${o.push?"نعم":"لا"}</b><br>خدمة الخلفية: <b>${o.active?"يعمل":"غير جاهزة"}</b><br>نطاق الخدمة: <b dir="ltr">${esc(o.scope)}</b><br>اشتراك الجهاز: <b>${o.subscription?"موجود ✓":"غير موجود"}</b><br>حفظ الاشتراك بالخادم: <b>${o.saved?"تم ✓":"غير مؤكّد"}</b></div>
       ${o.error?`<div style="color:#b91c1c;margin-bottom:10px">${esc(o.error)}</div>`:""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="b btn" id="pdg-ask">1) طلب الإذن</button><button class="b btn" id="pdg-sub">2) تفعيل الاشتراك</button><button class="b btn" id="pdg-local">3) إشعار تجريبي</button><button class="b btn" id="pdg-close">إغلاق</button></div>
@@ -584,7 +597,8 @@ async function pushDiag(initialLog=""){
       finally{ log.push("requestPermission → "+pushClient.requestResult+"; Notification.permission → "+notifState()) }
     });
     box.querySelector("#pdg-sub").onclick=()=>act(async()=>{ await ensurePush({strict:true}); log.push("OK: اشتراك الجهاز وحفظ الخادم نجحا") });
-    box.querySelector("#pdg-local").onclick=()=>act(async()=>{ const reg=await pushClient.registration(); await reg.showNotification("إشعار تجريبي",{body:"إذا ظهر هذا الإشعار فالعرض يعمل",dir:"rtl",icon:"/icons/captain-192.png",data:{url:"/captain.html"}}); log.push("showNotification OK — فحص عرض محلي") });
+    box.querySelector("#pdg-local").onclick=()=>act(async()=>{ await pushClient.showTest("إشعار تجريبي",{body:"إذا ظهر هذا الإشعار فالعرض يعمل",dir:"rtl",icon:"/icons/captain-192.png",data:{url:"/captain.html"}}); log.push("showNotification OK — فحص عرض محلي") });
+    if(pushClient.native?.expected){ const b=document.createElement("button"); b.className="b btn"; b.id="pdg-server"; b.textContent="4) اختبار FCM من الخادم"; box.querySelector("#pdg-local").after(b); b.onclick=()=>act(async()=>{ await pushClient.native.serverTest(); log.push("FCM accepted — أُرسل للاختبار؛ تحقّق من وصوله على الجهاز") }) }
   }
   async function act(fn){
     box.querySelectorAll("button").forEach(b=>b.disabled=true);
@@ -596,12 +610,13 @@ async function pushDiag(initialLog=""){
 async function ensurePush({strict=false}={}){
   try{
     if(!(!!me)) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
+    if(pushClient.native?.expected) await pushClient.native.ready();
     if(notifState()!=="granted" && !strict) return false;
     await pushClient.subscribe(); return true;
   }catch(e){ if(strict) throw e; console.warn("push",e); return false }
   finally{ initNotifUI(); if(pushClient.enabled){ $("push-enable-card")?.remove(); $("push-banner")?.remove() } }
 }
-async function dropPush(){ try{ await pushClient.unsubscribe() }catch(e){ console.warn("push unsubscribe",e) } }
+async function dropPush(){ try{ await pushClient.unsubscribe() }catch(e){ if(pushClient.native?.expected){ toast("تعذّر فصل الجهاز. أعد المحاولة قبل الخروج.","err"); throw e } console.warn("push unsubscribe",e) } }
 /* تحديث لحظي من القاعدة + احتياطي بالاستعلام الدوري */
 let rt, deb;
 function startLive(){

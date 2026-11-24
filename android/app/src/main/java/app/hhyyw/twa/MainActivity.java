@@ -4,12 +4,19 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Bundle;
 
 import com.google.androidbrowserhelper.trusted.LauncherActivity;
 import com.google.androidbrowserhelper.trusted.TwaLauncher;
 
 /** Use a provider with notification delegation regardless of the default browser. */
 public class MainActivity extends LauncherActivity {
+    private NativePushBridge nativeBridge;
+    private BridgeTwaLauncher bridgeLauncher;
+    @Override protected void onCreate(Bundle state) {
+        nativeBridge = new NativePushBridge(this);
+        super.onCreate(state);
+    }
     @Override
     protected boolean shouldLaunchImmediately() {
         if (ChromeProvider.isAvailable(getPackageManager())) return true;
@@ -29,7 +36,18 @@ public class MainActivity extends LauncherActivity {
 
     @Override
     protected TwaLauncher createTwaLauncher() {
-        return new TwaLauncher(this, ChromeProvider.PACKAGE_NAME);
+        bridgeLauncher = new BridgeTwaLauncher(this, ChromeProvider.PACKAGE_NAME, nativeBridge);
+        return bridgeLauncher;
+    }
+
+    @Override protected Uri getLaunchingUrl() {
+        Uri safe = NotificationRoute.safe(getIntent().getDataString(), BuildConfig.APP_SCOPE);
+        return safe.buildUpon().appendQueryParameter("native", "1").build();
+    }
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (bridgeLauncher != null) bridgeLauncher.launch(getLaunchingUrl());
     }
 
     private void openChromeSetup() {

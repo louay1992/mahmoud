@@ -1,4 +1,4 @@
 [
-  {"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"app.hhyyw.admin","sha256_cert_fingerprints":["1E:7B:90:71:94:5F:37:64:AE:71:EC:30:86:70:B6:CF:F4:02:33:2E:80:EA:7A:4D:7D:A0:71:5D:87:24:DF:05"]}},
-  {"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"app.hhyyw.captain","sha256_cert_fingerprints":["1E:7B:90:71:94:5F:37:64:AE:71:EC:30:86:70:B6:CF:F4:02:33:2E:80:EA:7A:4D:7D:A0:71:5D:87:24:DF:05"]}}
+  {"relation":["delegate_permission/common.handle_all_urls","delegate_permission/common.use_as_origin"],"target":{"namespace":"android_app","package_name":"app.hhyyw.admin","sha256_cert_fingerprints":["1E:7B:90:71:94:5F:37:64:AE:71:EC:30:86:70:B6:CF:F4:02:33:2E:80:EA:7A:4D:7D:A0:71:5D:87:24:DF:05"]}},
+  {"relation":["delegate_permission/common.handle_all_urls","delegate_permission/common.use_as_origin"],"target":{"namespace":"android_app","package_name":"app.hhyyw.captain","sha256_cert_fingerprints":["1E:7B:90:71:94:5F:37:64:AE:71:EC:30:86:70:B6:CF:F4:02:33:2E:80:EA:7A:4D:7D:A0:71:5D:87:24:DF:05"]}}
 ]

@@ -1,5 +1,6 @@
 import webpush from "npm:web-push@3.6.7";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.89.0";
+import { createFcmSender, parseFcmAccount } from "../_shared/fcm.ts";
 
 // تتحقق الدالة من كلمة سرّ مشتركة محفوظة في جدول push_config (لا يصل إليه أي تطبيق).
 // مفاتيح VAPID تُولَّد مرة واحدة هنا وتُحفظ في نفس الجدول.
@@ -12,6 +13,8 @@ const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...cors, "content-type": "application/json" } });
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+const fcmConfig = parseFcmAccount(Deno.env.get("FCM_SERVICE_ACCOUNT_JSON"));
+const sendFcm = fcmConfig ? createFcmSender(fcmConfig) : null;
 
 async function readCfg() {
   const { data } = await db.from("push_config").select("key,value");
@@ -35,7 +38,10 @@ Deno.serve(async (req) => {
   const c = await cfg();
   if (req.method === "GET") return json({ key: c.vapid_public });
   if (!c.push_secret || req.headers.get("x-push-secret") !== c.push_secret) return json({ error: "forbidden" }, 403);
-  const { captain_id, admins, title, body, tag, url, icon } = await req.json();
+  let payload;
+  try { payload = await req.json(); } catch (_) { return json({ error: "invalid JSON" }, 400); }
+  const { captain_id, admins, title, body, tag, url, icon, order_id } = payload;
+  if (typeof title !== "string" || typeof body !== "string") return json({ error: "invalid message" }, 400);
   webpush.setVapidDetails("mailto:admin@example.com", c.vapid_public, c.vapid_private);
   const q = db.from("push_subscriptions").select("*");
   const { data: subs } = admins ? await q.not("admin_email", "is", null) : await q.eq("captain_id", captain_id);
@@ -52,5 +58,21 @@ Deno.serve(async (req) => {
       if (e.statusCode === 404 || e.statusCode === 410) { await db.from("push_subscriptions").delete().eq("id", s.id); removed++; }
     }
   }));
-  return json({ sent, removed });
+  let fcm_sent = 0, fcm_removed = 0, fcm_failed = 0;
+  const { data: devices, error: deviceError } = await db.rpc("native_push_targets", { p_admins: !!admins, p_captain: captain_id || null });
+  const native_error = deviceError ? "NATIVE_MIGRATION_REQUIRED" : devices?.length && !sendFcm ? "FCM_NOT_CONFIGURED" : null;
+  if (sendFcm) await Promise.all((devices || []).map(async (device: any) => {
+    try {
+      const result = await sendFcm(device, { title, body, tag, url, order_id });
+      if (result.ok) fcm_sent++;
+      else if (result.unregistered) {
+        // Do not delete a device if its token or account changed while sending.
+        await db.from("native_push_devices").delete().eq("installation_id", device.installation_id)
+          .eq("fcm_token", device.fcm_token).eq("binding_id", device.binding_id);
+        fcm_removed++;
+      } else fcm_failed++;
+    } catch (_) { fcm_failed++; }
+  }));
+  if (native_error || fcm_failed) console.warn("native push delivery", { native_error, fcm_failed });
+  return json({ sent, removed, fcm_sent, fcm_removed, fcm_failed, native_error });
 });

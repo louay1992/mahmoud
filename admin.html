@@ -12,7 +12,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
+<script src="/mobile-ui.js" defer></script>
 <style>
 :root{
   --p:#0f766e;--p2:#134e4a;--p3:#14b8a6;--bg:#eef3f4;--card:#fff;--bd:#e1e9ec;--tx:#0f172a;--mut:#64748b;
@@ -240,6 +242,7 @@ tr:last-child td{border-bottom:0}
 .shc-m{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;border-top:1px dashed #e2e8f0;padding-top:8px}.shc-m b{font-size:14.5px}
 .setf{margin:0 0 14px}.setf label{display:block;font-weight:700;margin-bottom:4px}.setf input{width:100%}.setf small{display:block;color:#64748b;font-size:12px;margin-top:3px}
 </style>
+<link rel="stylesheet" href="/mobile.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><b>إدارة كباتن التوصيل</b><div class="spin"></div></div>
@@ -385,7 +388,7 @@ async function boot(){
     $("bell").style.display="none";
     if(!visTabs().length){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
     await loadAll(true); renderNav(); go(visTabs()[0][0]); hideSplash(); checkUpdate(); return }
-  await loadAll(true); renderNav(); go("home"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate();
+  await loadAll(true); renderNav(); go("home"); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 async function login(){
   const b=$("lbtn"), em=$("em").value.trim(), pw=$("pw").value; if(!em||!pw) return toast("اكتب البريد وكلمة المرور","err");
@@ -476,6 +479,7 @@ function beep(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioCon
     g.gain.setValueAtTime(.0001,t+d); g.gain.exponentialRampToValueAtTime(.3,t+d+.02); g.gain.exponentialRampToValueAtTime(.0001,t+d+.3); o.start(t+d); o.stop(t+d+.32) }) }catch(e){} }
 async function notify(title, body, tag){
   toast(title+(body?" — "+body:""),"bell"); beep(); try{ navigator.vibrate&&navigator.vibrate([200,100,200]) }catch(e){}
+  if(pushClient.native?.expected) return;
   if(document.hidden && "Notification" in window && Notification.permission==="granted"){
     const opt={body,tag,icon:"/icons/admin-192.png",badge:"/icons/admin-192.png",dir:"rtl",lang:"ar",renotify:true,vibrate:[200,100,200],data:{url:"/admin.html"}};
     try{ const reg=await pushClient.registration(); await reg.showNotification(title,opt) }catch(e){ console.warn("notification display",e) } }
@@ -516,6 +520,15 @@ function vNotifs(){
   $("main").innerHTML=h; markRead();
 }
 function openNotif(oid){ if(!(D.orders||[]).some(o=>o.id===oid)) return toast("الطلب غير متاح","err"); openOrder(oid) }
+async function openPushTarget(){
+  const params=new URLSearchParams(location.search), id=params.get("order"), incoming=params.get("notification")==="1";
+  if(!incoming) return;
+  params.delete("notification"); params.delete("order"); history.replaceState(null,"",location.pathname+(params.size?"?"+params:"")+location.hash);
+  if(!id||!/^[0-9a-f-]{36}$/i.test(id)){ tab="notifs"; renderNav(); render(); return }
+  let o=D.orders.find(x=>x.id===id);
+  if(!o){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).maybeSingle(); if(error||!data){ toast("هذا الطلب غير متاح لحسابك الحالي","err"); return } o=data; D.orders.push(o) }
+  if(o.fulfillment==="shipping") await openShip(id); else openOrder(id);
+}
 function detectNotifs(){
   const key="nseen_"+NME(); let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
   const ids=(D.notifs||[]).map(n=>n.id);
@@ -526,14 +539,15 @@ function detectNotifs(){
 }
 const pushClient=new DeliveryPush({
   scope:"/admin", keyUrl:SUPABASE_URL+"/functions/v1/send-push", apiKey:SUPABASE_KEY,
-  save:args=>sb.rpc("save_admin_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args)
+  save:args=>sb.rpc("save_admin_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args), session:()=>sb.auth.getSession()
 });
+globalThis.addEventListener?.("delivery-native-ready",async()=>{ const {data}=await sb.auth.getSession(); if(data.session) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
 function initNotifUI(){ const b=$("bell"); const nb=nBadge(); b.innerHTML=ic("bell")+(nb||(pushClient.enabled?"":'<i class="dot"></i>')); b.classList.toggle("on",pushClient.enabled) }
 async function bellClick(){
   const s=notifState();
   if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");
-  if(s==="denied") return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
+  if(s==="denied"&&!pushClient.native?.expected) return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
   try{
     if(s!=="granted" && await pushClient.requestPermission()!=="granted") return pushDiag();
     await ensurePush({strict:true});
@@ -551,7 +565,7 @@ async function pushDiag(initialLog=""){
   function draw(){
     const mode=(matchMedia("(display-mode: standalone)").matches||document.referrer.startsWith("android-app://"))?"تطبيق":"متصفح";
     box.innerHTML=`<div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:16px;max-height:85vh;overflow:auto;direction:rtl;font-size:14px;color:#0f172a">
-      <b style="font-size:16px">🔧 فحص الإشعارات · 1.0.1</b>
+      <b style="font-size:16px">🔧 فحص الإشعارات · 1.1.0 · ${esc(o.transport||"Web Push")}</b>
       <div style="margin:10px 0;line-height:1.9">إذن الموقع الفعلي: <b>${esc(o.permission)}</b><br>نتيجة آخر طلب إذن: <b>${esc(o.requestResult||"لم يُطلب")}</b><br>طريقة التشغيل: <b>${mode}</b><br>دعم Push: <b>${o.push?"نعم":"لا"}</b><br>خدمة الخلفية: <b>${o.active?"يعمل":"غير جاهزة"}</b><br>نطاق الخدمة: <b dir="ltr">${esc(o.scope)}</b><br>اشتراك الجهاز: <b>${o.subscription?"موجود ✓":"غير موجود"}</b><br>حفظ الاشتراك بالخادم: <b>${o.saved?"تم ✓":"غير مؤكّد"}</b></div>
       ${o.error?`<div style="color:#b91c1c;margin-bottom:10px">${esc(o.error)}</div>`:""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="b btn" id="pdg-ask">1) طلب الإذن</button><button class="b btn" id="pdg-sub">2) تفعيل الاشتراك</button><button class="b btn" id="pdg-local">3) إشعار تجريبي</button><button class="b btn" id="pdg-close">إغلاق</button></div>
@@ -563,7 +577,8 @@ async function pushDiag(initialLog=""){
       finally{ log.push("requestPermission → "+pushClient.requestResult+"; Notification.permission → "+notifState()) }
     });
     box.querySelector("#pdg-sub").onclick=()=>act(async()=>{ await ensurePush({strict:true}); log.push("OK: اشتراك الجهاز وحفظ الخادم نجحا") });
-    box.querySelector("#pdg-local").onclick=()=>act(async()=>{ const reg=await pushClient.registration(); await reg.showNotification("إشعار تجريبي",{body:"إذا ظهر هذا الإشعار فالعرض يعمل",dir:"rtl",icon:"/icons/admin-192.png",data:{url:"/admin.html"}}); log.push("showNotification OK — فحص عرض محلي") });
+    box.querySelector("#pdg-local").onclick=()=>act(async()=>{ await pushClient.showTest("إشعار تجريبي",{body:"إذا ظهر هذا الإشعار فالعرض يعمل",dir:"rtl",icon:"/icons/admin-192.png",data:{url:"/admin.html"}}); log.push("showNotification OK — فحص عرض محلي") });
+    if(pushClient.native?.expected){ const b=document.createElement("button"); b.className="b btn"; b.id="pdg-server"; b.textContent="4) اختبار FCM من الخادم"; box.querySelector("#pdg-local").after(b); b.onclick=()=>act(async()=>{ await pushClient.native.serverTest(); log.push("FCM accepted — أُرسل للاختبار؛ تحقّق من وصوله على الجهاز") }) }
   }
   async function act(fn){
     box.querySelectorAll("button").forEach(b=>b.disabled=true);
@@ -575,12 +590,13 @@ async function pushDiag(initialLog=""){
 async function ensurePush({strict=false}={}){
   try{
     if(!(!!ME && ACC.role==="full")) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
+    if(pushClient.native?.expected) await pushClient.native.ready();
     if(notifState()!=="granted" && !strict) return false;
     await pushClient.subscribe(); return true;
   }catch(e){ if(strict) throw e; console.warn("push",e); return false }
   finally{ initNotifUI(); if(pushClient.enabled){ $("push-enable-card")?.remove(); $("push-banner")?.remove() } }
 }
-async function dropPush(){ try{ await pushClient.unsubscribe() }catch(e){ console.warn("push unsubscribe",e) } }
+async function dropPush(){ try{ await pushClient.unsubscribe() }catch(e){ if(pushClient.native?.expected){ toast("تعذّر فصل الجهاز. أعد المحاولة قبل الخروج.","err"); throw e } console.warn("push unsubscribe",e) } }
 /* كشف التغييرات: طلبات تعديل السعر، حالات الطلبات من الكباتن، ملاحظات الكباتن */
 function detectAdmin(){
   const key="adm_seen_"+ME; let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
@@ -869,7 +885,7 @@ const whOpts=sel=>D.warehouses.map(w=>`<option value="${w.id}" ${w.id===sel?"sel
 const prodOpts=()=>D.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
 const waNum=p=>{ let d=String(p||"").replace(/[٠-٩]/g,c=>"٠١٢٣٤٥٦٧٨٩".indexOf(c)).replace(/\D/g,""); const cc=(D.settings.phone_country||"").replace(/\D/g,""); if(d.startsWith("00")) d=d.slice(2); else if(d.startsWith("0")&&cc) d=cc+d.slice(1); return d };
 const waUrl=(o,t)=>"https://wa.me/"+waNum(o.customer_phone)+"?text="+encodeURIComponent(t);
-const mapUrl=o=>o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):"");
+const mapUrl=o=>{try{const u=new URL(o.map_url||(o.customer_address?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.customer_address):""));return /^https?:$/.test(u.protocol)?esc(u.href):""}catch(_){return""}};
 const waText=o=>`مرحباً ${o.customer_name}، بخصوص طلبك رقم #${o.order_no}${D.settings.business_name?" من "+D.settings.business_name:""}. المبلغ المطلوب: ${money(o.total)}.`;
 const num2=x=>Number(Number(x).toFixed(2));
 function pickDlg(title,items,o={}){ // items:[{id,label,sub,off}]
@@ -1086,8 +1102,8 @@ function vNew(){
     <details style="margin-top:8px"><summary class="mut">عرض الكلاشة</summary><textarea id="watpl" rows="7" readonly style="width:100%;margin-top:6px">${WA_TPL}</textarea></details></div>
    <div class="card"><h2>طلب بيع جديد</h2>
     ${ACC.role!=="staff"?`<div class="seg"><button type="button" id="nm_d" class="on" onclick="setNom('delivery')">🚚 توصيل بكابتن</button><button type="button" id="nm_s" onclick="setNom('shipping')">📦 شحن بشركة</button></div>`:""}
-    <div class="row"><input id="on" placeholder="اسم الزبون"><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel"></div>
-    <div class="row"><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)"><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr"></div>
+    <div class="row"><label class="mobile-field"><span>اسم الزبون</span><input id="on" placeholder="اسم الزبون" autocomplete="name"></label><label class="mobile-field"><span>رقم الموبايل</span><input id="op" placeholder="رقم موبايل الزبون" dir="ltr" inputmode="tel" autocomplete="tel"></label></div>
+    <div class="row"><label class="mobile-field"><span>عنوان التوصيل</span><input id="oa" placeholder="عنوان الزبون (المنطقة / الشارع / أقرب نقطة)" autocomplete="street-address"></label><label class="mobile-field"><span>رابط الخريطة (اختياري)</span><input id="om" placeholder="رابط الموقع على الخرائط (اختياري)" dir="ltr" type="url" inputmode="url"></label></div>
     <div class="row"><textarea id="onote" rows="2" placeholder="ملاحظة خاصة بالطلب"></textarea></div>
     <div class="row"><select id="og" onchange="autoCap()">${govOptions("","— محافظة الطلب —")}</select></div>
     ${(can("pick_captain")||can("pick_marketer"))?`<div class="row">${can("pick_captain")?`<select id="oc" onchange="upd()">${capOptions("","— إسناد لاحقاً —")}</select>`:""}${can("pick_marketer")?`<input type="hidden" id="omk" value=""><button type="button" class="pkbtn" id="omkb" onclick="pickMarketer()">— اختر المسوّقة (ابحث) —</button>`:""}</div><div id="ohint" class="mut" style="margin:2px 0 6px;font-size:13px"></div>`:""}
@@ -1095,7 +1111,7 @@ function vNew(){
     ${ACC.role==="staff"?`<p class="mut" style="margin:4px 0">اكتب <b>سعر البيع</b> لكل منتج.</p>`:`<p class="mut" style="margin:4px 0">السعر المعبّأ تلقائياً هو رأس المال. اكتب <b>سعر البيع</b> لكل بند؛ الزيادة عن رأس المال تُسجَّل ربحاً للمسوّقة بعد التسليم.</p>`}
     ${itemRows("orows",true)}<br><br>
     <div id="otot" class="mut"></div><br>
-    <button class="b" onclick="saveOrder()">إنشاء الطلب</button></div>`;
+    <button class="b mobile-submit" onclick="saveOrder()">إنشاء الطلب</button></div>`;
 }
 function upd(){ updFor("orows","otot",()=>{ if(NOM==="shipping"&&$("ofee")) return parseFloat($("ofee").value)||0; const c=D.captains.find(c=>c.id===($("oc")||{}).value);return c?Number(c.delivery_fee):0}); if(EO) updFor("erows","etot",()=>Number(EO.delivery_fee)) }
 function updFor(rid,tid,feeFn){

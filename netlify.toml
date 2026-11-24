@@ -1,0 +1,29 @@
+"$schema" = "https://open-api.netlify.com/netlify.schema.json"
+
+[build]
+command = "npm run build"
+publish = "dist"
+
+[build.environment]
+NODE_VERSION = "24"
+
+[[redirects]]
+from = "/admin"
+to = "/admin.html"
+status = 200
+
+[[redirects]]
+from = "/captain"
+to = "/captain.html"
+status = 200
+
+[[headers]]
+for = "/sw.js"
+[headers.values]
+Cache-Control = "no-store"
+
+[[headers]]
+for = "/.well-known/assetlinks.json"
+[headers.values]
+Content-Type = "application/json"
+Cache-Control = "public, max-age=300"
