@@ -102,6 +102,30 @@ for (const role of ['captain', 'admin']) {
     assert.equal(await vm.runInContext('ensurePush()', f.context), false);
     await assert.rejects(vm.runInContext('ensurePush({strict:true})', f.context), /database failed/);
   });
+
+  test(role + ': non-strict boot activation saves an existing subscription with granted permission', async () => {
+    const f = fixture({ role, existing: true });
+    const saved = [];
+    const html = fs.readFileSync(role + '.html', 'utf8');
+    const start = html.indexOf('const pushClient=new DeliveryPush(');
+    const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
+    Object.assign(f.context, {
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public',
+      me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
+      sb: { rpc: async (name, args) => { saved.push({ name, args }); return { error: null }; } },
+      $: id => id === 'bell' ? { classList: { toggle() {} } } : null,
+      ic: () => '', nBadge: () => ''
+    });
+    vm.runInContext(html.slice(start, end), f.context);
+    assert.equal(vm.runInContext('pushClient.saved', f.context), false);
+    assert.equal(await vm.runInContext('ensurePush()', f.context), true);
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].name, role === 'captain' ? 'save_push_subscription' : 'save_admin_push_subscription');
+    assert.equal(saved[0].args.p_endpoint, 'https://push.example/' + role);
+    assert.equal(f.calls.subscribe, 0);
+    assert.equal(f.calls.fetched, undefined);
+    assert.equal(vm.runInContext('pushClient.enabled', f.context), true);
+  });
 }
 
 test('simultaneous activation calls create one subscription', async () => {

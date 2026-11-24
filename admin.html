@@ -575,7 +575,7 @@ async function pushDiag(initialLog=""){
 async function ensurePush({strict=false}={}){
   try{
     if(!(!!ME && ACC.role==="full")) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
-    if(!pushClient.enabled && !strict) return false;
+    if(notifState()!=="granted" && !strict) return false;
     await pushClient.subscribe(); return true;
   }catch(e){ if(strict) throw e; console.warn("push",e); return false }
   finally{ initNotifUI(); if(pushClient.enabled){ $("push-enable-card")?.remove(); $("push-banner")?.remove() } }
