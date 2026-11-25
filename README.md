@@ -107,6 +107,10 @@ curl "$SUPABASE_URL/functions/v1/webpage-text?url=https://apyhub.com/pricing" \
 - **الويب**: `npm run build` ينتج `dist/` (ملفات عامة فقط)، ويحسب بصمة بناء مستقلة لكل تطبيق تُحقن في `meta[name="delivery-build"]`، ويكتب `app-version.json` و`offline-shell-manifest.json` ببصمات SHA-256 لكل ملف. يعمل `sw.js` على حزمة مكتملة ومتحقَّق منها فقط، ويحتفظ بالنسخة السابقة إذا فشل أي ملف.
 - **Android**: `scripts/build-android.ps1` يبني النكهتين ويوقّعهما ويتحقق من بصمة الشهادة في `.well-known/assetlinks.json` ومن إصدار الحزمة. يتطلب `android/app/google-services.json` (غير مرفوع) و`app-config.js`. مسار GitHub Actions ينتج بناءً غير موقّع عند توفر سر `GOOGLE_SERVICES_JSON`.
 
+## تحديث تطبيقات Android
+
+من الإصدار 1.4.0 يظهر تنبيه عند توفر APK أحدث، مع تنزيل داخل التطبيق ونسبة تقدم والتحقق من الحزمة والتوقيع قبل فتح مثبت Android. تفاصيل التشغيل ونشر الإصدارات واختبارات التحديث في [دليل التحديث من داخل التطبيق](docs/in-app-updates-1.4.0.md).
+
 ## العمل دون اتصال
 
 قراءة فقط: `offline-data.js` يحفظ قراءات Supabase في IndexedDB مستقلة لكل تطبيق ومرتبطة بمعرّف الحساب، و`sw.js` يحفظ الواجهة العامة فقط.

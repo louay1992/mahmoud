@@ -71,13 +71,14 @@ class NativeDeliveryPush {
     port.onmessage = event => this.receive(event.data); port.start?.();
     this.readyResolve?.();
     if (this.unbindPending) this.unbind().catch(() => {});
+    globalThis.DeliveryAppUpdates?.connected(this);
     globalThis.dispatchEvent(new Event('delivery-native-ready'));
   }
 
   get permission() { return this.state.permission; }
   get enabled() { return this.permission === "granted" && this.state.saved === true; }
   update(data) {
-    for (const key of ["permission", "configured", "saved", "account_id", "error", "host", "app_version", "app_name"]) {
+    for (const key of ["permission", "configured", "saved", "account_id", "error", "host", "app_version", "app_name", "app_version_code", "app_update_supported"]) {
       if (Object.hasOwn(data, key)) this.state[key] = data[key];
     }
     if (this.unbindPending) { this.state.saved = false; this.state.account_id = ''; }

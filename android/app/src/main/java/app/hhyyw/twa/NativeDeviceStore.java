@@ -42,6 +42,7 @@ final class NativeDeviceStore {
     boolean configured() { return BuildConfig.FCM_CONFIGURED && !FirebaseApp.getApps(context).isEmpty(); }
     JSONObject status() throws Exception {
         return new JSONObject().put("host", "android").put("app_version", BuildConfig.VERSION_NAME).put("app_name", context.getString(R.string.app_name))
+                .put("app_version_code", BuildConfig.VERSION_CODE).put("app_update_supported", true)
                 .put("permission", NativeNotifications.permitted(context) ? "granted" : "denied")
                 .put("configured", configured()).put("saved", !prefs.getString("binding_id", "").isEmpty())
                 .put("account_id", prefs.getString("account_id", ""))

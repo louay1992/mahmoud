@@ -40,6 +40,9 @@ final class NativePushBridge {
             }
             if (id.isEmpty()) return;
             if ("status".equals(action)) { reply(id, null, null, destination); return; }
+            if ("check-app-update".equals(action) && activity instanceof MainActivity) {
+                ((MainActivity) activity).checkAppUpdate(); reply(id, null, null, destination); return;
+            }
             if ("copy".equals(action)) {
                 String text = request.optString("text");
                 if (text.length() > 20000) throw new IllegalArgumentException("النص طويل جدًّا");

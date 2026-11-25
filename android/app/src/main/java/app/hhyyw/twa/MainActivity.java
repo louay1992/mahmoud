@@ -44,6 +44,7 @@ public class MainActivity extends Activity {
     private ProgressBar progress;
     private LinearLayout errorPanel;
     private NativePushBridge bridge;
+    private AppUpdateController updates;
     private boolean pageFailed;
     private volatile boolean useOfflineShell;
     private OfflineShell offlineShell;
@@ -58,6 +59,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.WHITE);
         if (Build.VERSION.SDK_INT >= 26) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         bridge = new NativePushBridge(this);
+        updates = new AppUpdateController(this);
         offlineShell = new OfflineShell(this, BuildConfig.APP_SCOPE);
         ConnectivityManager connectivity=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
         android.net.NetworkInfo network=connectivity==null?null:connectivity.getActiveNetworkInfo();
@@ -185,7 +187,9 @@ public class MainActivity extends Activity {
         if (web == null || !NativeHostPolicy.appPage(Uri.parse(web.getUrl() == null ? "" : web.getUrl()), BuildConfig.APP_SCOPE)) { finish(); return; }
         web.evaluateJavascript("typeof handleNativeBack==='function' && handleNativeBack()", handled -> { if (!"true".equals(handled)) { if (web != null && web.canGoBack()) web.goBack(); else finish(); } });
     }
-    @Override protected void onPause() { super.onPause(); CookieManager.getInstance().flush(); }
+    void checkAppUpdate() { if (updates != null) updates.check(true); }
+    @Override protected void onResume() { super.onResume(); if (updates != null) updates.resume(); }
+    @Override protected void onPause() { if (updates != null) updates.pause(); super.onPause(); CookieManager.getInstance().flush(); }
     @Override protected void onSaveInstanceState(Bundle state) { if (web != null) web.saveState(state); super.onSaveInstanceState(state); }
-    @Override protected void onDestroy() { for (Dialog preview : new ArrayList<>(previews)) preview.dismiss(); if (web != null) { root.removeView(web); web.destroy(); } if (bridge != null) bridge.close(); super.onDestroy(); }
+    @Override protected void onDestroy() { if (updates != null) updates.close(); for (Dialog preview : new ArrayList<>(previews)) preview.dismiss(); if (web != null) { root.removeView(web); web.destroy(); } if (bridge != null) bridge.close(); super.onDestroy(); }
 }
