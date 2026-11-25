@@ -2,7 +2,7 @@ name: Check notification flow
 on:
   push:
     branches: [main]
-    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'app-updates*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
   # Required checks must run for every PR, including documentation-only changes.
   pull_request:
     branches: [main]
@@ -38,6 +38,7 @@ jobs:
       - run: node tests/auth-browser.cjs
       - run: node tests/diagnostics-browser.cjs
       - run: node tests/native-host-browser.cjs
+      - run: node tests/app-update-browser.cjs
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: browser-failure-screenshots, path: test-results/ }

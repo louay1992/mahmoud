@@ -1,6 +1,6 @@
 {
   "name": "delivery-apps",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "description": "نظام إدارة كباتن التوصيل: تطبيق إداري وتطبيق كابتن على Supabase",
@@ -21,7 +21,9 @@
     "test:admin-mobile": "node tests/admin-mobile-browser.cjs",
     "test:workspace": "node tests/admin-workspace-browser.cjs",
     "test:motion": "node tests/admin-motion-browser.cjs",
-    "test:refresh": "node tests/refresh-browser.cjs"
+    "test:refresh": "node tests/refresh-browser.cjs",
+    "test:app-updates": "node tests/app-update-browser.cjs",
+    "prepare:android-release": "node scripts/prepare-android-release.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.6.0",
