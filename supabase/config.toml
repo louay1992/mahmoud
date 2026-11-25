@@ -1,7 +1,0 @@
-project_id = "delivery-apps"
-
-[functions.send-push]
-verify_jwt = false
-
-[functions.native-device]
-verify_jwt = false
