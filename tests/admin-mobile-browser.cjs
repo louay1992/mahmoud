@@ -3,6 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=r
 const {execFileSync}=require('node:child_process'),{chromium}=require('playwright');
 const reference=execFileSync('git',['show','cbb852095170674ad65b794d4525ba420ea0b9ee:admin.html'],{encoding:'utf8'});
 async function populate(page,screen='home'){
+ await page.waitForFunction(()=>document.getElementById("splash")?.classList.contains("off"));
  await page.evaluate(screen=>{
   const id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0');
   const base={created_at:'2026-11-25T07:00:00Z',status_at:'2026-11-25T08:00:00Z',fulfillment:'delivery',customer_phone:'0944123456',customer_address:'المزة، شارع الفيلات، بجانب الصيدلية',governorate:'دمشق',captain_id:'captain-1',marketer_id:'marketer-1',total:185000,items_total:175000,list_total:175000,delivery_fee:10000,order_items:[{id:'item-1',qty:2,unit_price:87500,list_price:87500,products:{name:'مجموعة العناية اليومية'}}]};
@@ -33,7 +34,7 @@ async function populate(page,screen='home'){
   await fs.mkdir('test-results',{recursive:true});browser=await chromium.launch({headless:true});
   const origin='http://127.0.0.1:'+server.address().port,context=await browser.newContext({timezoneId:'Asia/Amman',reducedMotion:'reduce',serviceWorkers:'block'}),errors=[];
   context.on('page',page=>page.on('pageerror',e=>errors.push(e.message)));
-  await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.abort());
+  await context.route('**/*',route=>route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.request().url().startsWith(origin+'/')?route.continue():route.abort());
   for(const width of [320,360,390,430]){
    const page=await context.newPage();await page.setViewportSize({width,height:844});await page.goto(origin+'/admin.html');await populate(page);
    assert.equal(await page.locator('.am-home').count(),1);

@@ -28,6 +28,11 @@ for = "/app-version.json"
 Cache-Control = "no-store"
 
 [[headers]]
+for = "/offline-shell-manifest.json"
+[headers.values]
+Cache-Control = "no-store"
+
+[[headers]]
 for = "/.well-known/assetlinks.json"
 [headers.values]
 Content-Type = "application/json"

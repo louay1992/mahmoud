@@ -87,7 +87,7 @@ for (const role of ['captain', 'admin']) {
     const start = html.indexOf('const pushClient=new DeliveryPush(');
     const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
     Object.assign(f.context, {
-      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false},
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false}, offline:{denied:()=>false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => name.startsWith('save_') ?
         { error: { message: '<database failed>' } } : { error: null } },
@@ -111,7 +111,7 @@ for (const role of ['captain', 'admin']) {
     const start = html.indexOf('const pushClient=new DeliveryPush(');
     const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
     Object.assign(f.context, {
-      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false},
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false}, offline:{denied:()=>false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => { saved.push({ name, args }); return { error: null }; } },
       $: id => id === 'bell' ? { classList: { toggle() {} } } : null,

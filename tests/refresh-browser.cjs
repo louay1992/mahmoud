@@ -28,7 +28,7 @@ const sdk=`window.fixtureApi={counts:{},fail:false,hold:false};window.supabase={
   browser=await chromium.launch({headless:true});const origin='http://127.0.0.1:'+server.address().port;
   for(const role of ['admin','captain']){
    const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block',timezoneId:'Asia/Amman'});
-   await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:sdk}):route.abort());
+   await context.route('**/*',route=>route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?route.fulfill({contentType:'application/javascript',body:sdk}):route.request().url().startsWith(origin+'/')?route.continue():route.abort());
    const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
    await page.goto(origin+'/'+role+'.html?native=1&host=android');await page.locator('#app').waitFor({state:'visible'});await page.locator('#splash').waitFor({state:'hidden'});
    await page.waitForFunction(()=>!appRefresh.flight);if(role==='admin')await page.evaluate(()=>go('orders'));

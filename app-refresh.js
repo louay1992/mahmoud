@@ -14,6 +14,7 @@ class DeliveryRefresh {
   }
   safe(){return this.active()&&!document.body?.classList?.contains('busy')&&!this.hasDraft()&&this.options.safe();}
   async refresh({manual=false,force=false,reason='auto'}={}){
+    if(this.options.offline?.readonly){if(manual)await this.options.offline.retry();return {ok:false};}
     if(this.applying)return {ok:false};
     if(!this.active()||navigator.onLine===false){if(manual)this.options.toast('لا يوجد اتصال بالإنترنت. حاول مجددًا عند عودته.','err');return {ok:false};}
     if(!force&&!this.safe()){
@@ -47,6 +48,7 @@ class DeliveryRefresh {
   }
   async manual(){const result=await this.refresh({manual:true,reason:'manual'});if(result.ok)await this.checkUpdate();return result;}
   async checkUpdate(){
+    if(this.options.offline?.readonly)return;
     if(!this.active()||navigator.onLine===false||!/^\w{64}$/.test(this.build))return;
     if(this.versionFlight)return this.versionFlight;
     this.versionFlight=(async()=>{
@@ -127,7 +129,7 @@ class DeliveryRefresh {
     });
     document.addEventListener('pointerdown',interact,{passive:true});document.addEventListener('scroll',interact,{passive:true,capture:true});
     document.addEventListener('visibilitychange',()=>this.resume());addEventListener('focus',()=>this.resume());
-    addEventListener('online',()=>{document.getElementById('offline')?.classList.remove('on');this.resume();});
+    addEventListener('online',()=>{if(this.options.offline?.readonly){void this.options.offline.retry();return;}document.getElementById('offline')?.classList.remove('on');this.resume();});
     addEventListener('offline',()=>document.getElementById('offline')?.classList.add('on'));
     document.getElementById('offline')?.classList.toggle('on',navigator.onLine===false);
     setInterval(()=>{if(this.active())void this.refresh({reason:'timer'});},this.options.interval||20000);

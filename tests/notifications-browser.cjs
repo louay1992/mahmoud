@@ -33,11 +33,12 @@ const { chromium } = require('playwright');
     await context.grantPermissions(['notifications']);
     await context.route('**/*', route => {
       const url = route.request().url();
-      if (url.startsWith(origin + '/')) return route.continue();
-      if (url.startsWith('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2')) {
+
+      if (url.match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)) {
         return route.fulfill({ contentType: 'application/javascript', body:
           'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})};' });
       }
+      if (url.startsWith(origin + '/')) return route.continue();
       return route.abort();
     });
     const pages = [];

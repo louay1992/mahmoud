@@ -12,8 +12,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/vendor/supabase.js"></script>
 <script src="/auth-session.js"></script>
+<script src="/offline-data.js"></script>
+<link rel="stylesheet" href="/offline-data.css">
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
 <script src="/app-refresh.js"></script>
@@ -289,8 +291,9 @@ tr:last-child td{border-bottom:0}
 const SUPABASE_URL = "https://jabapvnmfdflysxfxwwf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYmFwdm5tZmRmbHlzeGZ4d3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTg2OTQsImV4cCI6MjExMTA5NDY5NH0.V-Axtg4cGwiSYNhcefmks0MP4iOn2DW5Ai74Ji8cv9I";
 // ===================================================================
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-admin-auth"}});
 const authGate = new DeliverySession("sb-admin-auth");
+const offline = new DeliveryOffline({role:"admin",storageKey:"sb-admin-auth",blocked:()=>authGate.blocked});
+const sb = offline.wrap(supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-admin-auth"}}));
 /* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
 let _lc=0,_le=null;
 document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b) return;
@@ -389,22 +392,26 @@ let tab = "home", orderFilter = "all", orderQuery = "";
 
 function hideSplash(){ $("splash").classList.add("off") }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
-async function boot(){
+function offlineLogin(){ME="";ACC={role:"none",perms:[]};D={products:[],captains:[],warehouses:[],stock:[],orders:[],balances:[],payments:[],invoices:[],movements:[],admins:[],settings:{},stats:null,ev:{},marketers:[],mbal:[],mpay:[],prof:{},notifs:[],carriers:[],prs:[],pr:{}};PDATA=null;SDATA=null;CUS={rows:null,q:""};SHIPS=null;CPAYS=[];globalThis.AdminWorkspace?.reset();showLogin();$("main").innerHTML="";$("modal").style.display="none";document.querySelectorAll(".dlg").forEach(d=>d.remove());Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});}
+function boot(){ return offline.boot(onlineBoot); }
+async function onlineBoot(){
   if(authGate.blocked){ authGate.clearSession(); showLogin(); return }
-  const {data:{session}} = await sb.auth.getSession();
+  const {data:{session}} = await offline.onlineSession(sb.auth);
   if(authGate.blocked){ showLogin(); return }
-  if(!session){ showLogin(); return }
+  if(!session){ await offline.invalidate(); showLogin(); return }
   ME = (session.user.email || "").toLowerCase();
-  const {data:acc} = await sb.rpc("my_access");
+  const {data:acc,error:accessError} = await sb.rpc("my_access");
+  if(accessError)throw Object.assign(new Error(accessError.message),{code:offline.networkError({error:accessError})?"NETWORK":"ACCESS_DENIED"});
   if(authGate.blocked){ showLogin(); return }
-  if(!acc || acc.role==="none"){ toast("هذا الحساب ليس إدارياً","err"); await sb.auth.signOut(); showLogin(); return }
+  if(!acc || acc.role==="none"){ await offline.invalidate(); toast("هذا الحساب ليس إدارياً","err"); await sb.auth.signOut(); showLogin(); return }
   ACC=acc;
+  await offline.attach(session,{access:ACC,email:ME});
   $("login").style.display="none"; $("app").style.display="block";
   if(ACC.role==="staff"){
     $("bell").style.display="none";
     if(!visTabs().length){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
-    await loadAll(true); if(authGate.blocked) return; renderNav(); go(visTabs()[0][0]); appRefresh.restoreView(); hideSplash(); checkUpdate(); return }
-  await loadAll(true); if(authGate.blocked) return; renderNav(); go("home"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
+    if(await loadAll(true)===false)throw Error("core data unavailable"); if(authGate.blocked) return; renderNav(); go(visTabs()[0][0]); appRefresh.restoreView(); hideSplash(); checkUpdate(); return }
+  if(await loadAll(true)===false)throw Error("core data unavailable"); if(authGate.blocked) return; renderNav(); go("home"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 async function login(){
   const b=$("lbtn"), em=$("em").value.trim(), pw=$("pw").value; if(!em||!pw) return toast("اكتب البريد وكلمة المرور","err");
@@ -419,6 +426,7 @@ async function login(){
 async function logout(){
   if(authGate.exiting || !await askc("هل تريد الخروج من حسابك؟",{title:"تسجيل الخروج",ok:"نعم، خروج",cls:"r"})) return;
   await authGate.logout({auth:sb.auth,detach:()=>dropPush(),reload:()=>location.reload(),lock:()=>{
+    void offline.invalidate();
     ME=""; ACC={role:"none",perms:[]}; showLogin(); $("main").innerHTML="";
     globalThis.AdminWorkspace?.reset(); D={products:[],captains:[],warehouses:[],stock:[],orders:[],balances:[],payments:[],invoices:[],movements:[],admins:[],settings:{},stats:null,ev:{},marketers:[],mbal:[],mpay:[],prof:{},notifs:[],carriers:[],prs:[],pr:{}}; PDATA=null;SDATA=null;CUS={rows:null,q:""};SHIPS=null;CPAYS=[];
     $("modal").style.display="none"; document.querySelectorAll(".dlg").forEach(d=>d.remove());
@@ -439,6 +447,7 @@ async function loadStaff(initial,{signal}={}){
   const L=lk.data||{}; D.products=L.products||[]; D.captains=L.captains||[]; D.marketers=L.marketers||[]; D.warehouses=L.warehouses||[]; D.orders=od.data||[];
   D.settings=Object.fromEntries((st.data||[]).map(x=>[x.key,x.value])); CUR=D.settings.currency||"";
   const biz=D.settings.business_name||"إدارة كباتن التوصيل"; $("hn").textContent=biz; document.title=biz;
+  await offline.checkpoint(D);return true;
 }
 async function loadAll(initial,{signal}={}){
   if(ACC.role==="staff") return loadStaff(initial,{signal});
@@ -481,6 +490,7 @@ async function loadAll(initial,{signal}={}){
   const biz = D.settings.business_name || "إدارة كباتن التوصيل";
   $("hn").textContent = biz; document.title = biz;
   D.carriers=r[19].data||[]; D.notifs=r[18].data||[]; try{ detectNotifs() }catch(e){ console.warn(e) }
+  await offline.checkpoint(D);return true;
 }
 const mname = id => (D.marketers.find(m=>m.id===id)||{}).name || "—";
 const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
@@ -506,9 +516,9 @@ function openMore(){
   $("modal").style.display="flex";
   globalThis.AdminMobile?.more();
 }
-function go(k){ if(globalThis.AdminWorkspace?.needsGuard()) return AdminWorkspace.confirmLeave(()=>go(k)); if(!visTabs().some(t=>t[0]===k)&&!(k==='notifs'&&ACC.role==='full'))return; if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); if(!globalThis.AdminWorkspace?.mobile())document.body.classList.add("anim"); const result=render(); globalThis.AdminWorkspace?.afterNavigation(k); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700); return result }
+function go(k){ if(k==="new"&&offline.denied())return toast(offline.error().error.message,"err"); if(globalThis.AdminWorkspace?.needsGuard()) return AdminWorkspace.confirmLeave(()=>go(k)); if(!visTabs().some(t=>t[0]===k)&&!(k==='notifs'&&ACC.role==='full'))return; if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); if(!globalThis.AdminWorkspace?.mobile())document.body.classList.add("anim"); const result=render(); globalThis.AdminWorkspace?.afterNavigation(k); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700); return result }
 async function refresh(){ return appRefresh.refresh({force:true,reason:'mutation'}); }
-async function manualRefresh(){ return appRefresh.manual(); }
+async function manualRefresh(){ if(offline.readonly)return offline.retry(); return appRefresh.manual(); }
 /* ===== الإشعارات ===== */
 let actx;
 function beep(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const t=actx.currentTime;
@@ -535,6 +545,7 @@ function nDay(s){ const d=new Date(s), t=new Date(), y=new Date(t.getFullYear(),
 function nBadge(){ const c=(D.notifs||[]).filter(nUnread).length; return c?`<i class="nbd">${c>99?"99+":c}</i>`:"" }
 let markReadFlight=null;
 async function markRead(){
+  if(offline.denied())return false;
   if(markReadFlight)return markReadFlight;
   const ids=(D.notifs||[]).filter(nUnread).map(n=>n.id); if(!ids.length) return;
   const m=NME();
@@ -565,7 +576,7 @@ async function openPushTarget(){
   params.delete("notification"); params.delete("order"); history.replaceState(null,"",location.pathname+(params.size?"?"+params:"")+location.hash);
   if(!id||!/^[0-9a-f-]{36}$/i.test(id)){ tab="notifs"; renderNav(); render(); return }
   let o=D.orders.find(x=>x.id===id);
-  if(!o){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).maybeSingle(); if(error||!data){ toast("هذا الطلب غير متاح لحسابك الحالي","err"); return } o=data; D.orders.push(o) }
+  if(!o){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).maybeSingle(); if(error||!data){ toast(offline.readonly?"هذا الطلب غير محفوظ على الجهاز. افتحه عند عودة الاتصال.":"هذا الطلب غير متاح لحسابك الحالي","err"); return } o=data; D.orders.push(o) }
   if(o.fulfillment==="shipping") await openShip(id); else openOrder(id);
 }
 function detectNotifs(){
@@ -584,7 +595,7 @@ const pushClient=new DeliveryPush({
   scope:"/admin", keyUrl:SUPABASE_URL+"/functions/v1/send-push", apiKey:SUPABASE_KEY,
   save:args=>sb.rpc("save_admin_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args), session:()=>authGate.blocked?Promise.resolve({data:{session:null}}):sb.auth.getSession()
 });
-globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
+globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(!authGate.blocked&&(offline.readonly||navigator.onLine===false)){initNotifUI();return;} if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
 function initNotifUI(){ const b=$("bell"); const nb=nBadge(); b.innerHTML=ic("bell")+(nb||(pushClient.enabled?"":'<i class="dot"></i>')); b.classList.toggle("on",pushClient.enabled) }
 async function bellClick(){
@@ -599,6 +610,7 @@ async function bellClick(){
 }
 
 async function ensurePush({strict=false}={}){
+  if(offline.denied())return false;
   try{
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(!(!!ME && ACC.role==="full")) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
@@ -631,6 +643,7 @@ let rt, deb;
 function idle(){ return $("modal").style.display!=="flex"&&!document.querySelector(".dlg")&&!(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) }
 async function autoRefresh(){ return appRefresh.refresh({reason:'live'}); }
 function startLive(){
+  if(rt){Promise.resolve(sb.removeChannel?.(rt)).catch(()=>{});rt=null;}
   const kick=()=>{ clearTimeout(deb); deb=setTimeout(autoRefresh,600) };
   try{ rt=sb.channel("adm-live").on("postgres_changes",{event:"*",schema:"public",table:"orders"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"captain_payments"},kick)
@@ -801,6 +814,7 @@ function vCaptains(){
   <p class="mut" style="padding:0 6px">${mode==="list"?"نمط الحساب: الكابتن يسلّمك <b>السعر المثبت</b>؛ الزيادة عن المثبت له والنقص عليه.":"نمط الحساب: الكابتن يسلّمك <b>ما قبضه فعلياً</b>؛ الفرق عن المثبت يظهر في «فروقات الأسعار»."} المتبقي = المطلوب منه − الدفعات المستلمة، وأجور التوصيل تبقى مع الكابتن (يمكن تغيير النمط من الإعدادات).</p>`;
 }
 async function callSetPw(captain_id,password,email){
+  if(offline.denied())throw new Error(offline.error().error.message);
   const {data:{session}}=await sb.auth.getSession();
   const r=await fetch(SUPABASE_URL+"/functions/v1/admin-set-password",{method:"POST",headers:{"Content-Type":"application/json",apikey:SUPABASE_KEY,Authorization:"Bearer "+(session?.access_token||"")},body:JSON.stringify({captain_id,password,email})});
   const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||"تعذّر تنفيذ الطلب"); return j;
@@ -2046,7 +2060,7 @@ if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn
 
 let lastReportRefresh=0;
 const appRefresh=new DeliveryRefresh({
-  role:'admin',interval:25000,
+  offline,role:'admin',interval:25000,
   active:()=>!!ME&&!authGate.blocked&&$('app').style.display!=='none'&&$('splash').classList.contains('off'),
   safe:()=>busy===0&&!(pushClient.native?.pending?.size)&&!globalThis.AdminWorkspace?.hasDraft()&&idle()&&tab!=='new'&&!(tab==='settings'&&SSEC),
   toast,
@@ -2078,6 +2092,19 @@ const appRefresh=new DeliveryRefresh({
     if(visTabs().some(t=>t[0]===v.tab)||(v.tab==='notifs'&&ACC.role==='full'))Promise.resolve(go(v.tab)).then(async()=>{if(ME!==v.owner||tab!==v.tab)return;globalThis.AdminWorkspace?.restoreView(v.workspace);if(globalThis.AdminWorkspace?.full()){await render();if(tab==='stock'&&SV.v==='wh'&&v.workspace?.wh?.tab!=='stock')await AdminWorkspace.loadWarehouse();}if(ME===v.owner&&tab===v.tab)requestAnimationFrame(()=>scrollTo({top:Math.max(0,Number(v.y)||0),behavior:'instant'}));}).catch(()=>{});
   }
 });
+offline.configure({
+  editing:()=>tab==='new'||(tab==='stock'&&['invoice','transfer'].includes(SV.v))||(tab==='settings'&&!!SSEC)||(tab==='products'&&PSV!=='list')||(tab==='marketers'&&MSV!=='list')||(['captains','warehouses'].includes(tab)&&CV!=='list'),
+  sessionEnded:()=>{authGate.closed=true;authGate.storage.setItem(authGate.marker,"1");authGate.clearSession();showLogin();$("main").innerHTML="";$("modal").style.display="none";location.reload();},
+  toast,login:offlineLogin,safe:()=>!appRefresh.hasDraft()&&appRefresh.options.safe(),
+  capture:()=>appRefresh.options.captureView(),reconnected:v=>appRefresh.options.restoreView(v),
+  restore:async record=>{
+    ME=record.profile.email;ACC=record.profile.access;D=record.data;CUR=D.settings.currency||"";
+    const biz=D.settings.business_name||"إدارة كباتن التوصيل";$("hn").textContent=biz;document.title=biz;
+    $("login").style.display="none";$("app").style.display="block";$("bell").style.display=ACC.role==="staff"?"none":"";
+    firstLoad=false;INITIAL_LOAD_FAILED=false;renderNav();const target=ACC.role==="staff"?visTabs().find(t=>t[0]!=="new")?.[0]:"home";if(target)go(target);else $("main").innerHTML='<div class="empty">لا توجد أقسام عرض ضمن صلاحيات هذا الحساب. إنشاء الطلبات يتطلب اتصالاً بالإنترنت.</div>';hideSplash();initNotifUI();if(ACC.role==="full")openPushTarget();
+  }
+});
+offline.watch(sb.auth);
 boot();
 </script>
 </body>

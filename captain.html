@@ -12,8 +12,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/vendor/supabase.js"></script>
 <script src="/auth-session.js"></script>
+<script src="/offline-data.js"></script>
+<link rel="stylesheet" href="/offline-data.css">
 <script src="/native-push.js"></script>
 <script src="/push-client.js"></script>
 <script src="/app-refresh.js"></script>
@@ -339,8 +341,9 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 const SUPABASE_URL = "https://jabapvnmfdflysxfxwwf.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYmFwdm5tZmRmbHlzeGZ4d3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MTg2OTQsImV4cCI6MjExMTA5NDY5NH0.V-Axtg4cGwiSYNhcefmks0MP4iOn2DW5Ai74Ji8cv9I";
 // ===================================================================
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-captain-auth"}});
 const authGate = new DeliverySession("sb-captain-auth");
+const offline = new DeliveryOffline({role:"captain",storageKey:"sb-captain-auth",blocked:()=>authGate.blocked});
+const sb = offline.wrap(supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-captain-auth"}}));
 /* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
 let _lc=0,_le=null;
 document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b || b.closest("#pdg") || b.hasAttribute("data-push-diagnostic")) return;
@@ -411,21 +414,25 @@ let me=null, D={orders:[],stock:[],payments:[],balance:null,ev:{},settings:{},pr
 
 /* ===== الدخول والبدء ===== */
 function hideSplash(){ $("splash").classList.add("off") }
-async function boot(){
+function boot(){ return offline.boot(onlineBoot); }
+async function onlineBoot(){
   if(authGate.blocked){ authGate.clearSession(); showLogin(); return }
-  const {data:{session}} = await sb.auth.getSession();
+  const {data:{session}} = await offline.onlineSession(sb.auth);
   if(authGate.blocked){ showLogin(); return }
-  if(!session){ showLogin(); return }
+  if(!session){ await offline.invalidate(); showLogin(); return }
   const em=String(session.user.email||"").toLowerCase();
-  const {data} = await sb.from("captains").select("*").eq("email",em).limit(1);
+  const {data,error:profileError} = await sb.from("captains").select("*").eq("email",em).limit(1);
+  if(profileError)throw Object.assign(new Error(profileError.message),{code:offline.networkError({error:profileError})?"NETWORK":"ACCESS_DENIED"});
   if(authGate.blocked){ showLogin(); return }
-  if(!data || !data.length || String(data[0].email||"").toLowerCase()!==em){ toast("هذا الحساب غير مرتبط بكابتن","err"); await sb.auth.signOut(); showLogin(); return }
+  if(!data || !data.length || data[0].active===false || String(data[0].email||"").toLowerCase()!==em){ await offline.invalidate(); toast("هذا الحساب غير مرتبط بكابتن","err"); await sb.auth.signOut(); showLogin(); return }
   me = data[0];
+  await offline.attach(session,{captain:me});
   $("login").style.display="none"; $("app").style.display="block";
   $("av").textContent=(me.name||"ك").trim().charAt(0); $("hn").textContent=me.name;
-  await load(true); if(authGate.blocked) return; go("orders"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
+  if(await load(true)===false)throw Error("core data unavailable"); if(authGate.blocked) return; go("orders"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
 function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
+function offlineLogin(){me=null;LSEQ++;D={orders:[],stock:[],payments:[],balance:null,ev:{},settings:{},pr:{},notifs:[]};showLogin();$("main").innerHTML="";$("modal").style.display="none";document.querySelectorAll(".dlg").forEach(d=>d.remove());Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});}
 const loginId=v=>{ v=String(v||"").trim(); if(v.includes("@")) return v.toLowerCase();
   let d=v.replace(/[٠-٩]/g,x=>"٠١٢٣٤٥٦٧٨٩".indexOf(x)).replace(/[۰-۹]/g,x=>"۰۱۲۳۴۵۶۷۸۹".indexOf(x)).replace(/\D/g,"");
   if(d.startsWith("00963")) d="0"+d.slice(5); else if(d.startsWith("963")) d="0"+d.slice(3); else if(d.length===9&&d[0]==="9") d="0"+d;
@@ -443,7 +450,8 @@ async function login(){
 async function logout(){
   if(authGate.exiting || !await ask("تسجيل الخروج","هل تريد الخروج من حسابك؟","نعم، خروج","r","logout")) return;
   await authGate.logout({auth:sb.auth,detach:()=>dropPush(),reload:()=>location.reload(),lock:()=>{
-    me=null; LSEQ++; showLogin(); $("main").innerHTML="";
+    void offline.invalidate();
+    me=null; D={orders:[],stock:[],payments:[],balance:null,ev:{},settings:{},pr:{},notifs:[]}; LSEQ++; showLogin(); $("main").innerHTML="";
     $("modal").style.display="none"; document.querySelectorAll(".dlg").forEach(d=>d.remove());
     $("em").value=""; $("pw").value=""; $("lbtn").disabled=true;
     Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});
@@ -476,6 +484,7 @@ async function load(initial,{signal}={}){
   D.ev={}; (r[5].data||[]).forEach(e=>(D.ev[e.order_id]=D.ev[e.order_id]||[]).push(e));
   const n=D.orders.filter(o=>OPEN.includes(o.status)).length; setBadge(n);
   D.notifs=r[7].data||[]; detectNotifs();
+  await offline.checkpoint(D);return true;
 }
 function setBadge(n){
   $("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"+(n?`<i class="bd">${n}</i>`:"");
@@ -505,7 +514,7 @@ function detect(prev){
 }
 function render_if_idle(){ if($("modal").style.display==="flex"||document.querySelector(".dlg")) return; if(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; const y=scrollY; render(); scrollTo(0,y) }
 async function refresh(){ return appRefresh.refresh({reason:'live'}); }
-async function manualRefresh(){ return appRefresh.manual(); }
+async function manualRefresh(){ if(offline.readonly)return offline.retry(); return appRefresh.manual(); }
 function go(t){ tab=t; if(t==="acc")ASUB="";["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
 function render(){ ({orders:vOrders,stock:vStock,acc:vAcc,notifs:vNotifs})[tab]() }
 
@@ -535,6 +544,7 @@ function nDay(s){ const d=new Date(s), t=new Date(), y=new Date(t.getFullYear(),
   return d.toLocaleDateString("ar-EG",{weekday:"long",day:"numeric",month:"long"}) }
 function nBadge(){ const c=(D.notifs||[]).filter(nUnread).length; return c?`<i class="nbd">${c>99?"99+":c}</i>`:"" }
 function markRead(){
+  if(offline.denied())return false;
   const ids=(D.notifs||[]).filter(nUnread).map(n=>n.id); if(!ids.length) return;
   ids.forEach(i=>NU.add(i)); const m=NME();
   D.notifs.forEach(n=>{ if(ids.includes(n.id)) n.read_by=[...(n.read_by||[]),m] }); initNotifUI();
@@ -563,7 +573,7 @@ async function openPushTarget(){
   if(!incoming) return;
   params.delete("notification"); params.delete("order"); history.replaceState(null,"",location.pathname+(params.size?"?"+params:"")+location.hash);
   if(!id||!/^[0-9a-f-]{36}$/i.test(id)){ go("notifs"); return }
-  if(!D.orders.some(x=>x.id===id)){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).eq("captain_id",me.id).maybeSingle(); if(error||!data){ toast("هذا الطلب غير متاح لحسابك الحالي","err"); return } D.orders.push(data) }
+  if(!D.orders.some(x=>x.id===id)){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).eq("captain_id",me.id).maybeSingle(); if(error||!data){ toast(offline.readonly?"هذا الطلب غير محفوظ على الجهاز. افتحه عند عودة الاتصال.":"هذا الطلب غير متاح لحسابك الحالي","err"); return } D.orders.push(data) }
   openOrder(id);
 }
 function detectNotifs(){
@@ -578,7 +588,7 @@ const pushClient=new DeliveryPush({
   scope:"/captain", keyUrl:SUPABASE_URL+"/functions/v1/send-push", apiKey:SUPABASE_KEY,
   save:args=>sb.rpc("save_push_subscription",args), remove:args=>sb.rpc("remove_push_subscription",args), session:()=>authGate.blocked?Promise.resolve({data:{session:null}}):sb.auth.getSession()
 });
-globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
+globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(!authGate.blocked&&(offline.readonly||navigator.onLine===false)){initNotifUI();return;} if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
 function initNotifUI(){ const b=$("bell"); b.innerHTML=ic("bell")+(pushClient.enabled?"":'<i class="dot"></i>'); b.classList.toggle("on",pushClient.enabled) }
 async function bellClick(){
@@ -597,6 +607,7 @@ async function pushDiag(initialLog=""){
   return openDeliveryPushDiagnostics({client:pushClient,role:"captain",initialLog,enable:()=>ensurePush({strict:true}),refreshUI:initNotifUI,escape:esc});
 }
 async function ensurePush({strict=false}={}){
+  if(offline.denied())return false;
   try{
     if(authGate.blocked){ if(strict) throw new Error("سجّل الدخول أولاً"); return false }
     if(!(!!me)) { if(strict) throw new Error("سجّل الدخول أولاً"); return false }
@@ -612,6 +623,7 @@ async function dropPush(){ await pushClient.unsubscribe() }
 /* تحديث لحظي من القاعدة + احتياطي بالاستعلام الدوري */
 let rt, deb;
 function startLive(){
+  if(rt){Promise.resolve(sb.removeChannel?.(rt)).catch(()=>{});rt=null;}
   const kick=()=>{ clearTimeout(deb); deb=setTimeout(refresh,500) };
   try{ rt=sb.channel("cap-live").on("postgres_changes",{event:"*",schema:"public",table:"orders"},kick)
       .on("postgres_changes",{event:"*",schema:"public",table:"captain_payments"},kick)
@@ -864,7 +876,7 @@ $("t_orders").innerHTML=ic("box")+"<span>طلباتي</span>"; $("t_stock").inne
 if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
 
 const appRefresh=new DeliveryRefresh({
-  role:'captain',interval:20000,
+  offline,role:'captain',interval:20000,
   active:()=>!!me&&!authGate.blocked&&$('app').style.display!=='none'&&$('splash').classList.contains('off'),
   safe:()=>busy===0&&!(pushClient.native?.pending?.size)&&!$('pdg')&&$('modal').style.display!=='flex'&&!document.querySelector('.dlg')&&!(document.activeElement&&document.activeElement.matches('input,textarea,select,[contenteditable]')),
   toast,
@@ -883,6 +895,18 @@ const appRefresh=new DeliveryRefresh({
     requestAnimationFrame(()=>scrollTo({top:Math.max(0,Number(v.y)||0),behavior:'instant'}));
   }
 });
+offline.configure({
+  sessionEnded:()=>{authGate.closed=true;authGate.storage.setItem(authGate.marker,"1");authGate.clearSession();showLogin();$("main").innerHTML="";$("modal").style.display="none";location.reload();},
+  toast,login:offlineLogin,safe:()=>!appRefresh.hasDraft()&&appRefresh.options.safe(),
+  capture:()=>appRefresh.options.captureView(),reconnected:v=>appRefresh.options.restoreView(v),
+  restore:async record=>{
+    me=record.profile.captain;D=record.data;CUR=D.settings.currency||"";BIZ=D.settings.business_name||"";
+    $("av").textContent=(me.name||"ك").trim().charAt(0);$("hn").textContent=me.name;$("hs").textContent=BIZ||"جاهز لاستلام الطلبات";
+    $("login").style.display="none";$("app").style.display="block";firstLoad=false;
+    setBadge(D.orders.filter(o=>OPEN.includes(o.status)).length);go("orders");hideSplash();initNotifUI();openPushTarget();
+  }
+});
+offline.watch(sb.auth);
 boot();
 </script>
 </body>

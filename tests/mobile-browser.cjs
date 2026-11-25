@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
 const orderId = '00000000-0000-0000-0000-000000000001';
 
 async function populate(page, role, screen) {
+ await page.waitForFunction(()=>document.getElementById("splash")?.classList.contains("off"));
   await page.evaluate(({ role, screen, orderId }) => {
     const now = '2026-11-24T09:00:00Z';
     const order = { id: orderId, order_no: 1234, status: 'assigned', fulfillment: 'delivery', customer_name: 'أحمد محمد',
@@ -63,9 +64,10 @@ async function populate(page, role, screen) {
   try {
     const context = await browser.newContext({ timezoneId: 'Asia/Amman', reducedMotion: 'reduce' });
     await context.route('**/*', route => {
-      if (route.request().url().startsWith(origin + '/')) return route.continue();
-      if (route.request().url().includes('cdn.jsdelivr.net')) return route.fulfill({ contentType: 'application/javascript', body:
+
+      if (route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)) return route.fulfill({ contentType: 'application/javascript', body:
         'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})};' });
+      if (route.request().url().startsWith(origin + '/')) return route.continue();
       return route.abort();
     });
     const errors = [];

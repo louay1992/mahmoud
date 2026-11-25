@@ -12,7 +12,7 @@ const {chromium}=require('playwright');
   browser=await chromium.launch({headless:true});const origin='http://127.0.0.1:'+server.address().port;
   for(const role of ['admin','captain']){
    const context=await browser.newContext({serviceWorkers:'block',viewport:{width:390,height:844}});
-   await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.request().url().includes('cdn.jsdelivr.net')?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.abort());
+   await context.route('**/*',route=>route.request().url().match(/cdn\.jsdelivr\.net|\/vendor\/supabase\.js/)?route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:null}})}})}'}):route.request().url().startsWith(origin+'/')?route.continue():route.abort());
    const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
    await page.goto(origin+'/'+role+'.html?native=1');
    if(role==='admin'){
