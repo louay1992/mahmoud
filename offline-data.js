@@ -106,13 +106,13 @@ class DeliveryOffline {
   wrap(client){
     const offline=this,readRPC=new Set(['my_access','staff_lookups','admin_products','dashboard_stats','admin_profit_items','marketer_return_impact']);
     const overrides=new Map();
-    const builder=(target,path,write=false)=>new Proxy(target,{
+    const builder=(target,path,write=false,signal)=>new Proxy(target,{
       get(object,name){
-        if(name==='then')return (resolve,reject)=>offline.execute(object,path,write).then(resolve,reject);
-        if(name==='catch')return reject=>offline.execute(object,path,write).catch(reject);
-        if(name==='finally')return callback=>offline.execute(object,path,write).finally(callback);
+        if(name==='then')return (resolve,reject)=>offline.execute(object,path,write,signal).then(resolve,reject);
+        if(name==='catch')return reject=>offline.execute(object,path,write,signal).catch(reject);
+        if(name==='finally')return callback=>offline.execute(object,path,write,signal).finally(callback);
         const value=Reflect.get(object,name);if(typeof value!=='function')return value;
-        return (...args)=>builder(value.apply(object,args),name==='abortSignal'?path:[...path,[name,args]],write||['insert','update','upsert','delete'].includes(name));
+        return (...args)=>builder(value.apply(object,args),name==='abortSignal'?path:[...path,[name,args]],write||['insert','update','upsert','delete'].includes(name),name==='abortSignal'?args[0]:signal);
       }
     });
     const auth=new Proxy(client.auth,{get(object,name){const value=Reflect.get(object,name);if(typeof value!=='function')return value;
@@ -125,7 +125,9 @@ class DeliveryOffline {
       const value=Reflect.get(object,name);return typeof value==='function'?value.bind(object):value;
     }});
   }
-  async execute(target,path,write){
+  async execute(target,path,write,signal){
+    const cancelled=()=>({data:null,error:{code:'ABORTED',message:'Read cancelled'},status:0});
+    if(signal?.aborted)return cancelled();
     const detach=path[0]?.[0]==='rpc'&&['remove_push_subscription','remove_admin_push_subscription'].includes(path[0]?.[1]?.[0]);
     if(write&&this.denied()&&!(detach&&!this.readonly&&navigator.onLine!==false))return this.error();
     const generation=this.generation,owner=this.ownerId,key='query:'+JSON.stringify(path);
@@ -135,11 +137,12 @@ class DeliveryOffline {
         if(entry?.owner===owner&&entry.checksum===await this.digest(entry.result)){if(!this.queryAt||entry.savedAt<this.queryAt)this.queryAt=entry.savedAt;this.paint();return structuredClone(entry.result);}
       }catch(_){}this.options?.toast('هذه التفاصيل لم تُحفظ على هذا الجهاز بعد. افتحها عند الاتصال.','err');return this.error('OFFLINE_NOT_CACHED');
     }
-    let result,timer,abort;
+    let result,timer,abort,onAbort;
     try{
       if(!write&&target.abortSignal){abort=new AbortController();target=target.abortSignal(abort.signal);}
-      result=write?await target:await Promise.race([Promise.resolve(target),new Promise(resolve=>{timer=setTimeout(()=>{abort?.abort();resolve({data:null,error:{message:'network timeout'},status:0});},12000);})]);
-    }catch(e){result={data:null,error:{message:String(e)},status:0};}finally{clearTimeout(timer);}
+      result=write?await target:await Promise.race([Promise.resolve(target),new Promise(resolve=>{timer=setTimeout(()=>{abort?.abort();resolve({data:null,error:{message:'network timeout'},status:0});},12000);onAbort=()=>{abort?.abort();resolve(cancelled());};signal?.addEventListener('abort',onAbort,{once:true});if(signal?.aborted)onAbort();})]);
+    }catch(e){result={data:null,error:{message:String(e)},status:0};}finally{clearTimeout(timer);if(onAbort)signal?.removeEventListener('abort',onAbort);}
+    if(signal?.aborted)return cancelled();
     if(this.networkError(result))this.lost();
     // An authoritative permission rejection must never unlock a stale copy.
     if([401,403].includes(result?.status)&&owner){void this.invalidate();this.options?.login();return result;}

@@ -31,7 +31,7 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
      // disconnect the synthetic backend too, including background token refresh.
      if(networkOffline)return route.abort('internetdisconnected');
      if(url.hostname!=='jabapvnmfdflysxfxwwf.supabase.co')return route.abort();
-     calls++;let data=[];if(denied)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Access revoked',code:'42501'})});
+     calls++;if(url.searchParams.get('limit')==='42')await new Promise(resolve=>setTimeout(resolve,500));let data=[];if(denied)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Access revoked',code:'42501'})});
      if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
      else {const table=url.pathname.split('/').pop();data=tables[table]||[];if(table==='orders'&&url.searchParams.get('fulfillment')==='eq.shipping')data=[];}
      return route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify(data)});
@@ -41,6 +41,7 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    await page.goto(origin+'/');await page.evaluate(({role,session})=>localStorage.setItem('sb-'+role+'-auth',JSON.stringify(session)),{role,session:session(uid)});
    await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
    assert.equal(await page.evaluate(()=>offline.readonly),false);
+   const cancellation=await page.evaluate(async()=>{const controller=new AbortController(),start=performance.now(),result=Promise.resolve(sb.from('stock_movements').select('*').limit(42).abortSignal(controller.signal));setTimeout(()=>controller.abort(),30);const response=await result;return {error:!!response.error,elapsed:performance.now()-start,readonly:offline.readonly};});assert.equal(cancellation.error,true);assert.equal(cancellation.readonly,false);assert.ok(cancellation.elapsed<400,'Cancelling navigation must interrupt the live read without switching to offline');
    if(role==='admin'){
     await page.evaluate(()=>go('stats'));await page.waitForFunction(()=>SDATA!==null&&!!document.querySelector('[data-aw-screen="stats"]'));
     await page.evaluate(()=>go('profit'));await page.waitForFunction(()=>PDATA!==null&&!!document.querySelector('[data-aw-screen="profit"]'));

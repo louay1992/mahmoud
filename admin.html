@@ -576,7 +576,7 @@ async function openPushTarget(){
   params.delete("notification"); params.delete("order"); history.replaceState(null,"",location.pathname+(params.size?"?"+params:"")+location.hash);
   if(!id||!/^[0-9a-f-]{36}$/i.test(id)){ tab="notifs"; renderNav(); render(); return }
   let o=D.orders.find(x=>x.id===id);
-  if(!o){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).maybeSingle(); if(error||!data){ toast("هذا الطلب غير متاح لحسابك الحالي","err"); return } o=data; D.orders.push(o) }
+  if(!o){ const {data,error}=await sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("id",id).maybeSingle(); if(error||!data){ toast(offline.readonly?"هذا الطلب غير محفوظ على الجهاز. افتحه عند عودة الاتصال.":"هذا الطلب غير متاح لحسابك الحالي","err"); return } o=data; D.orders.push(o) }
   if(o.fulfillment==="shipping") await openShip(id); else openOrder(id);
 }
 function detectNotifs(){
