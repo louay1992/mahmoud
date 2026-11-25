@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
 const orderId = '00000000-0000-0000-0000-000000000001';
 
 async function populate(page, role, screen) {
+ await page.waitForFunction(()=>document.getElementById("splash")?.classList.contains("off"));
   await page.evaluate(({ role, screen, orderId }) => {
     const now = '2026-11-24T09:00:00Z';
     const order = { id: orderId, order_no: 1234, status: 'assigned', fulfillment: 'delivery', customer_name: 'أحمد محمد',
