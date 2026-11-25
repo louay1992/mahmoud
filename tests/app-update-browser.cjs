@@ -3,9 +3,9 @@ const feed={schema:1,sourceCommit:'a'.repeat(40),apps:Object.fromEntries(['admin
 (async()=>{
  const root=process.cwd(),server=http.createServer(async(req,res)=>{try{
   const name=new URL(req.url,'http://localhost').pathname;
-  if(name==='/'){res.setHeader('Content-Type','text/html');res.end('<html lang="ar" dir="rtl"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app-updates.css"></head><body><button id="before">دخول</button><script src="/app-updates.js"></script></body></html>');return;}
+  if(name==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app-updates.css"></head><body><button id="before">دخول</button><script src="/app-updates.js"></script></body></html>');return;}
   if(!['/app-updates.js','/app-updates.css'].includes(name)){res.writeHead(404).end();return;}
-  res.setHeader('Content-Type',name.endsWith('.js')?'application/javascript':'text/css');res.end(await fs.readFile(path.join(root,name.slice(1))));
+  res.setHeader('Content-Type',(name.endsWith('.js')?'application/javascript':'text/css')+'; charset=utf-8');res.end(await fs.readFile(path.join(root,name.slice(1))));
  }catch(_){res.writeHead(500).end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  let browser;const origin='http://127.0.0.1:'+server.address().port;
  try{browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH||undefined});for(const role of ['admin','captain']){
