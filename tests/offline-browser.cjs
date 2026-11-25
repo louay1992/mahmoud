@@ -9,6 +9,7 @@ const product={id:'product-1',name:'منتج محفوظ',price:50000,cost:25000,
 const order={id:'order-1',order_no:501,fulfillment:'delivery',status:'assigned',captain_id:captainId,customer_name:'عميل محفوظ للاختبار',customer_phone:'0944000000',customer_address:'دمشق',created_at:'2026-11-25T09:00:00Z',total:55000,items_total:50000,delivery_fee:5000,order_items:[{id:'item-1',qty:1,unit_price:50000,products:{name:product.name}}]};
 const tables={captains:[captain],orders:[order],settings:[{key:'business_name',value:'متجر محفوظ'},{key:'currency',value:'ل.س'}],warehouses:[{id:'warehouse-1',name:'مستودع محفوظ',is_main:true}],stock:[{warehouse_id:'warehouse-1',product_id:product.id,qty:12,products:{name:product.name}}],captain_balances:[{captain_id:captainId,balance:55000,delivered_count:1}],stock_movements:[{id:'movement-1',qty:2,kind:'invoice',warehouse_id:'warehouse-1',product_id:product.id,created_at:order.created_at,products:{name:product.name}}]};
 (async()=>{
+ await fs.mkdir(path.join(root,'.tools'),{recursive:true});await fs.mkdir(path.join(root,'test-results'),{recursive:true});
  execFileSync(process.execPath,['scripts/build-web.cjs'],{stdio:'pipe'});
  let shellBroken=false,fakeRelease=false;const server=http.createServer(async(req,res)=>{try{
   let name=new URL(req.url,'http://localhost').pathname;if(name==='/'){res.end('<html><head></head><body>Fixture</body></html>');return;}
