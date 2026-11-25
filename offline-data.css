@@ -3,3 +3,4 @@
 @media(max-width:380px){#delivery-offline-state{grid-template-columns:1fr}#delivery-offline-state button{grid-column:1;grid-row:3}}
 @media(prefers-reduced-motion:reduce){#delivery-offline-state{animation:none;transition:none}}
 [data-offline-blocked]{opacity:.5!important;cursor:not-allowed!important}
+.delivery-readonly #offline{display:none}
