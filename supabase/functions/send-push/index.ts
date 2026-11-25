@@ -14,7 +14,8 @@ const json = (o: unknown, status = 200) =>
 
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const fcmConfig = parseFcmAccount(Deno.env.get("FCM_SERVICE_ACCOUNT_JSON"));
-const sendFcm = fcmConfig ? createFcmSender(fcmConfig) : null;
+const appOrigin = Deno.env.get("APP_ORIGIN");
+const sendFcm = fcmConfig ? createFcmSender(fcmConfig, fetch, appOrigin) : null;
 
 async function readCfg() {
   const { data } = await db.from("push_config").select("key,value");

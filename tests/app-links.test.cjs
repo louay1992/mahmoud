@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 for (const role of ['admin','captain']) test(role + ': stored map links cannot inject markup or scripts into account pages', () => {
-  const source = fs.readFileSync(role + '.html', 'utf8');
+  const source = fs.readFileSync(role + '-app.js', 'utf8');
   const context = vm.createContext({URL,encodeURIComponent});
   vm.runInContext(source.match(/^const esc = .*$/m)[0] + '\n' + source.match(/^const mapUrl=.*$/m)[0] + '\nthis.mapLink=mapUrl',context);
   assert.equal(context.mapLink({map_url:'javascript:alert(1)'}),'');

@@ -83,18 +83,18 @@ for (const role of ['captain', 'admin']) {
 
   test(role + ': page handlers report activation errors without a success toast', async () => {
     const f = fixture({ role, existing: true, saveError: '<database failed>' });
-    const html = fs.readFileSync(role + '.html', 'utf8');
-    const start = html.indexOf('const pushClient=new DeliveryPush(');
-    const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
+    const appSource = fs.readFileSync(role + '-app.js', 'utf8');
+    const start = appSource.indexOf('const pushClient=new DeliveryPush(');
+    const end = appSource.indexOf('\n', appSource.indexOf('async function dropPush()', start));
     Object.assign(f.context, {
-      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false}, offline:{denied:()=>false},
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', DELIVERY_CONFIG: { functionsPath: '/functions/v1' }, authGate: {blocked:false}, offline:{denied:()=>false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => name.startsWith('save_') ?
         { error: { message: '<database failed>' } } : { error: null } },
       $: () => ({ classList: { toggle() {} } }), ic: () => '', nBadge: () => '',
       beep() {}, render() {}, toast: (text, kind) => f.calls.notices.push({ text, kind })
     });
-    vm.runInContext(html.slice(start, end), f.context);
+    vm.runInContext(appSource.slice(start, end), f.context);
     if(role === 'captain') vm.runInContext('pushDiag=async message=>{globalThis.diagnostic=message}', f.context);
     await vm.runInContext('bellClick()', f.context);
     assert.equal(f.calls.notices.some(n => n.kind === 'ok'), false);
@@ -107,17 +107,17 @@ for (const role of ['captain', 'admin']) {
   test(role + ': non-strict boot activation saves an existing subscription with granted permission', async () => {
     const f = fixture({ role, existing: true });
     const saved = [];
-    const html = fs.readFileSync(role + '.html', 'utf8');
-    const start = html.indexOf('const pushClient=new DeliveryPush(');
-    const end = html.indexOf('\n', html.indexOf('async function dropPush()', start));
+    const appSource = fs.readFileSync(role + '-app.js', 'utf8');
+    const start = appSource.indexOf('const pushClient=new DeliveryPush(');
+    const end = appSource.indexOf('\n', appSource.indexOf('async function dropPush()', start));
     Object.assign(f.context, {
-      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', authGate: {blocked:false}, offline:{denied:()=>false},
+      SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', DELIVERY_CONFIG: { functionsPath: '/functions/v1' }, authGate: {blocked:false}, offline:{denied:()=>false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => { saved.push({ name, args }); return { error: null }; } },
       $: id => id === 'bell' ? { classList: { toggle() {} } } : null,
       ic: () => '', nBadge: () => ''
     });
-    vm.runInContext(html.slice(start, end), f.context);
+    vm.runInContext(appSource.slice(start, end), f.context);
     assert.equal(vm.runInContext('pushClient.saved', f.context), false);
     assert.equal(await vm.runInContext('ensurePush()', f.context), true);
     assert.equal(saved.length, 1);
@@ -201,12 +201,16 @@ test('logout disables local Web Push even when removing the server record fails'
  await assert.rejects(client.unsubscribe(),/offline/);assert.equal(calls.unsubscribed,true);
 });
 
-test('both pages parse with the shared client loaded before their inline code', () => {
+test('both pages parse with the shared client loaded before their app code', () => {
   for (const role of ['captain', 'admin']) {
     const html = fs.readFileSync(role + '.html', 'utf8');
-    assert.ok(html.indexOf('src="/push-client.js"') < html.indexOf('const pushClient='));
+    const appSource = fs.readFileSync(role + '-app.js', 'utf8');
+    assert.ok(html.indexOf('src="/push-client.js"') >= 0);
+    assert.ok(html.indexOf('src="/' + role + '-app.js"') > html.indexOf('src="/push-client.js"'));
+    assert.ok(appSource.includes('const pushClient=new DeliveryPush('));
     for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
       if (!match[1].includes('src=')) new vm.Script(match[2], { filename: role + '.html' });
     }
+    new vm.Script(appSource, { filename: role + '-app.js' });
   }
 });

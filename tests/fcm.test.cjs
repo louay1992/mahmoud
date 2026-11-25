@@ -4,7 +4,8 @@ const { generateKeyPairSync } = require('node:crypto');
 test('a missing, malformed, or different Firebase project configuration cannot break existing Web Push',async()=>{
   const {parseFcmAccount}=await import('../supabase/functions/_shared/fcm.ts');
   assert.equal(parseFcmAccount(undefined),null); assert.equal(parseFcmAccount('{invalid'),null);
-  assert.equal(parseFcmAccount(JSON.stringify({project_id:'wrong-project',client_email:'test@test',private_key:'BEGIN PRIVATE KEY'})),null);
+  assert.equal(parseFcmAccount(JSON.stringify({project_id:'wrong-project',client_email:'test@test',private_key:'BEGIN PRIVATE KEY'}),'expected-project'),null);
+  assert.ok(parseFcmAccount(JSON.stringify({project_id:'expected-project',client_email:'test@test',private_key:'BEGIN PRIVATE KEY'}),'expected-project'));
 });
 
 test('FCM uses an OAuth service-account signature and account-bound data-only messages', async () => {

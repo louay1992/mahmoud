@@ -45,7 +45,7 @@ New-Item -ItemType Directory -Path (Join-Path $androidRoot 'app') -Force | Out-N
 foreach ($name in @('build.gradle','settings.gradle','gradle.properties')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot "android/$name") -Destination (Join-Path $androidRoot $name)
 }
-Copy-Item -LiteralPath (Join-Path $projectRoot 'admin.html') -Destination (Join-Path $buildRoot 'admin.html')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'app-config.js') -Destination (Join-Path $buildRoot 'app-config.js')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'dist') -Destination (Join-Path $buildRoot 'dist') -Recurse
 Copy-Item -LiteralPath (Join-Path $projectRoot 'android/app/build.gradle') -Destination (Join-Path $androidRoot 'app/build.gradle')
 Copy-Item -LiteralPath $configFile -Destination (Join-Path $androidRoot 'app/google-services.json')

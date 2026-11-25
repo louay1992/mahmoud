@@ -6,9 +6,11 @@ const url = Deno.env.get("SUPABASE_URL")!;
 const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
 const db = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const serviceAccount = parseFcmAccount(Deno.env.get("FCM_SERVICE_ACCOUNT_JSON"));
-const send = serviceAccount ? createFcmSender(serviceAccount) : async () => { throw new Error("FCM_NOT_CONFIGURED"); };
+const appOrigin = Deno.env.get("APP_ORIGIN");
+const send = serviceAccount ? createFcmSender(serviceAccount, fetch, appOrigin) : async () => { throw new Error("FCM_NOT_CONFIGURED"); };
 Deno.serve(nativeDeviceHandler({
   configured: !!serviceAccount,
+  allowedOrigin: appOrigin,
   action: async params => await db.rpc("native_device_action", params),
   send,
   authenticate: async (jwt, scope) => {

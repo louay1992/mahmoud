@@ -2,9 +2,9 @@ name: Check notification flow
 on:
   push:
     branches: [main]
-    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
   pull_request:
-    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
 permissions:
   contents: read
 jobs:
@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '24' }
       - run: npm ci --ignore-scripts
+      - run: npm run check
       - run: npm test
       - run: python3 tests/check_android_notifications.py
   browser:

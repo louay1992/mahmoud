@@ -1,21 +1,30 @@
 export type FcmAccount = { project_id: string; client_email: string; private_key: string };
 export type NativeTarget = { installation_id: string; fcm_token: string; binding_id: string; app_scope: string };
 export type PushPayload = { title: string; body: string; tag?: string; url?: string; order_id?: string };
-export function parseFcmAccount(raw: string | undefined): FcmAccount | null {
+/* The Firebase project is pinned through FCM_PROJECT_ID (server env), not a literal in source. */
+export function parseFcmAccount(raw: string | undefined, expectedProjectId?: string): FcmAccount | null {
   try {
     const value = JSON.parse(raw || "");
-    return value.project_id === "health-beauty-e8abc" && typeof value.client_email === "string" &&
+    const expected = expectedProjectId ??
+      (typeof Deno !== "undefined" ? Deno.env.get("FCM_PROJECT_ID") : undefined);
+    return typeof value.project_id === "string" && value.project_id.length > 0 &&
+      (!expected || value.project_id === expected) && typeof value.client_email === "string" &&
       typeof value.private_key === "string" && value.private_key.includes("BEGIN PRIVATE KEY") ? value : null;
   } catch (_) { return null; }
 }
 const enc = new TextEncoder();
 const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const encoded = (value: unknown) => b64(enc.encode(JSON.stringify(value)));
-export function notificationUrl(scope: string, payload: PushPayload) {
+const DEFAULT_APP_ORIGIN = "https://hhyyw.netlify.app";
+function baseOrigin(appOrigin?: string) {
+  try { return new URL(appOrigin || DEFAULT_APP_ORIGIN).origin; } catch (_) { return DEFAULT_APP_ORIGIN; }
+}
+export function notificationUrl(scope: string, payload: PushPayload, appOrigin?: string) {
+  const base = baseOrigin(appOrigin);
   const fallback = "/" + scope + ".html";
   let url: URL;
-  try { url = new URL(payload.url || fallback, "https://hhyyw.netlify.app"); } catch (_) { url = new URL(fallback, "https://hhyyw.netlify.app"); }
-  if (url.origin !== "https://hhyyw.netlify.app" || !["/" + scope, fallback].includes(url.pathname)) url = new URL(fallback, "https://hhyyw.netlify.app");
+  try { url = new URL(payload.url || fallback, base); } catch (_) { url = new URL(fallback, base); }
+  if (url.origin !== base || !["/" + scope, fallback].includes(url.pathname)) url = new URL(fallback, base);
   // Older database triggers identify order events with these tag prefixes.
   const legacy = /^(?:o|n|e|s|c)([0-9a-f]{8}-[0-9a-f-]{27,})$/i.exec(payload.tag || "")?.[1];
   const order = payload.order_id || legacy;
@@ -24,7 +33,7 @@ export function notificationUrl(scope: string, payload: PushPayload) {
   return url.pathname + url.search;
 }
 
-export function createFcmSender(account: FcmAccount, http: typeof fetch = fetch) {
+export function createFcmSender(account: FcmAccount, http: typeof fetch = fetch, appOrigin?: string) {
   let cached: { token: string; until: number } | null = null;
   let refreshing: Promise<string> | null = null;
   async function authorize(): Promise<string> {
@@ -59,7 +68,7 @@ export function createFcmSender(account: FcmAccount, http: typeof fetch = fetch)
       body: JSON.stringify({ message: { token: device.fcm_token,
         // Data-only messages let Android reject a queued message after account changes.
         data: { title: payload.title, body: payload.body, tag: payload.tag || "", binding_id: device.binding_id,
-          app_scope: device.app_scope, url: notificationUrl(device.app_scope, payload) },
+          app_scope: device.app_scope, url: notificationUrl(device.app_scope, payload, appOrigin) },
         android: { priority: "HIGH", ttl: "86400s", restricted_package_name: "app.hhyyw." + device.app_scope }
       } }), signal: AbortSignal.timeout(10000)
     });

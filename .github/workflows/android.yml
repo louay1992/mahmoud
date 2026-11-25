@@ -1,7 +1,7 @@
 name: Build Android apps
 on:
   push:
-    paths: ['android/**', 'offline-*', 'vendor/**', 'scripts/build-web.cjs', 'admin.html', 'captain.html', '.github/workflows/android.yml']
+    paths: ['android/**', 'offline-*', 'vendor/**', 'scripts/build-web.cjs', 'app-config.js', 'admin.html', 'captain.html', 'admin.css', 'admin-app.js', 'captain.css', 'captain-app.js', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
   contents: write

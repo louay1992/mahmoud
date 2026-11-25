@@ -29,8 +29,9 @@ assert 'androidbrowserhelper' not in gradle and 'androidx.browser:' not in gradl
 for role in ['admin', 'captain']:
     manifest = json.loads(Path(f'manifest-{role}.json').read_text())
     page = Path(f'{role}.html').read_text(encoding='utf-8')
+    app = Path(f'{role}-app.js').read_text(encoding='utf-8')
     assert manifest['scope'] == f'/{role}'
-    assert f'scope:"/{role}"' in page
+    assert f'scope:"/{role}"' in app
     assert f'pathPrefix: "/{role}"' in gradle
     assert manifest['start_url'].startswith(manifest['scope'])
     assert re.search(r'<script src="/push-client.js"></script>', page)

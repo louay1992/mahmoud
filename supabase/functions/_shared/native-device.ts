@@ -2,6 +2,7 @@ import type { NativeTarget, PushPayload } from "./fcm.ts";
 type Account = { userId: string; captainId: string | null; email: string | null };
 type Services = {
   configured?: boolean;
+  allowedOrigin?: string;
   authenticate: (jwt: string, scope: string) => Promise<Account | null>;
   action: (params: Record<string, unknown>) => Promise<{ data: any; error: any }>;
   send: (device: NativeTarget, payload: PushPayload) => Promise<{ ok: boolean; message_id: string | null }>;
@@ -9,10 +10,11 @@ type Services = {
 export function nativeDeviceHandler(services: Services) {
   return async (request: Request) => {
     const origin = request.headers.get("origin");
-    const headers = { "content-type": "application/json", "access-control-allow-origin": "https://hhyyw.netlify.app",
+    const allowedOrigin = services.allowedOrigin || "https://hhyyw.netlify.app";
+    const headers = { "content-type": "application/json", "access-control-allow-origin": allowedOrigin,
       "access-control-allow-headers": "authorization,apikey,content-type", "access-control-allow-methods": "POST, OPTIONS" };
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
-    if (origin && origin !== "https://hhyyw.netlify.app") return json({ error: "forbidden origin" }, 403);
+    if (origin && origin !== allowedOrigin) return json({ error: "forbidden origin" }, 403);
     if (request.method === "OPTIONS") return new Response(null, { headers });
     if (request.method !== "POST") return json({ error: "method" }, 405);
     try {

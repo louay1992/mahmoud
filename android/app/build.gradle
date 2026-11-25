@@ -1,8 +1,11 @@
 plugins { id 'com.android.application' }
 def firebaseConfigured = file('google-services.json').exists()
 if (firebaseConfigured) apply plugin: 'com.google.gms.google-services'
-def sourceHtml = rootProject.file('../admin.html').getText('UTF-8')
-def apiKey = (sourceHtml =~ /const SUPABASE_KEY = "([^"]+)"/)[0][1]
+def appConfig = rootProject.file('../app-config.js').getText('UTF-8')
+def apiKey = (appConfig =~ /supabaseAnonKey:\s*"([^"]+)"/)[0][1]
+def supabaseUrl = (appConfig =~ /supabaseUrl:\s*"([^"]+)"/)[0][1]
+def appOrigin = (appConfig =~ /appOrigin:\s*"([^"]+)"/)[0][1]
+def appHost = java.net.URI.create(appOrigin).getHost()
 android {
     namespace 'app.hhyyw.twa'
     compileSdk 34
@@ -11,7 +14,7 @@ android {
         targetSdk 34
         versionCode 6
         versionName "1.3.0"
-        buildConfigField 'String', 'SUPABASE_URL', '"https://jabapvnmfdflysxfxwwf.supabase.co"'
+        buildConfigField 'String', 'SUPABASE_URL', '"' + supabaseUrl + '"'
         buildConfigField 'String', 'SUPABASE_ANON_KEY', '"' + apiKey + '"'
         buildConfigField 'boolean', 'FCM_CONFIGURED', firebaseConfigured.toString()
     }
@@ -21,14 +24,14 @@ android {
             dimension "app"
             applicationId "app.hhyyw.admin"
             buildConfigField 'String', 'APP_SCOPE', '"admin"'
-            manifestPlaceholders = [appName: "الإدارة", startUrl: "https://hhyyw.netlify.app/admin", host: "hhyyw.netlify.app", pathPrefix: "/admin"]
+            manifestPlaceholders = [appName: "الإدارة", startUrl: appOrigin + "/admin", host: appHost, pathPrefix: "/admin"]
             resValue "string", "app_name", "الإدارة"
         }
         captain {
             dimension "app"
             applicationId "app.hhyyw.captain"
             buildConfigField 'String', 'APP_SCOPE', '"captain"'
-            manifestPlaceholders = [appName: "كابتن التوصيل", startUrl: "https://hhyyw.netlify.app/captain", host: "hhyyw.netlify.app", pathPrefix: "/captain"]
+            manifestPlaceholders = [appName: "كابتن التوصيل", startUrl: appOrigin + "/captain", host: appHost, pathPrefix: "/captain"]
             resValue "string", "app_name", "كابتن التوصيل"
         }
     }
