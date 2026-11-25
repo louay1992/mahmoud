@@ -17,6 +17,8 @@
 --    (الدوال، جداول الشحن والإشعارات والعملاء، أعمدة الطلبات والمستودعات،
 --    وسياسات RLS ومشغّلاتها) محفوظة نصًّا في الترحيل:
 --    supabase/migrations/20261125091500_production_baseline_v17_v23.sql
+--    وتُكمله supabase/migrations/20261125103000_staff_policies_and_constraint_parity.sql
+--    (سياستا staff_orders/staff_order_items وإلغاء main_no_captain).
 -- 6) إعادة تركيب قاعدة جديدة = هذا الملف، ثم كل ملفات supabase/migrations بالترتيب.
 -- =====================================================================
 
@@ -1325,8 +1327,8 @@ revoke execute on function trg_order_times() from public, anon, authenticated;
 -- ===== v14: المستودع الرئيسي + خيار الخصم منه عند فاتورة المستودع الثانوي =====
 alter table warehouses add column if not exists is_main boolean not null default false;
 create unique index if not exists one_main_warehouse on warehouses ((true)) where is_main;
+-- v19 ألغى قيد «المستودع الرئيسي بلا كابتن»؛ يُسمح الآن بربط كابتن به.
 alter table warehouses drop constraint if exists main_no_captain;
-alter table warehouses add constraint main_no_captain check (not is_main or captain_id is null);
 insert into warehouses(name, is_main) select 'المستودع الرئيسي', true where not exists (select 1 from warehouses where is_main);
 alter table stock_invoices add column if not exists deducted_from_main boolean not null default false;
 

@@ -48,9 +48,13 @@ test('production baseline builds the shipping, notifications and staff schema id
       set check_function_bodies = off;
     `);
 
-    const migration = fs.readFileSync('supabase/migrations/20261125091500_production_baseline_v17_v23.sql', 'utf8');
-    await db.exec(migration);
-    await db.exec(migration); // idempotent: a second application must not fail
+    const migrations = [
+      'supabase/migrations/20261125091500_production_baseline_v17_v23.sql',
+      'supabase/migrations/20261125103000_staff_policies_and_constraint_parity.sql',
+    ].map(file => fs.readFileSync(file, 'utf8'));
+    for (const migration of migrations) await db.exec(migration);
+    // idempotent: a second application of the whole set must not fail
+    for (const migration of migrations) await db.exec(migration);
 
     const columns = async table =>
       (await db.query(`select attname from pg_attribute
@@ -73,6 +77,14 @@ test('production baseline builds the shipping, notifications and staff schema id
       where schemaname = 'public' and tablename in
       ('customers','carriers','carrier_payments','shipment_events','notifications')`);
     assert.equal(policies.rows[0].n, 7);
+
+    const staffPolicies = await db.query(`select tablename, policyname from pg_policies
+      where schemaname = 'public' and policyname in ('staff_orders','staff_order_items') order by 1`);
+    assert.deepEqual(staffPolicies.rows.map(r => r.tablename), ['order_items', 'orders']);
+
+    const legacy = await db.query(`select count(*)::int as n from pg_constraint
+      where conrelid = 'public.warehouses'::regclass and conname = 'main_no_captain'`);
+    assert.equal(legacy.rows[0].n, 0, 'the superseded main_no_captain constraint must not exist');
 
     const functions = await db.query(`select p.proname, pg_get_function_identity_arguments(p.oid) as args
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
