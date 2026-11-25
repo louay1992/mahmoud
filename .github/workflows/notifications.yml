@@ -3,8 +3,9 @@ on:
   push:
     branches: [main]
     paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+  # Required checks must run for every PR, including documentation-only changes.
   pull_request:
-    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    branches: [main]
 permissions:
   contents: read
 jobs:
