@@ -21,23 +21,31 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
  const origin='http://127.0.0.1:'+server.address().port;let context;
  try{
   for(const role of ['admin','captain']){
-   const profile=await fs.mkdtemp(path.join(root,'.tools','offline-profile-'));let calls=0,denied=false;
+   const profile=await fs.mkdtemp(path.join(root,'.tools','offline-profile-'));let calls=0,denied=false,networkOffline=false;const errors=[];
    async function launch(){
     context=await chromium.launchPersistentContext(profile,{headless:true,viewport:{width:390,height:844}});
     await context.routeWebSocket('**/*',socket=>socket.close());
     await context.route('**/*',async route=>{
      const url=new URL(route.request().url());if(url.origin===origin)return route.continue();
+     // Fulfilled Playwright routes bypass Chromium's offline emulation. Explicitly
+     // disconnect the synthetic backend too, including background token refresh.
+     if(networkOffline)return route.abort('internetdisconnected');
      if(url.hostname!=='jabapvnmfdflysxfxwwf.supabase.co')return route.abort();
      calls++;let data=[];if(denied)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Access revoked',code:'42501'})});
      if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
      else {const table=url.pathname.split('/').pop();data=tables[table]||[];if(table==='orders'&&url.searchParams.get('fulfillment')==='eq.shipping')data=[];}
      return route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify(data)});
-    });return context.pages()[0]||context.newPage();
+    });const page=context.pages()[0]||await context.newPage();page.on('pageerror',e=>errors.push(e.message));return page;
    }
-   let page=await launch(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   let page=await launch();
    await page.goto(origin+'/');await page.evaluate(({role,session})=>localStorage.setItem('sb-'+role+'-auth',JSON.stringify(session)),{role,session:session(uid)});
    await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
    assert.equal(await page.evaluate(()=>offline.readonly),false);
+   if(role==='admin'){
+    await page.evaluate(()=>go('stats'));await page.waitForFunction(()=>SDATA!==null&&!!document.querySelector('[data-aw-screen="stats"]'));
+    await page.evaluate(()=>go('profit'));await page.waitForFunction(()=>PDATA!==null&&!!document.querySelector('[data-aw-screen="profit"]'));
+    await page.evaluate(()=>go('home'));
+   }
    // Cache a separately loaded page and distinguish it from an unopened page.
    await page.evaluate(async()=>{const r=await sb.from('stock_movements').select('*').range(0,19);if(r.error)throw Error(r.error.message);});
    await page.waitForFunction(async()=>{const names=await caches.keys();return names.some(n=>n.startsWith('offline-bundle-'));});
@@ -49,8 +57,15 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    await page.close();await context.close();
    // Cold browser process, expired access token, no network, same private storage.
    page=await launch();await page.goto(origin+'/');await page.evaluate(role=>{const key='sb-'+role+'-auth',s=JSON.parse(localStorage.getItem(key));s.expires_at=1;localStorage.setItem(key,JSON.stringify(s));},role);
-   await context.setOffline(true);await page.goto(origin+'/'+role);await page.waitForFunction(()=>offline.readonly&&!!offline.savedAt);
+   networkOffline=true;await context.setOffline(true);await page.goto(origin+'/'+role);await page.waitForFunction(()=>offline.readonly&&!!offline.savedAt);
    await page.locator('#delivery-offline-state').waitFor();await page.locator('#splash').waitFor({state:'hidden'});assert.ok(await page.locator('#main').innerText());
+   await page.evaluate(()=>go('stock'));assert.match(await page.locator('#main').innerText(),/منتج محفوظ/);
+   if(role==='admin'){
+    await page.evaluate(()=>go('stats'));await page.locator('[data-aw-screen="stats"]').waitFor();
+    await page.evaluate(()=>go('profit'));await page.locator('[data-aw-screen="profit"]').waitFor();
+    await page.evaluate(()=>go('captains'));assert.match(await page.locator('#main').innerText(),/كابتن محفوظ/);
+    await page.evaluate(()=>go('home'));
+   }else{await page.evaluate(()=>go('acc'));assert.match(await page.locator('#main').innerText(),/55[٬,]?000/);await page.evaluate(()=>go('orders'));}
    const before=calls;
    const results=await page.evaluate(async()=>({
     cached:await sb.from('stock_movements').select('*').range(0,19),
@@ -74,7 +89,7 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    // A first launch offline has a working shell but no access to private data.
    await page.reload();await page.locator('#login').waitFor({state:'visible'});assert.equal(await page.locator('#app').isVisible(),false);
    // Reconnect with server-revoked permission must erase an otherwise valid cache.
-   await context.setOffline(false);await page.goto(origin+'/');await page.evaluate(({role,s})=>{localStorage.removeItem('sb-'+role+'-auth-signed-out');localStorage.setItem('sb-'+role+'-auth',JSON.stringify(s));},{role,s:session(uid)});
+   networkOffline=false;await context.setOffline(false);await page.goto(origin+'/');await page.evaluate(({role,s})=>{localStorage.removeItem('sb-'+role+'-auth-signed-out');localStorage.setItem('sb-'+role+'-auth',JSON.stringify(s));},{role,s:session(uid)});
    await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
    denied=true;await page.evaluate(()=>offline.lost());await page.evaluate(()=>offline.retry());
    await page.locator('#login').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>offline.ownerId),null);
