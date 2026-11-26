@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f766e">
+<title>إدارة الاشتراك — لوحة المالك</title><link rel="icon" href="/icons/admin-192.png">
+<link rel="stylesheet" href="/admin-subscription.css"><link rel="stylesheet" href="/owner.css">
+<script src="/app-config.js" defer></script><script src="/vendor/supabase.js" defer></script><script src="/auth-session.js" defer></script><script src="/subscription-utils.js" defer></script><script src="/owner-app.js" defer></script>
+</head>
+<body>
+<section id="owner-login" class="owner-login">
+ <div class="owner-brand" aria-hidden="true">◈</div><span class="subscription-kicker">لوحة المالك</span><h1>إدارة اشتراك النظام</h1><p>تحكّم بمدة الاشتراك وقيمة تجديده.</p>
+ <form id="owner-login-form" class="owner-panel"><label>البريد الإلكتروني<input id="owner-email" type="email" dir="ltr" autocomplete="username" required></label><label>كلمة المرور<input id="owner-password" type="password" dir="ltr" autocomplete="current-password" required></label><button class="b" type="submit" id="owner-login-button">دخول لوحة المالك</button></form>
+</section>
+<section id="owner-dashboard" class="owner-dashboard" hidden>
+ <header class="owner-header"><div><span class="subscription-kicker">لوحة المالك</span><h1>اشتراك الشركة</h1><p>بيانات واضحة لك وللشركة المشتركة.</p></div><button id="owner-logout" class="b secondary" type="button">تسجيل الخروج</button></header>
+ <div class="owner-actions"><button id="owner-refresh" class="b secondary" type="button">تحديث البيانات</button><span id="owner-updated" class="owner-muted"></span></div>
+ <div class="owner-grid">
+  <div><h2 class="owner-section-title">ما يظهر للشركة حاليًا</h2><div id="owner-preview"></div></div>
+  <section class="owner-panel"><div class="owner-panel-heading"><h2>بيانات الاشتراك السنوي</h2><p>تظهر البيانات للشركة بعد الحفظ.</p></div>
+   <form id="owner-subscription-form"><fieldset id="owner-fields"><div class="owner-date-fields"><label>بداية الاشتراك<input name="starts_on" type="date" required></label><label>صالح لغاية<input name="valid_until" type="date" required></label></div><label>قيمة التجديد السنوي<input name="renewal_amount" type="number" min="0" max="9999999999.99" step="0.01" inputmode="decimal" dir="ltr" required></label><label>عملة التجديد<select name="currency" required><option value="">اختر العملة</option><option value="USD">دولار أمريكي — USD</option><option value="SYP">ليرة سورية — SYP</option><option value="EUR">يورو — EUR</option><option value="SAR">ريال سعودي — SAR</option><option value="AED">درهم إماراتي — AED</option><option value="IQD">دينار عراقي — IQD</option></select></label><button class="b" type="submit" id="owner-save">حفظ بيانات الاشتراك</button></fieldset></form>
+  </section>
+ </div>
+ <section class="owner-panel owner-history"><h2>آخر التعديلات</h2><div id="owner-history"></div></section>
+</section>
+<p id="owner-message" class="owner-message" role="status" aria-live="polite"></p>
+</body></html>

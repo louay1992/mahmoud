@@ -28,6 +28,13 @@ const {bootstrap,id,claims}=require('./database-fixture.cjs');
   await main.query('update stock set qty=10');
   await Promise.all([transaction(a,'select transfer_stock($1,$2,$3,7,null)',[id(3),id(4),id(1)]),transaction(b,'select transfer_stock($1,$2,$3,7,null)',[id(4),id(3),id(1)])]);
   assert.deepEqual((await main.query('select qty from stock order by warehouse_id')).rows.map(x=>x.qty),[10,10]);
+  await main.query(`insert into auth.users(id)values('${id(901)}');insert into subscription_owners(user_id)values('${id(901)}')`);
+  for(const client of [a,b])await client.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({...JSON.parse(claims('owner@test')),sub:id(901)})]);
+  const saves=await Promise.allSettled([transaction(a,"select save_subscription('2026-11-26','2027-11-25',750,'USD',0)"),transaction(b,"select save_subscription('2026-11-26','2027-11-25',900,'USD',0)")]);
+  assert.equal(saves.filter(x=>x.status==='fulfilled').length,1,'one owner edit can win a shared revision');
+  assert.match(saves.find(x=>x.status==='rejected').reason.message,/جلسة أخرى/);
+  assert.equal((await main.query('select count(*)::int n from subscription_changes')).rows[0].n,1);
+  console.log('Real PostgreSQL: simultaneous subscription edits preserve one revision and one audit entry.');
   console.log('Real PostgreSQL: competing deliveries spend stock once; opposing transfers finish without a deadlock; totals are conserved.');
  }finally{await Promise.allSettled([a.end(),b.end(),main.end()]);}
 })().catch(error=>{console.error(error);process.exitCode=1;});

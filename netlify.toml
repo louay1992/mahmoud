@@ -50,3 +50,14 @@ for = "/.well-known/assetlinks.json"
 [headers.values]
 Content-Type = "application/json"
 Cache-Control = "public, max-age=300"
+
+[[redirects]]
+from = "/owner"
+to = "/owner.html"
+status = 200
+
+[[headers]]
+for = "/owner*"
+[headers.values]
+Cache-Control = "no-store"
+X-Robots-Tag = "noindex, nofollow"

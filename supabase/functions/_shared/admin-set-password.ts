@@ -36,3 +36,9 @@ export function passwordProblem(password: string): string | null {
   }
   return null;
 }
+
+/** A company administrator must never reset the separate subscription owner's credentials. */
+export async function protectedSubscriptionOwner(client: any, userId: string) {
+  const { data, error } = await client.from("subscription_owners").select("user_id").eq("user_id", userId).maybeSingle();
+  return { protected: !!data, error };
+}

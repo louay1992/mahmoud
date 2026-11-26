@@ -2,7 +2,7 @@ name: Check notification flow
 on:
   push:
     branches: [main]
-    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'app-updates*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
+    paths: ['auth-session.js', 'offline-*', 'vendor/**', 'app-refresh*', 'app-updates*', 'push*.js', 'native-push.js', 'mobile*', 'admin-mobile*', 'admin-subscription*', 'subscription-utils.js', 'owner*', 'admin-workspace*', 'admin-motion*', 'sw.js', 'captain.html', 'admin.html', 'app-config.js', 'admin-app.js', 'captain-app.js', 'admin.css', 'captain.css', 'manifest-*.json', 'android/**', 'supabase/**', 'tests/**', 'scripts/**', 'package*.json', 'netlify.toml', '.github/workflows/notifications.yml']
   # Required checks must run for every PR, including documentation-only changes.
   pull_request:
     branches: [main]
@@ -51,6 +51,7 @@ jobs:
       - run: node tests/notifications-browser.cjs
       - run: node tests/mobile-browser.cjs
       - run: node tests/admin-mobile-browser.cjs
+      - run: node tests/subscription-browser.cjs
       - run: node tests/admin-workspace-browser.cjs
       - run: node tests/admin-motion-browser.cjs
       - run: node tests/refresh-browser.cjs

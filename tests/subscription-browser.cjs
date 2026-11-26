@@ -1,0 +1,33 @@
+const assert=require('node:assert/strict'),fs=require('node:fs/promises'),{chromium}=require('playwright');
+const {serve,route,populate}=require('./workspace-fixture.cjs');
+const sample={schema:1,configured:true,plan_code:'annual',starts_on:'2026-11-26',valid_until:'2027-11-25',renewal_amount:750.5,currency:'USD',revision:1,updated_at:'2026-11-26T12:00:00Z',checked_on:'2026-11-26',status:'active',days_remaining:364,duration_days:365};
+const ownerSDK=`window.ownerFixture={session:null,subscription:{configured:false},changes:[],calls:[],hold:false};window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:ownerFixture.session}}),signInWithPassword:async({email})=>{ownerFixture.session={user:{id:email==='owner@test'?'owner-id':'company-id',email}};return {data:{session:ownerFixture.session},error:null}},signOut:async()=>{ownerFixture.session=null;return {error:null}},stopAutoRefresh:()=>{}},rpc:(name,args)=>{ownerFixture.calls.push({name,args});if(name==='is_subscription_owner')return Promise.resolve({data:ownerFixture.session?.user.id==='owner-id',error:null});if(name==='owner_subscription')return Promise.resolve({data:{subscription:ownerFixture.subscription,changes:ownerFixture.changes},error:null});if(name==='save_subscription'){const value={schema:1,configured:true,plan_code:'annual',starts_on:args.p_starts_on,valid_until:args.p_valid_until,renewal_amount:args.p_renewal_amount,currency:args.p_currency,revision:args.p_expected_revision+1,updated_at:'2026-11-26T12:00:00Z',checked_on:'2026-11-26',status:'active',days_remaining:364};if(ownerFixture.hold)return new Promise(resolve=>ownerFixture.finish=()=>resolve({data:value,error:null}));ownerFixture.subscription=value;return Promise.resolve({data:value,error:null});}return Promise.resolve({data:null,error:{message:'unknown'}})}})};`;
+(async()=>{
+ const {server,origin}=await serve();let browser;
+ try{
+  await fs.mkdir('test-results/subscription',{recursive:true});browser=await chromium.launch({headless:true});
+  const context=await browser.newContext({serviceWorkers:'block',reducedMotion:'reduce'});await route(context,origin);const p=await context.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
+  for(const width of [320,390,1440]){
+   await p.setViewportSize({width,height:900});await p.goto(origin+'/admin.html');await populate(p,'orders');
+   await p.evaluate(s=>{window.sub=s;const original=sb.rpc;sb.rpc=(name,args)=>name==='get_subscription'?Promise.resolve({data:sub,error:null}):original(name,args);go('subscription');},sample);
+   await p.locator('.subscription-price strong').waitFor();assert.match(await p.locator('.subscription-price strong').innerText(),/750.5 USD/);assert.doesNotMatch(await p.locator('.subscription-price strong').innerText(),/ل.س/);
+   assert.equal(await p.locator('#main input,#main select').count(),0,'company section must be read only');assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await p.screenshot({path:'test-results/subscription/customer-'+width+'.png',fullPage:true});
+  }
+  await p.evaluate(()=>{sub={...sub,status:'expired',days_remaining:-4};});await p.locator('#subscription-refresh').click();await p.getByText('انتهى الاشتراك',{exact:true}).waitFor();
+  await p.evaluate(()=>{sub={configured:false};});await p.locator('#subscription-refresh').click();await p.getByText('بيانات الاشتراك غير محددة بعد',{exact:true}).waitFor();assert.equal(await p.locator('.subscription-price').count(),0);
+  await p.evaluate(()=>{sb.rpc=()=>Promise.resolve({data:null,error:{message:'network'}});go('subscription');});await p.locator('#subscription-retry').waitFor();assert.equal(await p.locator('.subscription-price').count(),0);
+  await p.evaluate(()=>{sb.rpc=()=>new Promise(resolve=>window.finishSub=resolve);go('subscription');});await p.getByRole('status').waitFor();await p.evaluate(s=>{go('orders');finishSub({data:s,error:null});},sample);assert.equal(await p.locator('.subscription-price').count(),0);
+  await p.close();await context.close();
+  const owner=await browser.newContext({viewport:{width:390,height:900},serviceWorkers:'block'});
+  await owner.route('**/*',r=>r.request().url().endsWith('/vendor/supabase.js')?r.fulfill({contentType:'application/javascript',body:ownerSDK}):r.request().url().startsWith(origin+'/')?r.continue():r.abort());
+  const o=await owner.newPage();o.on('pageerror',e=>errors.push(e.message));await o.goto(origin+'/owner.html');
+  await o.locator('#owner-email').fill('company@test');await o.locator('#owner-password').fill('fixture-only');await o.locator('#owner-login-button').click();await o.getByText(/لا يملك صلاحية/).waitFor();assert.equal(await o.locator('#owner-dashboard').isVisible(),false);
+  await o.locator('#owner-email').fill('owner@test');await o.locator('#owner-password').fill('fixture-only');await o.locator('#owner-login-button').click();await o.locator('#owner-dashboard').waitFor();await o.getByText('بيانات الاشتراك غير محددة بعد',{exact:true}).waitFor();
+  await o.locator('[name=starts_on]').fill('2026-11-26');await o.locator('[name=valid_until]').fill('2027-11-25');await o.locator('[name=renewal_amount]').fill('750.50');await o.locator('[name=currency]').selectOption('USD');await o.locator('#owner-save').click();await o.getByText(/حُفظت بيانات الاشتراك/).waitFor();
+  const saved=await o.evaluate(()=>ownerFixture.calls.find(c=>c.name==='save_subscription').args);assert.equal(saved.p_expected_revision,0);assert.equal(saved.p_currency,'USD');assert.equal(saved.p_renewal_amount,'750.50');assert.equal(await o.locator('.owner-history-entry').count(),1);
+  assert.ok(await o.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await o.screenshot({path:'test-results/subscription/owner-390.png',fullPage:true});
+  await o.evaluate(()=>ownerFixture.hold=true);await o.locator('[name=renewal_amount]').fill('900');await o.locator('#owner-save').click();assert.equal(await o.locator('#owner-save').isDisabled(),true);await o.locator('#owner-logout').click();await o.locator('#owner-login').waitFor();assert.equal(await o.locator('#owner-dashboard').isVisible(),false);
+  assert.deepEqual(errors,[]);console.log('Subscription: customer display and currency, expiry and unconfigured states, stale reads, mobile layout, owner-only access/save/audit and logout during a save verified.');await owner.close();
+ }finally{await browser?.close();await new Promise(r=>server.close(r));}
+})().catch(e=>{console.error(e);process.exitCode=1;});

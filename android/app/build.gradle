@@ -41,8 +41,9 @@ android {
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets { main.assets.srcDir(layout.buildDirectory.dir('generated/offlineAssets')) }
 }
-tasks.register('prepareOfflineAssets', Copy) {
+tasks.register('prepareOfflineAssets', Sync) {
     from(rootProject.file('../dist'))
+    exclude('owner.html', 'owner-app.js', 'owner.css')
     into(layout.buildDirectory.dir('generated/offlineAssets/offline'))
     doFirst { if (!rootProject.file('../dist/offline-shell-manifest.json').exists()) throw new GradleException('Run npm run build before building Android') }
 }

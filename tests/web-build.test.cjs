@@ -7,7 +7,7 @@ test('build IDs are deterministic, embedded in HTML, and detect a stylesheet-onl
   for(const name of ['icons','.well-known','vendor'])fs.cpSync(name,path.join(root,name),{recursive:true});
   fs.mkdirSync(path.join(root,'scripts'));fs.copyFileSync('scripts/build-web.cjs',path.join(root,'scripts/build-web.cjs'));
   const build=()=>{execFileSync(process.execPath,[path.join(root,'scripts/build-web.cjs')],{stdio:'pipe'});return JSON.parse(fs.readFileSync(path.join(root,'dist/app-version.json'),'utf8'))};
-  const first=build();assert.deepEqual(build(),first);assert.match(first.admin,/^[a-f0-9]{64}$/);
+  const first=build();const shell=JSON.parse(fs.readFileSync(path.join(root,'dist/offline-shell-manifest.json'),'utf8'));for(const role of ['admin','captain'])assert.equal(shell[role].files.some(x=>/^\/owner(?:[-.]|$)/.test(x.url)),false,'owner console must not enter an app offline shell');assert.ok(shell.admin.files.some(x=>x.url==='/admin-subscription.js'));assert.equal(shell.captain.files.some(x=>x.url==='/admin-subscription.js'),false);assert.deepEqual(build(),first);assert.match(first.admin,/^[a-f0-9]{64}$/);
   assert.ok(fs.readFileSync(path.join(root,'dist/admin.html'),'utf8').includes('content="'+first.admin+'"'));
   fs.appendFileSync(path.join(root,'admin-mobile.css'),'\n/* fixture stylesheet update */');const changed=build();
   assert.notEqual(changed.admin,first.admin);assert.equal(changed.captain,first.captain);

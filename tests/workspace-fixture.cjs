@@ -7,6 +7,7 @@ async function populate(page,screen='stock'){
  await page.waitForFunction(()=>document.getElementById("splash")?.classList.contains("off"));
  await page.evaluate(screen=>{
   const id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0'),today=dayK(new Date())+'T09:00:00Z';
+if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(TABS.length-1,0,['subscription','إدارة الاشتراك','wallet']);
   D.settings={business_name:'الصحة والجمال',currency:'ل.س',low_stock:'3',price_mode:'actual'};CUR='ل.س';
   D.products=Array.from({length:65},(_,i)=>({id:id(i+1),name:i===0?'مجموعة العناية اليومية للبشرة الحساسة — إصدار خاص طويل الاسم':i===1?'سيروم فيتامين سي':'منتج العناية '+(i+1),price:25000+i*1000,cost:15000+i*700,active:i%9!==8}));
   D.warehouses=[{id:id(101),name:'المستودع الرئيسي',is_main:true,governorates:['دمشق','ريف دمشق']},{id:id(102),name:'مستودع حلب',is_main:false,governorates:['حلب']}];

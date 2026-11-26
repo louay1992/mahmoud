@@ -104,7 +104,7 @@ class DeliveryOffline {
     sessionStorage.removeItem('delivery-refresh-view-'+this.role);localStorage.removeItem(this.purgeKey);
   }
   wrap(client){
-    const offline=this,readRPC=new Set(['working_orders','carrier_balances','carrier_statement','my_access','staff_lookups','admin_products','dashboard_stats','admin_profit_items','marketer_return_impact']);
+    const offline=this,readRPC=new Set(['get_subscription','working_orders','carrier_balances','carrier_statement','my_access','staff_lookups','admin_products','dashboard_stats','admin_profit_items','marketer_return_impact']);
     const overrides=new Map();
     const builder=(target,path,write=false,signal)=>new Proxy(target,{
       get(object,name){
