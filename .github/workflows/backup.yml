@@ -1,0 +1,48 @@
+name: Production backup to Backblaze B2
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+      timezone: Asia/Damascus
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-production-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install PostgreSQL, S3 and encryption clients
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc |
+            sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' |
+            sudo tee /etc/apt/sources.list.d/backup-pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18 python3-psycopg2 python3-boto3 age
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      - name: Export, encrypt and verify the backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.BACKUP_SUPABASE_DB_URL }}
+          SUPABASE_STORAGE_KEY_ID: ${{ secrets.BACKUP_SUPABASE_STORAGE_KEY_ID }}
+          SUPABASE_STORAGE_KEY: ${{ secrets.BACKUP_SUPABASE_STORAGE_KEY }}
+          SUPABASE_STORAGE_REGION: ${{ vars.BACKUP_SUPABASE_STORAGE_REGION }}
+          B2_KEY_ID: ${{ secrets.BACKUP_B2_KEY_ID }}
+          B2_KEY: ${{ secrets.BACKUP_B2_KEY }}
+          B2_REGION: ${{ vars.BACKUP_B2_REGION }}
+          B2_BUCKET: ${{ vars.BACKUP_B2_BUCKET }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: /usr/bin/python3 scripts/backup/backup.py
