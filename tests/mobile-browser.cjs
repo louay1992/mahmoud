@@ -17,6 +17,7 @@ async function populate(page, role, screen) {
       delivery_fee: 5000, created_at: now, status_at: now, note: 'يرجى الاتصال قبل الوصول',
       map_url: 'https://maps.google.com/?q=Damascus', order_items: [{ id: 'item-1', qty: 1, unit_price: 25000, list_price: 22000, products: { name: 'مجموعة العناية اليومية' } }] };
     D.orders = [order, { ...order, id: '00000000-0000-0000-0000-000000000002', order_no: 1235, status: 'in_delivery', customer_name: 'سارة أحمد' }];
+if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(TABS.length-1,0,['subscription','إدارة الاشتراك','wallet']);
     D.settings = { business_name: 'الصحة والجمال', currency: 'ل.س', phone_country: '963' }; CUR = 'ل.س';
     D.ev = {}; D.pr = {}; D.notifs = []; D.payments = []; D.stock = [{ warehouse_id: 'warehouse-1', product_id: 'product-1', qty: 12, products: { name: 'مجموعة العناية اليومية' } }];
     if (role === 'admin') {

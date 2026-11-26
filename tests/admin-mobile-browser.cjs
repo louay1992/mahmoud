@@ -12,6 +12,7 @@ async function populate(page,screen='home'){
   const ships=['preparing','handed','in_transit','returned','cancelled','delivered'];
   window.fixtureShips=ships.map((ship_status,n)=>({...base,id:id(n+101),order_no:2011+n,status:ship_status==='delivered'?'delivered':'new',ship_status,fulfillment:'shipping',customer_name:['ليلى الحسن','أحمد محمود'][n%2],carrier_id:'carrier-1',waybill:'SY-0049-'+n,shipping_cost:7000,ship_warehouse:'warehouse-1'}));
   D.orders.push(...window.fixtureShips);D.settings={business_name:'الصحة والجمال',currency:'ل.س'};CUR='ل.س';
+if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(TABS.length-1,0,['subscription','إدارة الاشتراك','wallet']);
   D.products=[{id:'product-1',name:'مجموعة العناية اليومية',active:true,price:87500}];
   D.captains=[{id:'captain-1',name:'أحمد خالد',active:true,warehouse_id:'warehouse-1'}];D.marketers=[{id:'marketer-1',name:'نور',active:true}];D.warehouses=[{id:'warehouse-1',name:'المستودع الرئيسي',is_main:true}];D.carriers=[{id:'carrier-1',name:'قدموس',phone:'0944000000',active:true}];
   D.stats={delivered_today:12,sales_today:2140000,owed_total:975000,low_stock:[{warehouse:'المستودع الرئيسي',product:'سيروم العناية',qty:2}]};

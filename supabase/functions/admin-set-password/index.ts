@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.89.0";
-import { corsHeaders, normalizeOrigin, originRejected, passwordProblem } from "../_shared/admin-set-password.ts";
+import { corsHeaders, normalizeOrigin, originRejected, passwordProblem, protectedSubscriptionOwner } from "../_shared/admin-set-password.ts";
 
 // CORS مقصور على أصل التطبيق (APP_ORIGIN) لا على '*': أي صفحة أخرى لا تستطيع
 // إرسال طلب مفهوك، لأن الردّ على OPTIONS نفسه يُرفض قبل التحقق من الجلسة.
@@ -45,6 +45,9 @@ Deno.serve(async (req) => {
     if (data.users.length < 1000) break;
   }
   if (found) {
+    const protection = await protectedSubscriptionOwner(admin, found.id);
+    if (protection.error) return json({ error: "تعذّر التحقق من حماية الحساب. حاول لاحقًا" }, 503);
+    if (protection.protected) return json({ error: "لا يمكن تعديل حساب مالك النظام من لوحة الشركة" }, 403);
     const { error } = await admin.auth.admin.updateUserById(found.id, { password, email_confirm: true });
     if (error) return json({ error: error.message }, 500);
     return json({ ok: true, created: false });

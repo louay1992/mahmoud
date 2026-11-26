@@ -206,7 +206,7 @@ const cname = id => (D.captains.find(c=>c.id===id)||{}).name || "—";
 const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
-const TABS = [["home","الرئيسية","home"],["orders","طلبات التوصيل","box"],["ship","طلبات الشحن","box"],["carriers","شركات الشحن","store"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["settings","الإعدادات","gear"]];
+const TABS = [["home","الرئيسية","home"],["orders","طلبات التوصيل","box"],["ship","طلبات الشحن","box"],["carriers","شركات الشحن","store"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["subscription","إدارة الاشتراك","wallet"],["settings","الإعدادات","gear"]];
 const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","ship"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
@@ -362,7 +362,7 @@ function checkUpdate(){ return appRefresh.checkUpdate(); }
 function applyUpdate(){ return appRefresh.applyUpdate(true); }
 
 
-function render(){ if(globalThis.AdminWorkspace?.dispatch())return; if(tab==="notifs"&&ACC.role!=="staff") return vNotifs(); if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew})[tab]?.(); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]?.() }
+function render(){ if(globalThis.AdminWorkspace?.dispatch())return; if(tab==="notifs"&&ACC.role!=="staff") return vNotifs(); if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew})[tab]?.(); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,subscription:()=>AdminSubscription.render(),settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]?.() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -1777,6 +1777,7 @@ const appRefresh=new DeliveryRefresh({
     if(!force&&!appRefresh.safe())return false;
     if(tab!==screen)return false;
     renderNav();
+    if(tab==='subscription')return AdminSubscription.render();
     if(tab==='ship'||tab==='carriers'){const result=await vShip(tab,{quiet:true,signal});return result!==false;}
     if(globalThis.AdminWorkspace?.full()&&['profit','stats','customers'].includes(tab)){if(force||appRefresh.foreground||Date.now()-lastReportRefresh>60000){const result=await ({profit:vProfit,stats:vStats,customers:vCustomers})[tab]({quiet:true,signal});if(result!==false)lastReportRefresh=Date.now();return result!==false;}return true;}
     const y=scrollY,anchor=globalThis.AdminWorkspace?.captureAnchor();
