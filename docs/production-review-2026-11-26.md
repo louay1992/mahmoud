@@ -24,3 +24,11 @@ Notification grouping IDs and order IDs now travel separately. Both native and W
 3. Merge through normal branch protection, let Netlify publish main, then compare the live deployment commit, web build IDs and asset hashes. Verify allowed-origin and foreign-origin preflights.
 
 GitHub Actions attempts were rejected before running jobs because the GitHub account is locked for billing. Local results do not replace required checks or justify bypassing branch protection. Release completion must be reported separately from preparation and from backend-only application.
+
+## Applied backend result
+
+The production migration was applied successfully. Its full journal source has MD5 `37a8f97d1aa36934cd91f96d1e69c4f0`, matching the checked-in file. All 63 live function bodies, security-definer flags and search-path settings match a fresh installation of the repaired repository. Existing policies, triggers and effective function execution ACLs are preserved, with the reset RPC revoked and the nonnegative stock constraint validated.
+
+The downloaded live admin-set-password bundle matches the generated upload byte for byte. Live public endpoint, unauthenticated device rejection, foreign-origin rejection and allowed password-origin preflight checks pass.
+
+A normal merge of PR #17 was attempted and rejected with `3 of 3 required status checks are failing`. The checks did not start their steps because the account is locked for billing. Netlify production remains on `bcef4101d770310a6a5739a5e6facfff7554aa0e`; frontend publication and CI/device validation remain pending. No protection was bypassed.
