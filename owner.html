@@ -10,7 +10,11 @@
 <body>
 <section id="owner-login" class="owner-login">
  <div class="owner-brand" aria-hidden="true">◈</div><span class="subscription-kicker">لوحة المالك</span><h1>إدارة اشتراك النظام</h1><p>تحكّم بمدة الاشتراك وقيمة تجديده.</p>
- <form id="owner-login-form" class="owner-panel"><label>البريد الإلكتروني<input id="owner-email" type="email" dir="ltr" autocomplete="username" required></label><label>كلمة المرور<input id="owner-password" type="password" dir="ltr" autocomplete="current-password" required></label><button class="b" type="submit" id="owner-login-button">دخول لوحة المالك</button></form>
+ <form id="owner-login-form" class="owner-panel"><label>البريد الإلكتروني<input id="owner-email" type="email" dir="ltr" autocomplete="username" required></label><label>كلمة المرور<input id="owner-password" type="password" dir="ltr" autocomplete="current-password" required></label><button class="b" type="submit" id="owner-login-button">دخول لوحة المالك</button><button class="b secondary owner-reset-request" type="button" id="owner-reset-request">تعيين كلمة المرور عبر البريد</button></form>
+</section>
+<section id="owner-recovery" class="owner-login" hidden>
+ <div class="owner-brand" aria-hidden="true">◈</div><span class="subscription-kicker">لوحة المالك</span><h1>تعيين كلمة المرور</h1><p>اختر كلمة مرور لحساب المالك. استخدم 8 أحرف على الأقل.</p>
+ <form id="owner-recovery-form" class="owner-panel"><fieldset id="owner-recovery-fields" disabled><label>كلمة المرور الجديدة<input id="owner-new-password" type="password" dir="ltr" autocomplete="new-password" minlength="8" maxlength="128" required></label><label>تأكيد كلمة المرور<input id="owner-confirm-password" type="password" dir="ltr" autocomplete="new-password" minlength="8" maxlength="128" required></label><button class="b" id="owner-password-save" type="submit">حفظ كلمة المرور</button></fieldset><button class="b secondary owner-reset-request" type="button" id="owner-recovery-exit">إلغاء وتسجيل الخروج</button></form>
 </section>
 <section id="owner-dashboard" class="owner-dashboard" hidden>
  <header class="owner-header"><div><span class="subscription-kicker">لوحة المالك</span><h1>اشتراك الشركة</h1><p>بيانات واضحة لك وللشركة المشتركة.</p></div><button id="owner-logout" class="b secondary" type="button">تسجيل الخروج</button></header>
