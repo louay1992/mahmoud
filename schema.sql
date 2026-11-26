@@ -304,7 +304,7 @@ grant select, insert, update, delete on settings to authenticated;
 
 drop policy if exists admins_admin_all on admins;
 create policy admins_admin_all on admins for all to authenticated using (is_admin()) with check (is_admin());
-grant insert, delete on admins to authenticated;
+grant insert, update, delete on admins to authenticated;
 
 create or replace function trg_keep_one_admin() returns trigger language plpgsql as $$
 begin
