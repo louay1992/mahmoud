@@ -217,7 +217,19 @@
     if(step===2&&NOM==='shipping'){if(!$('ocar').value)fail($('ocar'),'اختر شركة الشحن.');if(!$('og').value){fail($('og'),'اختر المحافظة؛ هي مطلوبة للشحن.');state.newStep=0;decorateNew();}for(const id of ['ocost','ofee'])if(!Number.isFinite(Number($(id).value||0))||Number($(id).value||0)<0)fail($(id),'أدخل أجورًا صحيحة لا تقل عن صفر.');}
     if(invalid){const section=invalid.closest('.aw-order-section');if(section){state.newStep=Number(section.dataset.step);decorateNew();}invalid.focus({preventScroll:true});invalid.scrollIntoView({block:'center',behavior:'instant'});return false;}return true;
   }
-  function newStep(next){if(state.saving)return;next=Math.min(3,Math.max(0,Number(next)));if(next>state.newStep){for(let i=0;i<next;i++)if(!validate(i))return;}state.newStep=next;decorateNew();AdminMotion.play(document.querySelector('.aw-order-section:not([hidden])'),[{opacity:.7},{opacity:1}],180);scrollTo({top:0,behavior:'instant'});document.querySelector('.aw-order-section:not([hidden]) h2')?.focus({preventScroll:true});}
+  function newStep(next){
+    if(state.saving)return;
+    next=Math.min(3,Math.max(0,Number(next)));
+    if(next>state.newStep){
+      for(let i=0;i<next;i++)if(!validate(i))return;
+    }
+    state.newStep=next;
+    decorateNew();
+    const section=document.querySelector('.aw-order-section:not([hidden])');
+    AdminMotion.blur(section);
+    scrollTo({top:0,behavior:'instant'});
+    section?.querySelector('h2')?.focus({preventScroll:true});
+  }
   async function pickCustomer(){
     if(ACC.role!=='full'&&!can('view_orders'))return;
     const unique=new Map();D.orders.forEach(o=>{const key=normPh(o.customer_phone);if(key&&!unique.has(key))unique.set(key,o);});
