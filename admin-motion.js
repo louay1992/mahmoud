@@ -22,6 +22,9 @@
       {transformOrigin,transform:'scale(1)',opacity:1}
     ],300);
   }
+  function blur(node){
+    return play(node,[{filter:'blur(5px)'},{filter:'blur(0px)'}],240);
+  }
   function enter(key,origin){
     if(!enabled()||(screen===key&&!origin))return;screen=key;
     const main=document.getElementById('main'),orderContent=main.querySelector('.aw-order-content');
@@ -30,7 +33,7 @@
       return;
     }
     const content=orderContent?[orderContent]:[...main.children].filter(node=>!node.hidden);
-    for(const node of content)play(node,[{opacity:.7},{opacity:1}],220);
+    for(const node of content)blur(node);
   }
   // Remove interactive DOM immediately; a short inert visual exit cannot close a newer dialog.
   function retire(node){
@@ -119,6 +122,6 @@
   }
   function reset(){animations.forEach(a=>a.cancel());animations.clear();retiring?.remove();retiring=null;screen='';opener=null;overlay=null;panelNode=null;document.body.classList.remove('aw-overlay-open');const app=document.getElementById('app');if(app)app.inert=false;}
   reduce.addEventListener('change',()=>{if(reduce.matches)animations.forEach(a=>a.cancel());});
-  globalThis.AdminMotion={enabled,play,anchor,enter,retire,reset,sync};
+  globalThis.AdminMotion={enabled,play,anchor,blur,enter,retire,reset,sync};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
