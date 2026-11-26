@@ -77,13 +77,17 @@ select version, name from supabase_migrations.schema_migrations order by version
 
 ### نشر Edge Functions
 
+`supabase/config.toml` هو مرجع إعداد الدوال: الأقسام `[functions.send-push]` و`[functions.native-device]` و`[functions.admin-set-password]` و`[functions.webpage-text]` تثبّت `verify_jwt = false` لكل منها، فيقرأها `supabase functions deploy` ويلغي ما عُدّل يدويًا من اللوحة. لذلك لا تُضاف `--no-verify-jwt` إلى الأوامر ولا تُغيَّر من لوحة Supabase.
+
 ```bash
 node scripts/prepare-deployment.cjs   # ينتج artifacts/supabase/{send-push,native-device}.ts بلا أسرار
-npx supabase functions deploy send-push --no-verify-jwt
-npx supabase functions deploy native-device --no-verify-jwt
+npx supabase functions deploy send-push
+npx supabase functions deploy native-device
 npx supabase functions deploy admin-set-password
-npx supabase functions deploy webpage-text --no-verify-jwt
+npx supabase functions deploy webpage-text
 ```
+
+تحقق بعد كل نشر أن الإعداد مطابق: `verify_jwt` يجب أن يكون `false` للدوال الأربع.
 
 `send-push` يولّد مفاتيح VAPID تلقائيًا ويحفظها في `push_config`، ويتحقق من كلمة سرّ مشتركة؛ لا تصل هذه القيم إلى أي تطبيق.
 
