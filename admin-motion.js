@@ -3,7 +3,7 @@
   const phone=matchMedia('(max-width:719px)'),reduce=matchMedia('(prefers-reduced-motion:reduce)');
   const ease='cubic-bezier(.2,.8,.2,1)',animations=new Set();
   const itemRowsSeen=new WeakSet();
-  let opener=null,overlay=null,panelNode=null,screen='',startY=null,drag=null,backNext=false;
+  let opener=null,overlay=null,panelNode=null,retiring=null,screen='',startY=null,drag=null;
   const enabled=()=>(phone.matches||!!overlay||!!document.querySelector('.aw-page'))&&typeof ACC!=='undefined'&&ACC.role!=='none';
   function play(el,frames,duration=220){
     if(!el||!enabled()||reduce.matches||!el.animate)return;
@@ -11,30 +11,61 @@
     const a=el.animate(frames,{duration,easing:ease});animations.add(a);
     a.finished.catch(()=>{}).finally(()=>animations.delete(a));return a;
   }
-  function enter(key,back=false){
-    if(!enabled()||screen===key)return;screen=key;
-    back=back||backNext;backNext=false;play(document.getElementById('main'),[{opacity:.45,transform:`translateX(${back?12:-12}px)`},{opacity:1,transform:'translateX(0)'}]);
+  function anchor(button){
+    return (button.querySelector('svg')||button).getBoundingClientRect();
+  }
+  function expand(node,origin,opacity){
+    const box=node.getBoundingClientRect();
+    const transformOrigin=`${origin.left+origin.width/2-box.left}px ${origin.top+origin.height/2-box.top}px`;
+    return play(node,[
+      {transformOrigin,transform:'scale(.9)',opacity},
+      {transformOrigin,transform:'scale(1)',opacity:1}
+    ],300);
+  }
+  function enter(key,origin){
+    if(!enabled()||(screen===key&&!origin))return;screen=key;
+    const main=document.getElementById('main'),orderContent=main.querySelector('.aw-order-content');
+    if(orderContent&&origin){
+      expand(orderContent,origin,.62);
+      return;
+    }
+    const content=orderContent?[orderContent]:[...main.children].filter(node=>!node.hidden);
+    for(const node of content)play(node,[{opacity:.7},{opacity:1}],220);
   }
   // Remove interactive DOM immediately; a short inert visual exit cannot close a newer dialog.
   function retire(node){
     if(!enabled()||reduce.matches||!node)return;
+    retiring?.remove();
     const style=getComputedStyle(node);
     const ghost=node.cloneNode(true);ghost.removeAttribute('id');ghost.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
     ghost.setAttribute('aria-hidden','true');ghost.inert=true;ghost.classList.add('aw-retiring');
-    Object.assign(ghost.style,{display:'flex',alignItems:style.alignItems,justifyContent:style.justifyContent,background:style.backgroundColor,padding:style.padding,backdropFilter:style.backdropFilter,zIndex:String((Number(style.zIndex)||60)-1)});
-    document.body.appendChild(ghost);if(ghost.firstElementChild&&node.firstElementChild){const panel=getComputedStyle(node.firstElementChild);ghost.firstElementChild.scrollTop=node.firstElementChild.scrollTop;ghost.firstElementChild.style.transform=panel.transform;ghost.firstElementChild.style.opacity=panel.opacity;}const a=play(ghost,[{opacity:Number(style.opacity)},{opacity:0}],140);
-    if(a)a.finished.catch(()=>{}).finally(()=>ghost.remove());else ghost.remove();
+    const backgroundColor=style.backgroundColor;
+    Object.assign(ghost.style,{display:'flex',top:style.top,bottom:'auto',height:style.height,alignItems:style.alignItems,justifyContent:style.justifyContent,backgroundColor,padding:style.padding,zIndex:String((Number(style.zIndex)||60)-1)});
+    document.body.appendChild(ghost);
+    retiring=ghost;
+    const panel=ghost.firstElementChild;
+    if(panel){
+      panel.scrollTop=node.firstElementChild.scrollTop;
+      const panelStyle=getComputedStyle(node.firstElementChild);
+      panel.style.transformOrigin=panelStyle.transformOrigin;
+      const transform=panelStyle.transform;
+      const start=transform==='none'?'translateY(0)':transform;
+      play(panel,[{transform:start},{transform:`translateY(36px) ${start}`}],140);
+    }
+    const a=play(ghost,[{backgroundColor},{backgroundColor:'transparent'}],140);
+    const finish=()=>{ghost.remove();if(retiring===ghost)retiring=null;};
+    if(a)a.finished.catch(()=>{}).finally(finish);else finish();
   }
   function controls(node){return [...node.querySelectorAll('button,a[href],input,select,textarea,[tabindex="0"]')].filter(n=>!n.disabled&&n.getClientRects().length);}
-  function sync(){
+  function sync(origin){
     if(!enabled())return;
     const dialogs=[...document.querySelectorAll('.dlg:not(.aw-retiring)')],modal=document.getElementById('modal');
     const next=dialogs.at(-1)||(modal?.style.display==='flex'?modal:null);
+    if(!overlay&&next)opener=document.activeElement;
     if(modal)modal.inert=dialogs.length>0;
     const app=document.getElementById('app');if(app)app.inert=!!next;
     document.body.classList.toggle('aw-overlay-open',!!next);
     if(next===overlay&&next?.firstElementChild===panelNode)return;
-    if(!overlay&&next)opener=document.activeElement;
     const entering=next!==overlay;overlay=next;
     panelNode=next?.firstElementChild||null;
     if(next){
@@ -43,7 +74,12 @@
       panel.setAttribute('aria-label',panel.querySelector('h1,h2,h3,.sh-h b')?.textContent||'تفاصيل');
       panel.tabIndex=-1;next.dataset.awOverlay='true';
       for(const other of dialogs)other.inert=other!==next;
-      if(entering){play(next,[{opacity:0},{opacity:1}],180);play(panel,[{opacity:.5,transform:'translateY(28px)'},{opacity:1,transform:'translateY(0)'}],280);}
+      if(entering){
+        retiring?.remove();
+        play(next,[{backgroundColor:'transparent'},{backgroundColor:getComputedStyle(next).backgroundColor}],180);
+        if(origin)expand(panel,origin,1);
+        else play(panel,[{transform:'translateY(36px)'},{transform:'translateY(0)'}],220);
+      }
       panel.focus({preventScroll:true});
     }else{if(opener?.isConnected&&!opener.closest('[inert]'))opener.focus({preventScroll:true});opener=null;}
   }
@@ -81,8 +117,8 @@
       if(n.type==='number')n.inputMode=n.step==='1'?'numeric':'decimal';
     });
   }
-  function reset(){animations.forEach(a=>a.cancel());animations.clear();document.querySelectorAll('.aw-retiring').forEach(n=>n.remove());screen='';opener=null;overlay=null;document.body.classList.remove('aw-overlay-open');const app=document.getElementById('app');if(app)app.inert=false;}
+  function reset(){animations.forEach(a=>a.cancel());animations.clear();retiring?.remove();retiring=null;screen='';opener=null;overlay=null;panelNode=null;document.body.classList.remove('aw-overlay-open');const app=document.getElementById('app');if(app)app.inert=false;}
   reduce.addEventListener('change',()=>{if(reduce.matches)animations.forEach(a=>a.cancel());});
-  globalThis.AdminMotion={enabled,play,enter,retire,reset,sync,reverse:()=>{backNext=true;}};
+  globalThis.AdminMotion={enabled,play,anchor,enter,retire,reset,sync};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

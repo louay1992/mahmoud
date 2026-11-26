@@ -215,19 +215,38 @@ const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
   const n=pendingPR(), bdg=k=>k==="home"&&n?`<i class="bd">${n}</i>`:"";
   $("side").innerHTML=visTabs().map(([k,l,i])=>`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
+  if(globalThis.AdminMobile?.navigation())return;
   const m=visTabs().filter(t=>MAIN_TABS.includes(t[0])).sort((x,y)=>MAIN_TABS.indexOf(x[0])-MAIN_TABS.indexOf(y[0])).map(([k,l,i])=>k==="new"
-    ?`<button class="fab ${tab===k?"on":""}" onclick="go('new')" aria-label="${l}"><span class="pl">${ic("plus")}</span></button>`
+    ?`<button class="fab ${tab===k?"on":""}" onclick="go('new',{origin:AdminMotion.anchor(this)})" aria-label="${l}"><span class="pl">${ic("plus")}</span></button>`
     :`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
-  $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_TABS.includes(tab)?"":"on"}" onclick="openMore()">${ic("menu")}<span>المزيد</span></button>`;
-  globalThis.AdminMobile?.navigation();
+  $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_TABS.includes(tab)?"":"on"}" onclick="openMore(AdminMotion.anchor(this))">${ic("menu")}<span>المزيد</span></button>`;
 }
-function openMore(){
-  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.more();
+function openMore(origin){
+  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.more(origin);
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${visTabs().filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
   $("modal").style.display="flex";
   globalThis.AdminMobile?.more();
+  globalThis.AdminMotion?.sync(origin);
 }
-function go(k){ if(k==="new"&&offline.denied())return toast(offline.error().error.message,"err"); if(globalThis.AdminWorkspace?.needsGuard()) return AdminWorkspace.confirmLeave(()=>go(k)); if(!visTabs().some(t=>t[0]===k)&&!(k==='notifs'&&ACC.role==='full'))return; if(k==="settings") SSEC=null; if(k==="marketers") MSV="list"; if(k==="products") PSV="list"; if(k==="marketers") MF={q:"",f:"all",g:""}; if(k==="captains"||k==="warehouses") CV="list"; if(k==="stock") SV={v:"list",wh:null}; tab=k; renderNav(); if(!globalThis.AdminWorkspace?.mobile())document.body.classList.add("anim"); const result=render(); globalThis.AdminWorkspace?.afterNavigation(k); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700); return result }
+function go(k,options={}){
+  if(k==="new"&&offline.denied())return toast(offline.error().error.message,"err");
+  if(globalThis.AdminWorkspace?.needsGuard())return AdminWorkspace.confirmLeave(()=>go(k,options));
+  if(!visTabs().some(t=>t[0]===k)&&!(k==="notifs"&&ACC.role==="full"))return;
+  if(k==="settings")SSEC=null;
+  if(k==="marketers"){MSV="list";MF={q:"",f:"all",g:""};}
+  if(k==="products")PSV="list";
+  if(k==="captains"||k==="warehouses")CV="list";
+  if(k==="stock")SV={v:"list",wh:null};
+  tab=k;
+  renderNav();
+  if(!globalThis.AdminWorkspace?.mobile())document.body.classList.add("anim");
+  const result=render();
+  if(k==="new"&&options.orderMode==="shipping")setNom("shipping");
+  scrollTo({top:0,behavior:"instant"});
+  globalThis.AdminWorkspace?.afterNavigation(k,options.origin);
+  setTimeout(()=>document.body.classList.remove("anim"),700);
+  return result;
+}
 async function refresh(){ return appRefresh.refresh({force:true,reason:'mutation'}); }
 async function manualRefresh(){ if(offline.readonly)return offline.retry(); return appRefresh.manual(); }
 /* ===== الإشعارات ===== */
@@ -253,7 +272,6 @@ const nCat=n=>(NK[n.kind]||["أخرى"])[0];
 function nDay(s){ const d=new Date(s), t=new Date(), y=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1);
   if(d.toDateString()===t.toDateString()) return "اليوم"; if(d.toDateString()===y.toDateString()) return "أمس";
   return d.toLocaleDateString("ar-EG",{weekday:"long",day:"numeric",month:"long"}) }
-function nBadge(){ const c=(D.notifs||[]).filter(nUnread).length; return c?`<i class="nbd">${c>99?"99+":c}</i>`:"" }
 let markReadFlight=null;
 async function markRead(){
   if(offline.denied())return false;
@@ -308,7 +326,21 @@ const pushClient=new DeliveryPush({
 });
 globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(!authGate.blocked&&(offline.readonly||navigator.onLine===false)){initNotifUI();return;} if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
-function initNotifUI(){ const b=$("bell"); const nb=nBadge(); b.innerHTML=ic("bell")+(nb||(pushClient.enabled?"":'<i class="dot"></i>')); b.classList.toggle("on",pushClient.enabled) }
+function initNotifUI(){
+  const bell=$("bell"), unread=(D.notifs||[]).filter(nUnread).length;
+  if(!bell.firstElementChild)bell.innerHTML=ic("bell");
+  const marker=bell.querySelector(".nbd,.dot");
+  const badge=unread?`<i class="nbd" aria-hidden="true">${unread>99?"99+":unread}</i>`:
+    pushClient.enabled?"":'<i class="dot" aria-hidden="true"></i>';
+  if((marker?.outerHTML||"")!==badge){
+    marker?.remove();
+    if(badge)bell.insertAdjacentHTML("beforeend",badge);
+  }
+  bell.classList.toggle("on",pushClient.enabled);
+  bell.classList.toggle("has-unread",unread>0);
+  if(unread)bell.setAttribute("aria-description","عدد الإشعارات غير المقروءة "+unread);
+  else bell.removeAttribute("aria-description");
+}
 async function bellClick(){
   const s=notifState();
   if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");

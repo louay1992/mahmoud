@@ -30,10 +30,32 @@
     });
   }
   function navigation(){
-    document.body.classList.toggle('admin-phone',enabled());
-    if(!enabled()) return;
+    const strip=$('bnr'), phone=enabled();
+    document.body.classList.toggle('admin-phone',phone);
+    if(!phone){
+      strip.classList.remove('am-nav-tabs');
+      return false;
+    }
     const entries=[['home','الرئيسية','home'],['orders','التوصيل','truck'],['ship','الشحن','box'],['new','طلب جديد','plus'],['more','المزيد','menu']];
-    $('bnr').innerHTML=entries.map(([key,label,glyph])=>button(`${icon(glyph)}<span>${label}</span>${key==='home'&&pendingPR()?'<i class="bd">'+pendingPR()+'</i>':''}`,'navigate',key,tab===key||(key==='more'&&!MAIN_TABS.includes(tab))?'on':'',`aria-label="${label}" ${tab===key?'aria-current="page"':''}`)).join('');
+    const active=MAIN_TABS.includes(tab)?tab:'more';
+    if(!strip.querySelector('.am-nav-indicator')){
+      strip.innerHTML='<span class="am-nav-indicator" aria-hidden="true"></span>'+entries.map(([key,label,glyph])=>{
+        const attributes=key==='more'?'aria-haspopup="dialog"':'';
+        return button(`${icon(glyph)}<span>${label}</span>${key==='home'?'<i class="bd" hidden></i>':''}`,'navigate',key,'',attributes);
+      }).join('');
+      strip.classList.add('am-nav-tabs');
+    }
+    strip.style.setProperty('--am-nav-index',entries.findIndex(([key])=>key===active));
+    for(const item of strip.querySelectorAll('button')){
+      const key=item.dataset.value;
+      item.classList.toggle('on',key===active);
+      if(key===tab)item.setAttribute('aria-current','page');
+      else item.removeAttribute('aria-current');
+    }
+    const badge=strip.querySelector('.bd'), pending=pendingPR();
+    badge.hidden=!pending;
+    if(pending&&badge.textContent!==String(pending))badge.textContent=pending;
+    return true;
   }
   function heading(title,subtitle,shipping=false){
     return `<div class="am-page-title"><div><h1>${title}</h1><p>${subtitle}</p></div>${button(icon('plus'),'create',shipping?'shipping':'delivery','am-icon-btn',`aria-label="${shipping?'إنشاء طلب شحن':'إنشاء طلب توصيل'}"`)}</div>`;
@@ -174,9 +196,16 @@
     const map=mapUrl(o),closed=['delivered','returned','cancelled'].includes(shipping?shippingStatus(o):o.status);
     sheet('خيارات الطلب #'+esc(o.order_no),`<div class="am-options">${button(icon('box')+'التفاصيل',shipping?'open-shipment':'open-order',id,'am-option')}${!closed&&!shipping?button(icon('tag')+'تعديل بيانات الطلب','edit-order',id,'am-option'):''}<a class="am-option" href="${waUrl(o,waText(o))}" target="_blank" rel="noopener">${icon('phone')}واتساب الزبون</a>${map?`<a class="am-option" href="${map}" target="_blank" rel="noopener">${icon('pin')}فتح الخريطة</a>`:''}</div>`);
   }
+  function createOrder(type,target){
+    go('new',{origin:AdminMotion.anchor(target),orderMode:type});
+  }
   const handlers={
-    navigate:key=>key==='more'?openMore():go(key),
-    create:type=>{go('new');if(type==='shipping')setNom('shipping');},
+    navigate:(key,target)=>{
+      if(key==='more')return openMore(AdminMotion.anchor(target));
+      if(key==='new')return createOrder('delivery',target);
+      return go(key);
+    },
+    create:createOrder,
     'delivery-status':deliveryStatus,'shipping-status':shippingFilter,
     'retry-shipping':()=>go('ship'),
     'open-order':id=>{if(validId(id))openOrder(id);},'open-shipment':id=>{if(validId(id))openShip(id);},
@@ -193,7 +222,7 @@
   };
   document.addEventListener('click',event=>{
     const target=event.target.closest?.('[data-am]');if(!target||!enabled())return;
-    const name=target.dataset.am,value=target.dataset.value||'',action=handlers[name];if(action)action(value);
+    const name=target.dataset.am,value=target.dataset.value||'',action=handlers[name];if(action)action(value,target);
     if(event.detail===0&&['delivery-status','shipping-status'].includes(name))document.querySelector(`[data-am="${name}"][data-value="${CSS.escape(value)}"]`)?.focus({preventScroll:true});
   });
   document.addEventListener('keydown',event=>{
