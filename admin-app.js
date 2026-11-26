@@ -1705,11 +1705,8 @@ function vSettings(){
     <p class="mut">الحساب بصلاحيات محدودة لا يرى رأس المال ولا الأرصدة ولا بقية الأقسام.</p></div>`,
     pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
     <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
-    danger:`<div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
-    <p class="mut">يمسح كل الطلبات والجرد والدفعات وسجل الحركة. يبقى المنتجات والكباتن والمستودعات. استخدمه بعد انتهاء التجربة فقط.</p>
-    <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`,
   };
-  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"], ["danger", "منطقة الخطر", "مسح البيانات التجريبية", "x"]];
+  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"]];
   if(SSEC&&secs[SSEC]){
     const m=meta.find(x=>x[0]===SSEC);
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
@@ -1756,11 +1753,6 @@ async function changePw(){
   const p=$("np").value; if(p.length<8) return toast("كلمة المرور قصيرة");
   if(await run(sb.auth.updateUser({password:p}),"تم تغيير كلمة المرور")) $("np").value="";
 }
-async function resetData(){
-  const f=await askf("مسح البيانات التجريبية",[{k:"c",l:"للتأكيد اكتب: مسح"}],"مسح كل البيانات",{cls:"r",msg:"سيُحذف كل الطلبات والجرد والدفعات. لا يمكن التراجع."}); if(!f||f.c.trim()!=="مسح") return;
-  if(await run(sb.rpc("reset_test_data"),"تم مسح البيانات")) refresh();
-}
-
 $("i_mail").innerHTML=ic("mail"); $("i_lock").innerHTML=ic("lock"); $("eye").innerHTML=ic("eye");
 $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"password" };
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });
