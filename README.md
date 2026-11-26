@@ -68,7 +68,8 @@ docs/                  قرارات التصميم والتحقق لكل إصد�
 - `npm run check` يفشل إذا استدعى العميل RPC غير معرّف في المخطط أو الترحيلات، ويسرد الدوال المُعاد تعريفها بلا فشل.
 - **أساس الإنتاج v17–v23**: `supabase/migrations/20261125091500_production_baseline_v17_v23.sql` يحمل نصًّا كل ما كان `schema.sql` يصفه بالتعليقات فقط: 18 دالة (`my_access`, `staff_lookups`, `create_order` بتوقيعه الكامل, `create_shipment`, `set_shipment_status`, `update_shipment`, `add_carrier_payment`, `mark_notifications_read`, `admin_profit_items`, `guard_once`, `notify`, `order_lines`, `fmt_money`, `has_perm`, `my_warehouse_id`, `norm_phone`, `trg_customer`, `trg_dup_guard`)، و6 جداول (`customers`, `op_guard`, `carriers`, `carrier_payments`, `shipment_events`, `notifications`)، وأعمدة الشحن وصلاحيات الموظفين والمحافظات، وسياسات RLS ومشغّلاتها وصلاحياتها. سُحب من المشروع بقراءة فقط في 2026-11-25 ويُختبر بتطبيقه مرتين على PGlite في `tests/schema-baseline.test.cjs`. `supabase/untracked-rpcs.txt` بقي فارغًا كحاجز ضد أي انحراف جديد.
 - **تكافؤ الإنتاج المتبقي**: `supabase/migrations/20261125103000_staff_policies_and_constraint_parity.sql` يضيف سياستي القراءة `staff_orders` و`staff_order_items` (الموظف يرى طلباته هو فقط) ويلغي قيد `main_no_captain` الذي حذفه الإنتاج في v19. قوبلت الكائنات كلها مع `pg_catalog` في المشروع: الفهارس (39) والمشغّلات (14) والـViews الثلاثة (`captain_balances`, `marketer_balances`, `order_profits` بـ `security_invoker=true`) مطابقة، ولم يبق فرق آخر.
-- **سجل الترحيلات**: النسخ `20261124180741`, `20261124203345`, `20261125091500`, `20261125103000` مسجّلة في `supabase_migrations.schema_migrations` لأن كائناتها طُبّقت فعلًا على المشروع (الأوليان عبر لوحة Supabase والأخيران نصًّا). بدون هذا التسجيل يعيد `supabase db push` تطبيقها: الأوليان تفشلان (`create table` بلا `if not exists`) والثالثة تُعيد إنشاء ما هو موجود. تحقق قبل أي `db push` بـ:
+- **إشعارات APK فقط**: `supabase/migrations/20261126123000_native_only_push_delivery.sql` يعيد تعريف `push_to_captain` و`push_to_admins` ليكتفي بوجود جهاز أصلي مفعّل عند غياب اشتراك Web. قبلها كان الشرط `if not exists (select 1 from push_subscriptions …) then return` يمنع نداء `send-push` تمامًا لحساب يملك التطبيق وحده، فلا تصل إشعارات FCM أبدًا. الترشيح النهائي يبقى في `web_push_targets` و`native_push_targets`. اختباره في `tests/native-only-push.test.cjs` على PGlite.
+- **سجل الترحيلات**: النسخ `20261124180741`, `20261124203345`, `20261125091500`, `20261125103000`, `20261126123000` مسجّلة في `supabase_migrations.schema_migrations` لأن كائناتها طُبّقت فعلًا على المشروع (الأوليان عبر لوحة Supabase والأخيران نصًّا). بدون هذا التسجيل يعيد `supabase db push` تطبيقها: الأوليان تفشلان (`create table` بلا `if not exists`) والثالثة تُعيد إنشاء ما هو موجود. تحقق قبل أي `db push` بـ:
 
 ```sql
 select version, name from supabase_migrations.schema_migrations order by version;
@@ -77,13 +78,17 @@ select version, name from supabase_migrations.schema_migrations order by version
 
 ### نشر Edge Functions
 
+`supabase/config.toml` هو مرجع إعداد الدوال: الأقسام `[functions.send-push]` و`[functions.native-device]` و`[functions.admin-set-password]` و`[functions.webpage-text]` تثبّت `verify_jwt = false` لكل منها، فيقرأها `supabase functions deploy` ويلغي ما عُدّل يدويًا من اللوحة. لذلك لا تُضاف `--no-verify-jwt` إلى الأوامر ولا تُغيَّر من لوحة Supabase.
+
 ```bash
 node scripts/prepare-deployment.cjs   # ينتج artifacts/supabase/{send-push,native-device}.ts بلا أسرار
-npx supabase functions deploy send-push --no-verify-jwt
-npx supabase functions deploy native-device --no-verify-jwt
+npx supabase functions deploy send-push
+npx supabase functions deploy native-device
 npx supabase functions deploy admin-set-password
-npx supabase functions deploy webpage-text --no-verify-jwt
+npx supabase functions deploy webpage-text
 ```
+
+تحقق بعد كل نشر أن الإعداد مطابق: `verify_jwt` يجب أن يكون `false` للدوال الأربع.
 
 `send-push` يولّد مفاتيح VAPID تلقائيًا ويحفظها في `push_config`، ويتحقق من كلمة سرّ مشتركة؛ لا تصل هذه القيم إلى أي تطبيق.
 

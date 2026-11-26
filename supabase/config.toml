@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.native-device]
 verify_jwt = false
+
+[functions.admin-set-password]
+verify_jwt = false
+
+[functions.webpage-text]
+verify_jwt = false

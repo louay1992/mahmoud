@@ -1102,7 +1102,10 @@ begin
   select value into u from push_config where key = 'fn_url';
   select value into sec from push_config where key = 'push_secret';
   if u is null or sec is null or p_captain is null then return; end if;
-  if not exists (select 1 from push_subscriptions where captain_id = p_captain) then return; end if;
+  -- هدف واحد يكفي: اشتراك Web أو جهاز APK مربوط، وإلا فلا داعي لنداء send-push.
+  if not exists (select 1 from push_subscriptions where captain_id = p_captain)
+    and not exists (select 1 from native_push_devices
+      where enabled and app_scope = 'captain' and captain_id = p_captain) then return; end if;
   perform net.http_post(url := u,
     body := jsonb_build_object('captain_id', p_captain, 'title', p_title, 'body', p_body, 'tag', p_tag),
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', sec));
@@ -1202,7 +1205,9 @@ begin
   select value into u from push_config where key = 'fn_url';
   select value into sec from push_config where key = 'push_secret';
   if u is null or sec is null then return; end if;
-  if not exists (select 1 from push_subscriptions where admin_email is not null) then return; end if;
+  if not exists (select 1 from push_subscriptions where admin_email is not null)
+    and not exists (select 1 from native_push_devices
+      where enabled and app_scope = 'admin' and admin_email is not null) then return; end if;
   perform net.http_post(url := u,
     body := jsonb_build_object('admins', true, 'title', p_title, 'body', p_body, 'tag', p_tag, 'url', '/admin.html', 'icon', '/icons/admin-192.png'),
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', sec));
