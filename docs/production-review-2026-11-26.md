@@ -32,3 +32,11 @@ The production migration was applied successfully. Its full journal source has M
 The downloaded live admin-set-password bundle matches the generated upload byte for byte. Live public endpoint, unauthenticated device rejection, foreign-origin rejection and allowed password-origin preflight checks pass.
 
 A normal merge of PR #17 was attempted and rejected with `3 of 3 required status checks are failing`. The checks did not start their steps because the account is locked for billing. Netlify production remains on `bcef4101d770310a6a5739a5e6facfff7554aa0e`; frontend publication and CI/device validation remain pending. No protection was bypassed.
+
+## Release retry and migration history
+
+After billing was resolved, all required Node, browser, real PostgreSQL and Android jobs passed. PR #17 merged as `6e8e0eedb46f7662df5c55465ccefc65bd241ba2`; Netlify production deploy `6b0880ffb9eea21228ce3172` published that commit. Forty-one of 42 public files matched byte for byte; the landing page differed only in Netlify's two pretty-URL link rewrites, and matched after reversing those two transforms. Live migration and function-source digests were rechecked.
+
+The separate Supabase integration then reported `Remote migration versions not found in local migrations directory`. Production retained 22 original migration records that had been consolidated into `schema.sql` but never saved as individual files. They are now restored with their original versions, names and exact statement bytes. `supabase/historical-migrations.json` records the observed original MD5 values; no production history is deleted or rewritten and no old migration should be replayed there.
+
+Fresh installation now executes the complete migration chain, without a preliminary `schema.sql` import. The full-system fixture follows that same path and checksums guard the recovered history against accidental edits. Local fresh-install and real PostgreSQL concurrency tests validate the restored chain. The historical chain also revealed an obsolete eight-argument create_order overload absent from live production. A new migration retires it so fresh installs have the same unambiguous API; it is a no-op on the existing production schema. Published frontend assets are unchanged.

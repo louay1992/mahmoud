@@ -1,0 +1,115 @@
+{
+  "source": "Read-only export of production supabase_migrations.schema_migrations on 2026-11-26. Files contain the exact recorded statements joined by a newline, with no added header or newline.",
+  "migrations": [
+    {
+      "version": "20261124121350",
+      "name": "delivery_captains_schema",
+      "md5": "dc5b830a3167bea99b35ead46e2165b6"
+    },
+    {
+      "version": "20261124121445",
+      "name": "captain_balance_excludes_delivery_fee",
+      "md5": "1fb86139a0729827aa09927180d76e31"
+    },
+    {
+      "version": "20261124122914",
+      "name": "grant_table_privileges_authenticated",
+      "md5": "66e954a163e7ab99b309d1d87925343e"
+    },
+    {
+      "version": "20261124122937",
+      "name": "admins_self_select_policy",
+      "md5": "ee2995aab57eff0cd97259fa2631922e"
+    },
+    {
+      "version": "20261124123632",
+      "name": "deliver_order_requires_stock",
+      "md5": "07b0a4e80798c9fbf8d10bf897d920ec"
+    },
+    {
+      "version": "20261124123955",
+      "name": "admin_settings_movements_returns_dashboard",
+      "md5": "a5aed68ac6c728678356fbcea5ff2b7f"
+    },
+    {
+      "version": "20261124124651",
+      "name": "order_statuses_events",
+      "md5": "635d714337a5d98de45d8eac848a5643"
+    },
+    {
+      "version": "20261124124835",
+      "name": "in_delivery_status_and_restore",
+      "md5": "42a4f00f4d209ab70d042cab54011254"
+    },
+    {
+      "version": "20261124125406",
+      "name": "price_variance_tracking",
+      "md5": "151310c8cd886b784deda10a04dfa977"
+    },
+    {
+      "version": "20261124130227",
+      "name": "price_change_requests",
+      "md5": "f7c0fcdba6a85fb7e991c6b687684170"
+    },
+    {
+      "version": "20261124130509",
+      "name": "price_request_on_invoice_total",
+      "md5": "3eb1e4c6271c56a032da8177be8f0081"
+    },
+    {
+      "version": "20261124131644",
+      "name": "admin_order_note_rpc",
+      "md5": "e364d13da4ecbc104027a43e3164100e"
+    },
+    {
+      "version": "20261124132511",
+      "name": "address_edit_order",
+      "md5": "e7299e3763ec8abec27e94060222cc2b"
+    },
+    {
+      "version": "20261124132725",
+      "name": "push_notifications_infra",
+      "md5": "84b4510a9cc954fcf5f2db57f4833f50"
+    },
+    {
+      "version": "20261124132819",
+      "name": "harden_trigger_functions",
+      "md5": "43019f27fcab9109cf18df562d6753b8"
+    },
+    {
+      "version": "20261124133356",
+      "name": "admin_push_notifications",
+      "md5": "6e8e0f6ee810ca757a25c19f892a37f2"
+    },
+    {
+      "version": "20261124134748",
+      "name": "marketers_capital_profit",
+      "md5": "debb3f1a5276ed29f3f2f5dff5832082"
+    },
+    {
+      "version": "20261124134820",
+      "name": "edit_order_marketer_capital",
+      "md5": "95518b36f268892dd25cc777d4a11a92"
+    },
+    {
+      "version": "20261124140314",
+      "name": "order_status_and_note_timestamps",
+      "md5": "e9b20f33afa89ea3f71f7e13c95d6c69"
+    },
+    {
+      "version": "20261124141305",
+      "name": "main_warehouse_and_invoice_deduct",
+      "md5": "2ea2f043c732f35e72797915ad6ae376"
+    },
+    {
+      "version": "20261124142245",
+      "name": "marketer_return_impact",
+      "md5": "b64848d3fc3179f0d4ff075b3b024439"
+    },
+    {
+      "version": "20261124145404",
+      "name": "v16_duplicate_guards",
+      "md5": "c8531ac3d0e3449043509ca6760760da"
+    }
+  ]
+}

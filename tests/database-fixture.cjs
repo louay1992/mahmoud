@@ -1,4 +1,4 @@
-/* Build the actual schema and every migration. No substitute business functions or production calls. */
+/* Build the actual migration chain from an empty database. No substitute business functions or production calls. */
 const fs=require('node:fs');
 const path=require('node:path');
 const root=path.resolve(__dirname,'..');
@@ -13,7 +13,6 @@ async function bootstrap(db){
  create table net.calls(id bigint generated always as identity,payload jsonb);
  create function net.http_post(url text,body jsonb,headers jsonb) returns bigint language plpgsql as $$begin insert into net.calls(payload) values(body);return 1::bigint;end$$;
  create publication supabase_realtime;`);
- await db.exec(fs.readFileSync(path.join(root,'schema.sql'),'utf8').replace(/create extension if not exists pg_net with schema extensions;/i,''));
- for(const file of fs.readdirSync(path.join(root,'supabase/migrations')).sort())await db.exec(fs.readFileSync(path.join(root,'supabase/migrations',file),'utf8'));
+ for(const file of fs.readdirSync(path.join(root,'supabase/migrations')).sort())await db.exec(fs.readFileSync(path.join(root,'supabase/migrations',file),'utf8').replace(/create extension if not exists pg_net with schema extensions;/i,''));
 }
 module.exports={bootstrap,id,claims};
