@@ -1,13 +1,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders, normalizeOrigin, originRejected, passwordProblem } from "../_shared/admin-set-password.ts";
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// CORS مقصور على أصل التطبيق (APP_ORIGIN) لا على '*': أي صفحة أخرى لا تستطيع
+// إرسال طلب مفهوك، لأن الردّ على OPTIONS نفسه يُرفض قبل التحقق من الجلسة.
+const allowedOrigin = normalizeOrigin(Deno.env.get("APP_ORIGIN"));
+const cors = corsHeaders(allowedOrigin);
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 
 Deno.serve(async (req) => {
+  if (originRejected(req.headers.get("origin"), allowedOrigin)) return json({ error: "forbidden origin" }, 403);
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   if (req.method !== "POST") return json({ error: "method" }, 405);
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -23,7 +24,8 @@ Deno.serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "طلب غير صالح" }, 400); }
   const password = String(body.password || "");
-  if (password.length < 6) return json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" }, 400);
+  const problem = passwordProblem(password);
+  if (problem) return json({ error: problem }, 400);
   let cemail = "";
   if (body.captain_id) {
     const { data: cap } = await admin.from("captains").select("id,name,email").eq("id", body.captain_id).maybeSingle();

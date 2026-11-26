@@ -494,7 +494,7 @@ function vCaptains(){
     $("main").innerHTML = backBtn("vCaptains")+`<div class="card"><h2>إضافة كابتن توصيل</h2>
     <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="رقم الموبايل (هو اسم المستخدم للدخول)" dir="ltr" inputmode="tel">
       <input id="cf" type="number" min="0" step="0.01" placeholder="أجور التوصيل"></div>
-    <div class="row"><input id="cpw" dir="ltr" placeholder="كلمة مرور الدخول (اختياري الآن، 6 أحرف على الأقل)"></div>
+    <div class="row"><input id="cpw" dir="ltr" placeholder="كلمة مرور الدخول (اختياري الآن، 8 أحرف على الأقل)"></div>
     <button class="b" onclick="addCaptain()">حفظ</button>
     <p class="mut">إذا كتبتَ رقم الموبايل وكلمة المرور يصبح الكابتن جاهزاً للدخول فوراً. يمكنك تغيير كلمة المرور لاحقاً من زر «كلمة المرور».</p></div>`;
     return;
@@ -531,8 +531,8 @@ async function callSetPw(captain_id,password,email){
 async function setCapPw(id){
   const c=D.captains.find(x=>x.id===id);
   if(!c.email) return toast("أضف رقم موبايل الكابتن أولاً من «تعديل»","err");
-  const f=await askf("كلمة مرور الكابتن "+c.name,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",ph:"اكتبها هنا وأعطها للكابتن",dir:"ltr"}],"تعيين",{msg:"اسم المستخدم (رقم الموبايل): <b dir=\"ltr\">"+esc(c.email.endsWith("@captain.local")?c.phone:c.email)+"</b><br>إذا لم يكن له حساب دخول سيُنشأ الآن."}); if(!f) return;
-  const p=f.p.trim(); if(p.length<6) return toast("كلمة المرور قصيرة (6 أحرف على الأقل)","err");
+  const f=await askf("كلمة مرور الكابتن "+c.name,[{k:"p",l:"كلمة المرور الجديدة (8 أحرف على الأقل)",ph:"اكتبها هنا وأعطها للكابتن",dir:"ltr"}],"تعيين",{msg:"اسم المستخدم (رقم الموبايل): <b dir=\"ltr\">"+esc(c.email.endsWith("@captain.local")?c.phone:c.email)+"</b><br>إذا لم يكن له حساب دخول سيُنشأ الآن."}); if(!f) return;
+  const p=f.p.trim(); if(p.length<8) return toast("كلمة المرور قصيرة (8 أحرف على الأقل)","err");
   try{ const j=await run2(callSetPw(id,p)); toast(j.created?"تم إنشاء حساب الدخول وتعيين كلمة المرور":"تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
 const run2=async p=>{ document.body.classList.add("busy"); try{ return await p } finally{ document.body.classList.remove("busy") } };
@@ -570,7 +570,7 @@ async function addCaptain(){
   const name=$("cn").value.trim(); if(!name) return toast("أدخل الاسم");
   const rec={name, phone:$("cph").value.trim()||null, email:capEmail($("cph").value), delivery_fee:parseFloat($("cf").value)||0};
   const pw=($("cpw").value||"").trim();
-  if(pw&&(pw.length<6||!rec.email)) return toast("كلمة المرور 6 أحرف على الأقل، ويلزم رقم موبايل","err");
+  if(pw&&(pw.length<8||!rec.email)) return toast("كلمة المرور 8 أحرف على الأقل، ويلزم رقم موبايل","err");
   const {data,error}=await sb.from("captains").insert(rec).select("id").single();
   if(error) return toast(error.message,"err");
   if(pw){ try{ await callSetPw(data.id,pw); toast("تمت إضافة الكابتن وتعيين كلمة المرور","ok") }catch(e){ toast("أُضيف الكابتن لكن تعذّر تعيين كلمة المرور: "+e.message,"err") } } else toast("تمت الإضافة","ok");
@@ -1698,13 +1698,13 @@ function vSettings(){
     </div>
     <div class="card"><h2>إنشاء حساب إداري</h2>
     <div class="row"><input id="sn" placeholder="الاسم (للتمييز)"><input id="nae" type="email" dir="ltr" placeholder="البريد الإلكتروني"></div>
-    <div class="row"><input id="spw" dir="ltr" placeholder="كلمة المرور (6 أحرف على الأقل)"></div>
+    <div class="row"><input id="spw" dir="ltr" placeholder="كلمة المرور (8 أحرف على الأقل)"></div>
     <div style="margin:8px 0"><label style="display:block;margin:4px 0"><input type="checkbox" id="sfull" onchange="document.getElementById('sperms').style.display=this.checked?'none':'block'"> إداري كامل (كل الصلاحيات)</label>
     <div id="sperms">${Object.entries(PERM_L).map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" class="sp" value="${k}" ${k==="create_orders"?"checked":""}> ${l}</label>`).join("")}</div></div>
     <button class="b" onclick="createStaff()">إنشاء الحساب</button>
     <p class="mut">الحساب بصلاحيات محدودة لا يرى رأس المال ولا الأرصدة ولا بقية الأقسام.</p></div>`,
     pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
-    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
+    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
     danger:`<div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
     <p class="mut">يمسح كل الطلبات والجرد والدفعات وسجل الحركة. يبقى المنتجات والكباتن والمستودعات. استخدمه بعد انتهاء التجربة فقط.</p>
     <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`,
@@ -1728,7 +1728,7 @@ const PERM_L={create_orders:"إنشاء طلبات",view_orders:"عرض الطل
 async function createStaff(){
   const email=$("nae").value.trim().toLowerCase(), name=$("sn").value.trim(), pw=$("spw").value;
   if(!/^\S+@\S+\.\S+$/.test(email)) return toast("بريد غير صالح","err");
-  if(pw.length<6) return toast("كلمة المرور 6 أحرف على الأقل","err");
+  if(pw.length<8) return toast("كلمة المرور 8 أحرف على الأقل","err");
   const full=$("sfull").checked, perms=full?null:[...document.querySelectorAll(".sp:checked")].map(x=>x.value);
   if(!full&&!perms.length) return toast("اختر صلاحية واحدة على الأقل","err");
   if(full&&!await askc("سيُنشأ حساب إداري <b>كامل</b> يرى كل شيء بما فيه رأس المال والأرصدة. متأكد؟",{title:"إداري كامل",ok:"نعم",cls:"r"})) return;
@@ -1746,14 +1746,14 @@ function editStaff(email){
     d.remove(); if(await run(sb.from("admins").update({perms}).eq("email",email),"تم الحفظ")) refresh() };
 }
 async function staffPw(email){
-  const f=await askf("كلمة مرور "+email,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",dir:"ltr"}],"تعيين"); if(!f) return;
-  const p=f.p.trim(); if(p.length<6) return toast("كلمة المرور قصيرة","err");
+  const f=await askf("كلمة مرور "+email,[{k:"p",l:"كلمة المرور الجديدة (8 أحرف على الأقل)",dir:"ltr"}],"تعيين"); if(!f) return;
+  const p=f.p.trim(); if(p.length<8) return toast("كلمة المرور قصيرة","err");
   try{ await run2(callSetPw(null,p,email)); toast("تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
 async function delAdmin(email){ if(!await askc("حذف الإداري <b dir=\"ltr\">"+esc(email)+"</b>؟",{title:"حذف إداري",ok:"حذف",cls:"r"})) return;
   if(await run(sb.from("admins").delete().eq("email",email),"تم الحذف")) refresh() }
 async function changePw(){
-  const p=$("np").value; if(p.length<6) return toast("كلمة المرور قصيرة");
+  const p=$("np").value; if(p.length<8) return toast("كلمة المرور قصيرة");
   if(await run(sb.auth.updateUser({password:p}),"تم تغيير كلمة المرور")) $("np").value="";
 }
 async function resetData(){

@@ -7,6 +7,19 @@ publish = "dist"
 [build.environment]
 NODE_VERSION = "24"
 
+# رؤوس أمان لكل المسارات. سياسة CSP تُبقي 'unsafe-inline' للنصوص والأنماط لأن
+# الصفحات تستخدم <style> ومعالجات onclick ونافذة طباعة تكتب HTML داخليًا، لكنها
+# تقصر الاتصال على self و*.supabase.co (HTTPS وWebSocket) وبيان تحديث APK على
+# GitHub، وتمنع الإطارات والأجسام والمصادر الخارجية الأخرى.
+[[headers]]
+for = "/*"
+[headers.values]
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "strict-origin-when-cross-origin"
+X-Frame-Options = "DENY"
+Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), display-capture=()"
+Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://raw.githubusercontent.com; manifest-src 'self'; worker-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
 [[redirects]]
 from = "/admin"
 to = "/admin.html"
