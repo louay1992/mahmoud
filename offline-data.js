@@ -104,7 +104,7 @@ class DeliveryOffline {
     sessionStorage.removeItem('delivery-refresh-view-'+this.role);localStorage.removeItem(this.purgeKey);
   }
   wrap(client){
-    const offline=this,readRPC=new Set(['my_access','staff_lookups','admin_products','dashboard_stats','admin_profit_items','marketer_return_impact']);
+    const offline=this,readRPC=new Set(['working_orders','carrier_balances','carrier_statement','my_access','staff_lookups','admin_products','dashboard_stats','admin_profit_items','marketer_return_impact']);
     const overrides=new Map();
     const builder=(target,path,write=false,signal)=>new Proxy(target,{
       get(object,name){
@@ -173,7 +173,7 @@ class DeliveryOffline {
   });}
   mutator(control){
     const action=control.getAttribute('onclick')||'',name=control.dataset.aw||control.dataset.am||'',value=control.dataset.value;
-    return /\b(save\w*|submit\w*|add\w*|edit\w*|del\w*|delete\w*|toggleCaptain|toggleProduct|toggleMarketer|assign|cancelO|restoreO|returnO|transferStock|adjustOne|createStaff|resetData|changePw|staffPw|setCapPw|payMarketer|carPay|carPayDel|carEdit|shipEdit|shipSet|quick|restore|sendPriceReq|openStatus|pickStatus|openEdit|openPrices|openNote|decidePR|markAllRead)\s*\(/.test(action)||/^(new-|.*-save$|.*-delete$|.*-add$|.*-edit$|.*-pay$|.*-toggle$|.*-submit$)/.test(name)||['create','invoice','transfer','adjust','captain-fee','captain-password','notification-read'].includes(name)||(['navigate','more-navigate'].includes(name)&&value==='new')||/go\(['"]new['"]\)/.test(action);
+    return /\b(save\w*|submit\w*|add\w*|edit\w*|del\w*|delete\w*|toggleCaptain|toggleProduct|toggleMarketer|assign|cancelO|restoreO|returnO|transferStock|adjustOne|createStaff|changePw|staffPw|setCapPw|payMarketer|carPay|carPayDel|carEdit|shipEdit|shipSet|quick|restore|sendPriceReq|openStatus|pickStatus|openEdit|openPrices|openNote|decidePR|markAllRead)\s*\(/.test(action)||/^(new-|.*-save$|.*-delete$|.*-add$|.*-edit$|.*-pay$|.*-toggle$|.*-submit$)/.test(name)||['create','invoice','transfer','adjust','captain-fee','captain-password','notification-read'].includes(name)||(['navigate','more-navigate'].includes(name)&&value==='new')||/go\(['"]new['"]\)/.test(action);
   }
   paint(){
     if(!this.options)return;const main=document.getElementById('main');if(!main)return;

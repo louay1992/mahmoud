@@ -12,7 +12,7 @@ const sdk=`window.fixtureApi={counts:{},fail:false,hold:false};window.supabase={
  }};return q};
  const channel={on:()=>channel,subscribe:()=>channel};
  return {auth:{getSession:async()=>({data:{session:{user:{id:'fixture-user',email:'fixture@example.test'},access_token:'fixture-jwt'}}})},from:table,
- rpc:async name=>({data:name==='my_access'?{role:'full'}:name==='dashboard_stats'?{}:[],error:null}),channel:()=>channel,removeAllChannels:async()=>{}};
+ rpc:name=>name==='working_orders'?table('orders'):Promise.resolve({data:name==='my_access'?{role:'full'}:name==='dashboard_stats'?{}:[],error:null}),channel:()=>channel,removeAllChannels:async()=>{}};
 }};`;
 (async()=>{
  const root=process.cwd(),versions={admin:'a'.repeat(64),captain:'a'.repeat(64)};let browser;

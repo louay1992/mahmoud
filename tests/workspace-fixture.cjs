@@ -33,7 +33,7 @@ async function populate(page,screen='stock'){
   sb.rpc=(name,args)=>{
    fixtures.calls.push({rpc:name,args});let signal;const query={abortSignal:s=>{signal=s;return query;},then:(resolve,reject)=>{
     const isWrite=['create_order','create_shipment'].includes(name);if(isWrite&&fixtures.hold)return new Promise(done=>{fixtures.complete=done;signal?.addEventListener('abort',()=>done({data:null,error:{message:'aborted'}}),{once:true});}).then(resolve,reject);
-    return Promise.resolve({data:name==='admin_profit_items'?profitItems:name==='admin_products'?D.products:name==='dashboard_stats'?D.stats:isWrite?fixtures.created:[],error:isWrite?fixtures.writeError:null}).then(resolve,reject);
+    return Promise.resolve({data:name==='working_orders'?fixtures.tables.orders:name==='carrier_balances'?[]:name==='admin_profit_items'?profitItems:name==='admin_products'?D.products:name==='dashboard_stats'?D.stats:isWrite?fixtures.created:[],error:isWrite?fixtures.writeError:null}).then(resolve,reject);
    }};return query;
   };
   sb.auth.getSession=async()=>({data:{session:{user:{email:'admin@example.test'},access_token:'fixture-only'}}});

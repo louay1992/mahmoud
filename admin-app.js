@@ -148,7 +148,7 @@ let firstLoad=true, ALOAD=0, INITIAL_LOAD_FAILED=false;
 async function loadStaff(initial,{signal}={}){
   const seq=++ALOAD,who=ME;
   const [lk,od,st]=await Promise.all([ can("create_orders")?sb.rpc("staff_lookups"):Promise.resolve({data:null}),
-    can("view_orders")?sb.from("orders").select("*, order_items(id, qty, unit_price, products(name))").order("created_at",{ascending:false}).limit(200):Promise.resolve({data:[]}),
+    can("view_orders")?sb.rpc("working_orders",{p_history_limit:200}):Promise.resolve({data:[]}),
     sb.from("settings").select("*") ].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
   if(signal?.aborted||seq!==ALOAD||who!==ME||authGate.blocked)return false;
   if([lk,od,st].some(x=>x.error)){if(!initial)throw new Error('تعذّر تحميل البيانات');toast('تعذّر تحميل البيانات. حاول مجددًا.','err');return false;}
@@ -166,7 +166,7 @@ async function loadAll(initial,{signal}={}){
     sb.from("captains").select("*").order("name"),
     sb.from("warehouses").select("*").order("name"),
     sb.from("stock").select("*"),
-    sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").order("created_at",{ascending:false}).limit(300),
+    sb.rpc("working_orders",{p_history_limit:300}),
     sb.from("captain_balances").select("*"),
     sb.from("captain_payments").select("*").order("created_at",{ascending:false}).limit(2000),
     sb.from("stock_invoices").select("*, stock_invoice_items(qty, products(name))").order("created_at",{ascending:false}).limit(50),
@@ -494,7 +494,7 @@ function vCaptains(){
     $("main").innerHTML = backBtn("vCaptains")+`<div class="card"><h2>إضافة كابتن توصيل</h2>
     <div class="row"><input id="cn" placeholder="الاسم"><input id="cph" placeholder="رقم الموبايل (هو اسم المستخدم للدخول)" dir="ltr" inputmode="tel">
       <input id="cf" type="number" min="0" step="0.01" placeholder="أجور التوصيل"></div>
-    <div class="row"><input id="cpw" dir="ltr" placeholder="كلمة مرور الدخول (اختياري الآن، 6 أحرف على الأقل)"></div>
+    <div class="row"><input id="cpw" dir="ltr" placeholder="كلمة مرور الدخول (اختياري الآن، 8 أحرف على الأقل)"></div>
     <button class="b" onclick="addCaptain()">حفظ</button>
     <p class="mut">إذا كتبتَ رقم الموبايل وكلمة المرور يصبح الكابتن جاهزاً للدخول فوراً. يمكنك تغيير كلمة المرور لاحقاً من زر «كلمة المرور».</p></div>`;
     return;
@@ -531,8 +531,8 @@ async function callSetPw(captain_id,password,email){
 async function setCapPw(id){
   const c=D.captains.find(x=>x.id===id);
   if(!c.email) return toast("أضف رقم موبايل الكابتن أولاً من «تعديل»","err");
-  const f=await askf("كلمة مرور الكابتن "+c.name,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",ph:"اكتبها هنا وأعطها للكابتن",dir:"ltr"}],"تعيين",{msg:"اسم المستخدم (رقم الموبايل): <b dir=\"ltr\">"+esc(c.email.endsWith("@captain.local")?c.phone:c.email)+"</b><br>إذا لم يكن له حساب دخول سيُنشأ الآن."}); if(!f) return;
-  const p=f.p.trim(); if(p.length<6) return toast("كلمة المرور قصيرة (6 أحرف على الأقل)","err");
+  const f=await askf("كلمة مرور الكابتن "+c.name,[{k:"p",l:"كلمة المرور الجديدة (8 أحرف على الأقل)",ph:"اكتبها هنا وأعطها للكابتن",dir:"ltr"}],"تعيين",{msg:"اسم المستخدم (رقم الموبايل): <b dir=\"ltr\">"+esc(c.email.endsWith("@captain.local")?c.phone:c.email)+"</b><br>إذا لم يكن له حساب دخول سيُنشأ الآن."}); if(!f) return;
+  const p=f.p.trim(); if(p.length<8) return toast("كلمة المرور قصيرة (8 أحرف على الأقل)","err");
   try{ const j=await run2(callSetPw(id,p)); toast(j.created?"تم إنشاء حساب الدخول وتعيين كلمة المرور":"تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
 const run2=async p=>{ document.body.classList.add("busy"); try{ return await p } finally{ document.body.classList.remove("busy") } };
@@ -570,7 +570,7 @@ async function addCaptain(){
   const name=$("cn").value.trim(); if(!name) return toast("أدخل الاسم");
   const rec={name, phone:$("cph").value.trim()||null, email:capEmail($("cph").value), delivery_fee:parseFloat($("cf").value)||0};
   const pw=($("cpw").value||"").trim();
-  if(pw&&(pw.length<6||!rec.email)) return toast("كلمة المرور 6 أحرف على الأقل، ويلزم رقم موبايل","err");
+  if(pw&&(pw.length<8||!rec.email)) return toast("كلمة المرور 8 أحرف على الأقل، ويلزم رقم موبايل","err");
   const {data,error}=await sb.from("captains").insert(rec).select("id").single();
   if(error) return toast(error.message,"err");
   if(pw){ try{ await callSetPw(data.id,pw); toast("تمت إضافة الكابتن وتعيين كلمة المرور","ok") }catch(e){ toast("أُضيف الكابتن لكن تعذّر تعيين كلمة المرور: "+e.message,"err") } } else toast("تمت الإضافة","ok");
@@ -1000,17 +1000,15 @@ async function vShip(mode,{quiet=false,signal}={}){
   if(mode==="ship"&&globalThis.AdminMobile?.enabled()) AdminMobile.shippingLoading();
   }
   const my=++SHLOAD;
-  const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
+  const [o,p,b]=await Promise.all([sb.rpc("working_orders",{p_history_limit:1000}), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000),sb.rpc("carrier_balances")].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
   if(signal?.aborted||my!==SHLOAD||tab!==mode||who!==ME||authGate.blocked) return false;
-  if(quiet&&(o.error||p.error))throw new Error('تعذّر تحميل الشحنات');
-  if(o.error||p.error){ if(mode==="carriers"&&globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError("شركات الشحن","carriers"); if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc((o.error||p.error).message)}</div>`; return }
-  SHIPS=o.data; CPAYS=p.data||[]; if(quiet&&!appRefresh.safe())return false;
-  const y=scrollY; if(mode==="carriers") drawCarriers(); else drawShip(); if(quiet)scrollTo({top:y,behavior:'instant'});
+  if(quiet&&(o.error||p.error||b.error))throw new Error('تعذّر تحميل الشحنات');
+  if(o.error||p.error||b.error){ if(mode==="carriers"&&globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError("شركات الشحن","carriers"); if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc((o.error||p.error||b.error).message)}</div>`; return }
+  SHIPS=(o.data||[]).filter(x=>x.fulfillment==="shipping"); CPAYS=p.data||[]; D.carrierBalances=b.data||[]; if(quiet&&!appRefresh.safe())return false;
+  const y=scrollY; if(mode==="carriers") drawCarriers(); else drawShip(); if(quiet)scrollTo({top:y,behavior:'instant'}); return true;
 }
-const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.filter(x=>x.carrier_id===cid);
-  const col=L.filter(o=>o.status==="delivered").reduce((a,o)=>a+Number(o.total),0), fees=L.filter(o=>["delivered","returned"].includes(o.status)).reduce((a,o)=>a+Number(o.shipping_cost),0), paid=P.reduce((a,x)=>a+Number(x.amount),0);
-  const fly=L.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)), pend=fly.reduce((a,o)=>a+Number(o.total),0);
-  return {col,fees,paid,owed:col-fees-paid,fly:fly.length,pend,n:L.length,dl:L.filter(o=>o.status==="delivered").length,rt:L.filter(o=>o.status==="returned").length} };
+const carBal=cid=>{const row=(D.carrierBalances||[]).find(x=>x.carrier_id===cid)||{};
+  return Object.fromEntries(['col','fees','paid','owed','fly','pend','n','dl','rt'].map(k=>[k,Number(row[k]||0)]));};
 const shFilt=()=>{ const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), q=nrm(SHF.q), n=new Date(), d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
   const from=SHF.per==="today"?d0:SHF.per==="week"?d0-6*864e5:SHF.per==="month"?new Date(n.getFullYear(),n.getMonth(),1).getTime():0;
   return (SHIPS||[]).filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):NS(o.ship_status)===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!SHF.mk||(SHF.mk==="none"?!o.marketer_id:o.marketer_id===SHF.mk))&&(!SHF.gov||o.governorate===SHF.gov)&&(!from||new Date(o.created_at).getTime()>=from)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate,mname(o.marketer_id)].some(v=>nrm(v).includes(q)))) };
@@ -1071,18 +1069,26 @@ async function carPay(cid){
   const a=parseFloat(f.a); if(isNaN(a)||a<=0) return toast("مبلغ غير صحيح","err");
   if(await run(sb.rpc("add_carrier_payment",{p_carrier:cid,p_amount:a,p_note:f.n.trim()||null}),"تم تسجيل التحويل")) (tab==="carriers"?vCarriers():vShip());
 }
-function carPays(cid){
-  const L=CPAYS.filter(x=>x.carrier_id===cid), t=L.reduce((a,x)=>a+Number(x.amount),0);
+async function carPays(cid){
+  const who=ME,{data,error}=await sb.rpc("carrier_statement",{p_carrier:cid});
+  if(who!==ME||authGate.blocked)return;
+  if(error)return toast("تعذّر تحميل التحويلات: "+error.message);
+  const L=data.payments, t=L.reduce((a,x)=>a+Number(x.amount),0);
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>تحويلات ${esc(carName(cid))}</b><button class="x" onclick="closeStatus()">${ic("x")}</button></div><div class="mut" style="margin-bottom:8px">العدد: <b>${L.length}</b> · المجموع: <b>${money(t)}</b></div>
    ${L.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr>${L.map(x=>`<tr><td>${dt(x.created_at)}</td><td><b>${money(x.amount)}</b></td><td>${esc(x.note)}</td><td><button class="b s r" onclick="carPayDel('${x.id}','${cid}')">حذف</button></td></tr>`).join("")}</table>`:'<p class="mut">لا توجد تحويلات</p>'}</div>`;
   $("modal").style.display="flex";
 }
 async function carPayDel(id,cid){ if(!await askc("سيزيد المستحق لك عند الشركة بقيمتها.",{title:"حذف التحويل؟",ok:"حذف",cls:"r"})) return;
-  if(await run(sb.from("carrier_payments").delete().eq("id",id),"تم الحذف")){ const {data}=await sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000); CPAYS=data||[]; carPays(cid); tab==="carriers"?drawCarriers():drawShip() } }
-function carStatement(cid){
-  const c=D.carriers.find(x=>x.id===cid), b=carBal(cid);
-  const L=(SHIPS||[]).filter(o=>o.carrier_id===cid&&["delivered","returned"].includes(o.status)).sort((x,y)=>new Date(x.status_at)-new Date(y.status_at)), P=CPAYS.filter(x=>x.carrier_id===cid).slice().reverse();
+  if(await run(sb.from("carrier_payments").delete().eq("id",id),"تم الحذف")){ if(await vShip(tab==="carriers"?"carriers":"ship"))carPays(cid); } }
+async function carStatement(cid){
+  const c=D.carriers.find(x=>x.id===cid);
   const w=window.open("","_blank"); if(!w) return toast("اسمح بالنوافذ المنبثقة لطباعة الكشف");
+  w.document.write('<html lang="ar" dir="rtl"><body>جارٍ تحميل كشف الحساب الكامل…</body></html>');w.document.close();
+  const who=ME,{data,error}=await sb.rpc("carrier_statement",{p_carrier:cid});
+  if(error||who!==ME||authGate.blocked){w.close();if(error)toast("تعذّر تحميل الكشف: "+error.message);return;}
+  if(w.closed)return;
+  const L=data.orders,P=data.payments.slice().reverse(),b=data.balance;
+  w.document.open();
   w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف حساب ${esc(c.name)}</title><style>body{font-family:Tahoma,Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin:8px 0 20px}th,td{border:1px solid #ccc;padding:6px;text-align:right;font-size:13px}th{background:#f3f3f3}.t{font-size:17px;font-weight:700;line-height:1.9}</style></head><body>
   <h1>${esc(D.settings.business_name||"")} — كشف حساب شركة الشحن: ${esc(c.name)}</h1><div>التاريخ: ${new Date().toLocaleDateString("ar-EG")}</div>
   <h2>الشحنات المنتهية</h2><table><tr><th>التاريخ</th><th>#</th><th>البوليصة</th><th>الزبون</th><th>الحالة</th><th>المحصَّل (COD)</th><th>أجور الشركة</th></tr>
@@ -1698,18 +1704,15 @@ function vSettings(){
     </div>
     <div class="card"><h2>إنشاء حساب إداري</h2>
     <div class="row"><input id="sn" placeholder="الاسم (للتمييز)"><input id="nae" type="email" dir="ltr" placeholder="البريد الإلكتروني"></div>
-    <div class="row"><input id="spw" dir="ltr" placeholder="كلمة المرور (6 أحرف على الأقل)"></div>
+    <div class="row"><input id="spw" dir="ltr" placeholder="كلمة المرور (8 أحرف على الأقل)"></div>
     <div style="margin:8px 0"><label style="display:block;margin:4px 0"><input type="checkbox" id="sfull" onchange="document.getElementById('sperms').style.display=this.checked?'none':'block'"> إداري كامل (كل الصلاحيات)</label>
     <div id="sperms">${Object.entries(PERM_L).map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" class="sp" value="${k}" ${k==="create_orders"?"checked":""}> ${l}</label>`).join("")}</div></div>
     <button class="b" onclick="createStaff()">إنشاء الحساب</button>
     <p class="mut">الحساب بصلاحيات محدودة لا يرى رأس المال ولا الأرصدة ولا بقية الأقسام.</p></div>`,
     pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
-    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (6 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
-    danger:`<div class="card" style="border-color:var(--red)"><h2 style="color:var(--red)">منطقة الخطر</h2>
-    <p class="mut">يمسح كل الطلبات والجرد والدفعات وسجل الحركة. يبقى المنتجات والكباتن والمستودعات. استخدمه بعد انتهاء التجربة فقط.</p>
-    <button class="b r" onclick="resetData()">مسح البيانات التجريبية</button></div>`,
+    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
   };
-  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"], ["danger", "منطقة الخطر", "مسح البيانات التجريبية", "x"]];
+  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"]];
   if(SSEC&&secs[SSEC]){
     const m=meta.find(x=>x[0]===SSEC);
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
@@ -1728,7 +1731,7 @@ const PERM_L={create_orders:"إنشاء طلبات",view_orders:"عرض الطل
 async function createStaff(){
   const email=$("nae").value.trim().toLowerCase(), name=$("sn").value.trim(), pw=$("spw").value;
   if(!/^\S+@\S+\.\S+$/.test(email)) return toast("بريد غير صالح","err");
-  if(pw.length<6) return toast("كلمة المرور 6 أحرف على الأقل","err");
+  if(pw.length<8) return toast("كلمة المرور 8 أحرف على الأقل","err");
   const full=$("sfull").checked, perms=full?null:[...document.querySelectorAll(".sp:checked")].map(x=>x.value);
   if(!full&&!perms.length) return toast("اختر صلاحية واحدة على الأقل","err");
   if(full&&!await askc("سيُنشأ حساب إداري <b>كامل</b> يرى كل شيء بما فيه رأس المال والأرصدة. متأكد؟",{title:"إداري كامل",ok:"نعم",cls:"r"})) return;
@@ -1746,21 +1749,16 @@ function editStaff(email){
     d.remove(); if(await run(sb.from("admins").update({perms}).eq("email",email),"تم الحفظ")) refresh() };
 }
 async function staffPw(email){
-  const f=await askf("كلمة مرور "+email,[{k:"p",l:"كلمة المرور الجديدة (6 أحرف على الأقل)",dir:"ltr"}],"تعيين"); if(!f) return;
-  const p=f.p.trim(); if(p.length<6) return toast("كلمة المرور قصيرة","err");
+  const f=await askf("كلمة مرور "+email,[{k:"p",l:"كلمة المرور الجديدة (8 أحرف على الأقل)",dir:"ltr"}],"تعيين"); if(!f) return;
+  const p=f.p.trim(); if(p.length<8) return toast("كلمة المرور قصيرة","err");
   try{ await run2(callSetPw(null,p,email)); toast("تم تغيير كلمة المرور","ok") }catch(e){ toast(e.message,"err") }
 }
 async function delAdmin(email){ if(!await askc("حذف الإداري <b dir=\"ltr\">"+esc(email)+"</b>؟",{title:"حذف إداري",ok:"حذف",cls:"r"})) return;
   if(await run(sb.from("admins").delete().eq("email",email),"تم الحذف")) refresh() }
 async function changePw(){
-  const p=$("np").value; if(p.length<6) return toast("كلمة المرور قصيرة");
+  const p=$("np").value; if(p.length<8) return toast("كلمة المرور قصيرة");
   if(await run(sb.auth.updateUser({password:p}),"تم تغيير كلمة المرور")) $("np").value="";
 }
-async function resetData(){
-  const f=await askf("مسح البيانات التجريبية",[{k:"c",l:"للتأكيد اكتب: مسح"}],"مسح كل البيانات",{cls:"r",msg:"سيُحذف كل الطلبات والجرد والدفعات. لا يمكن التراجع."}); if(!f||f.c.trim()!=="مسح") return;
-  if(await run(sb.rpc("reset_test_data"),"تم مسح البيانات")) refresh();
-}
-
 $("i_mail").innerHTML=ic("mail"); $("i_lock").innerHTML=ic("lock"); $("eye").innerHTML=ic("eye");
 $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"password" };
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });

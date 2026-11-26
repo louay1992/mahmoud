@@ -123,7 +123,7 @@ let LSEQ=0;
 async function load(initial,{signal}={}){
   const seq=++LSEQ, who=me&&me.id;
   const r = await Promise.all([
-    sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").eq("captain_id",me.id).order("created_at",{ascending:false}).limit(200),
+    sb.rpc("working_orders",{p_history_limit:200,p_captain:me.id}),
     sb.from("stock").select("qty, products(name)").eq("warehouse_id",me.warehouse_id||"00000000-0000-0000-0000-000000000000"),
     sb.from("captain_payments").select("*").eq("captain_id",me.id).order("created_at",{ascending:false}),
     sb.from("captain_balances").select("*").eq("captain_id",me.id).limit(1),

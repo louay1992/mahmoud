@@ -57,7 +57,8 @@ docs/                  قرارات التصميم والتحقق لكل إصد�
   المفتاح المضمّن هو **anon public** ومصمَّم للوصول من العميل؛ الصلاحيات يحكمها RLS. لا تضع أي مفتاح إداري كامل الصلاحية أو أي سرّ في هذا الملف.
 - **Edge Functions**: تُقرأ الأسرار من بيئة Supabase فقط: `SUPABASE_URL`، `SUPABASE_ANON_KEY`، `APY_TOKEN` (ApyHub)، واختياريًا `APP_ORIGIN` (أصل CORS وأصل روابط الإشعارات، افتراضيًا `https://hhyyw.netlify.app`). أمّا الإعدادات الحسّاسة لخدمة Firebase فتُضاف من لوحة Supabase وحدها، ولا تُكتب قيمها في المستودع ولا في هذه الوثيقة.
 - **قيم فارغة للتوثيق**: `.env.example` يسرد أسماء الأسرار بقيم فارغة فقط؛ لا يُوضع فيه أي قيمة حقيقية.
-- **النشر**: `netlify.toml` ينشر `dist/` ويضيف تحويلات `/admin` و`/captain` ورؤوس عدم التخزين المؤقت لملفات الإصدار.
+- **النشر**: `netlify.toml` ينشر `dist/`، ويضيف تحويلات `/admin` و`/captain`، ورؤوس عدم التخزين المؤقت لملفات الإصدار، ورؤوس أمان لكل المسارات: `X-Content-Type-Options: nosniff`، `Referrer-Policy: strict-origin-when-cross-origin`، `X-Frame-Options: DENY`، `Permissions-Policy` تعطّل الكاميرا والميكروفون والموقع والدفع، و`Content-Security-Policy` تقصر المصادر على `self` و`*.supabase.co` (HTTPS وWebSocket) و`raw.githubusercontent.com` (بيان تحديث APK) وتمنع الإطارات. تُبقي CSP `'unsafe-inline'` للنصوص والأنماط لأن الصفحات تستخدم `<style>` ومعالجات `onclick` ونافذة طباعة تكتب HTML داخليًا؛ لذلك تبقى الحماية الفعلية من XSS في `esc()` لكل إدخال مستخدم، وCSP هنا حاجز ضد المصادر الخارجية.
+- **كلمة المرور**: `admin-set-password` تقبل الطلبات من `APP_ORIGIN` وحده (التحقق من `Origin` يسبق الردّ على `OPTIONS`، والاستجابة تحمل `Access-Control-Allow-Origin` مساويًا له لا `*`)، والحد الأدنى 8 محارف داخل الدالة وفي `admin-app.js`. إعداد Supabase Auth `password_min_length` على 8 أيضًا، ليُطبَّق الحد نفسه على `auth.updateUser` من العميل.
 
 ## قاعدة البيانات
 
@@ -77,6 +78,22 @@ select version, name from supabase_migrations.schema_migrations order by version
 ```
 - الأدوار: `full` (إداري كامل)، موظف بصلاحيات (`create_orders`, `view_orders`, `pick_captain`, `pick_marketer`)، وكابتن. كل القراءات محمية بـ RLS ودوال `security definer` تتحقق من الدور.
 
+### النسخ الاحتياطي و PITR
+
+النسخ الاحتياطي المجدول وPITR **غير مفعّلين** على المشروع الحالي: `GET /v1/projects/{ref}/database/backups` يعيد `pitr_enabled=false` و`backups=[]`، وطلب جدولة النسخ يعيد HTTP 402 لأن الميزة تتطلب خطة مدفوعة (Pro أو أعلى). لا يوجد حتى الآن أي استرجاع ممكن من تلقاء Supabase.
+
+حتى تُرقّى الخطة:
+
+- خُذ نسخة منطقية دورية واحفظها خارج المشروع (وليس في المستودع):
+
+```bash
+pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges -Fc -f delivery-$(date +%F).dump
+pg_restore --list delivery-$(date +%F).dump | head   # تحقق من سلامة الأرشيف
+```
+
+- بعد الترقية: فعّل Daily Backups ثم PITR من Database → Backups، واضبط مدة الاحتفاظ بما يغطي نافذة الخطأ المتوقعة، وجرّب استرجاعًا على مشروع فرعي قبل الاعتماد عليه.
+- `schema.sql` والترحيلات تعيد بناء المخطط وحده؛ لا تعيد بيانات الإنتاج، ولذلك لا تُغني عن النسخ.
+
 ### نشر Edge Functions
 
 `supabase/config.toml` هو مرجع إعداد الدوال: الأقسام `[functions.send-push]` و`[functions.native-device]` و`[functions.admin-set-password]` و`[functions.webpage-text]` تثبّت `verify_jwt = false` لكل منها، فيقرأها `supabase functions deploy` ويلغي ما عُدّل يدويًا من اللوحة. لذلك لا تُضاف `--no-verify-jwt` إلى الأوامر ولا تُغيَّر من لوحة Supabase.
@@ -90,6 +107,13 @@ npx supabase functions deploy webpage-text
 ```
 
 تحقق بعد كل نشر أن الإعداد مطابق: `verify_jwt` يجب أن يكون `false` للدوال الأربع.
+
+`admin-set-password` ترفض أي `Origin` غير `APP_ORIGIN` قبل الردّ على `OPTIONS`، وتحمل استجابتها `Access-Control-Allow-Origin` مساويًا له بدل `*`. تحقق بعد النشر:
+
+```bash
+curl -si -X OPTIONS "$SUPABASE_URL/functions/v1/admin-set-password" -H "Origin: https://example.com" | head -1   # 403
+curl -si -X OPTIONS "$SUPABASE_URL/functions/v1/admin-set-password" -H "Origin: $APP_ORIGIN" | head -1          # 200
+```
 
 `send-push` يولّد مفاتيح VAPID تلقائيًا ويحفظها في `push_config`، ويتحقق من كلمة سرّ مشتركة؛ لا تصل هذه القيم إلى أي تطبيق.
 
@@ -131,9 +155,22 @@ npm run test:workspace            # Playwright: مساحة عمل الإدارة
 npm run test:offline              # IndexedDB وService Worker فعليان
 npm run test:auth                 # الدخول والخروج
 npm run test:android-wiring       # ربط إشعارات Android (Python)
+npm run check:taskless            # قواعد Taskless في .taskless/ (بلا حساب)
 ```
 
 سير العمل `.github/workflows/notifications.yml` يشغّل الفحص والاختبارات وكل اختبارات المتصفح على كل تغيير في الواجهة أو قاعدة البيانات أو Android. تقارير التصميم والتحقق لكل إصدار في `docs/`.
+
+### قواعد Taskless
+
+`.taskless/` يحمل [Taskless](https://taskless.io) وأربع قواعد `sg` (ast-grep) تحمي ثوابت المشروع: عنوان Supabase لا يُكتب خارج `app-config.js`، ولا مفتاح `service_role` في كود العميل، وإذن الإشعارات يُطلب عبر `PushClient.requestPermission()`، وكل عميل Supabase يُنشأ بـ`auth.storageKey` ليُعزل جلستا الإدارة والكابتن.
+
+```bash
+npm run check:taskless                              # فحص كامل، بلا شبكة وبلا حساب
+node .taskless/bin/cli.mjs check <ملفات>            # فحص الملفات المتغيرة فقط
+node .taskless/bin/cli.mjs verify .taskless/rules/sg/<id>   # قواعد + حالاتها
+```
+
+لا تُستدعى عبر `npx`: المشغّل `.taskless/bin/cli.mjs` يشغّل النسخة المسجّلة في `.taskless/taskless.json`، وأي نسخة أخرى ترفض العمل. الوظيفة `taskless` في `notifications.yml` تفحص المتغيّر في طلبات الدمج والكل على `main`. قاعدة جديدة = مجلد في `.taskless/rules/sg/<id>/` مع حالات `tests/fail` و`tests/pass`؛ لا تُعدَّل ملفات خارج المجلد.
 
 ## القواعد المتّبعة
 

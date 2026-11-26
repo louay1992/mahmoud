@@ -23,10 +23,12 @@
     "test:motion": "node tests/admin-motion-browser.cjs",
     "test:refresh": "node tests/refresh-browser.cjs",
     "test:app-updates": "node tests/app-update-browser.cjs",
-    "prepare:android-release": "node scripts/prepare-android-release.cjs"
+    "prepare:android-release": "node scripts/prepare-android-release.cjs",
+    "test:database": "node tests/stock-concurrency.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.6.0",
+    "pg": "8.16.3",
     "playwright": "1.65.1",
     "supabase": "3.4.0"
   }
