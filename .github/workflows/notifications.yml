@@ -52,6 +52,7 @@ jobs:
       - run: node tests/mobile-browser.cjs
       - run: node tests/admin-mobile-browser.cjs
       - run: node tests/subscription-browser.cjs
+      - run: node tests/owner-auth-browser.cjs
       - run: node tests/admin-workspace-browser.cjs
       - run: node tests/admin-motion-browser.cjs
       - run: node tests/refresh-browser.cjs

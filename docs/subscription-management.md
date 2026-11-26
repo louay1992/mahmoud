@@ -16,6 +16,12 @@ insert into public.subscription_owners(user_id) values ('OWNER_USER_UUID');
 
 4. Sign in at `/owner.html` and enter the actual agreed start date, last valid date, renewal amount and currency. No production owner or subscription record is created by the migration.
 
+### Password setup by email
+
+Set the project's Auth Site URL to the deployed HTTPS `/owner.html` URL. The login page can request a password setup email with that exact redirect. Existing verified owner accounts use Supabase's password recovery flow; the link proves mailbox access before showing the password form. The Supabase SDK validates the callback session, and the server owner check must succeed before the form is enabled. Expired links show a request-again state. A new recovery callback can start a new session after a local logout, while clearing any old stored session first.
+
+The owner enters and confirms the new password themselves. The page calls `updateUser`, clears both password fields and signs out locally after success, then asks for a fresh login. Passwords never enter the repository, subscription tables or logs. The recovery screen survives a refresh within the same tab; cancelling clears it and signs out. There is no public registration or role assignment route.
+
 The company's password-setting Edge Function checks `subscription_owners` before resetting any existing account, including an inactive owner. It fails closed if that protection cannot be checked. This prevents a company administrator from adding the owner's email as a staff/captain account and then using the service-backed reset endpoint to take over the owner account. Deploy the database before the password function.
 
 To revoke owner access, a privileged operator sets `subscription_owners.active=false`. The account remains protected against company password resets. No customer-facing endpoint can assign owner roles. Owner access is not cached for offline use; owner pages are excluded from both offline packages.
