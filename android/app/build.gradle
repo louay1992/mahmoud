@@ -43,7 +43,7 @@ android {
 }
 tasks.register('prepareOfflineAssets', Sync) {
     from(rootProject.file('../dist'))
-    exclude('owner.html', 'owner-app.js', 'owner.css')
+    exclude('owner*', 'account-setup*')
     into(layout.buildDirectory.dir('generated/offlineAssets/offline'))
     doFirst { if (!rootProject.file('../dist/offline-shell-manifest.json').exists()) throw new GradleException('Run npm run build before building Android') }
 }

@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0f766e">
 <title>إدارة الاشتراك — لوحة المالك</title><link rel="icon" href="/icons/admin-192.png">
 <link rel="stylesheet" href="/admin-subscription.css"><link rel="stylesheet" href="/owner.css">
-<script src="/app-config.js" defer></script><script src="/vendor/supabase.js" defer></script><script src="/auth-session.js" defer></script><script src="/subscription-utils.js" defer></script><script src="/owner-app.js" defer></script>
+<script src="/app-config.js" defer></script><script src="/vendor/supabase.js" defer></script><script src="/auth-session.js" defer></script><script src="/subscription-utils.js" defer></script><script src="/owner-invitations.js" defer></script><script src="/owner-app.js" defer></script>
 </head>
 <body>
 <section id="owner-login" class="owner-login">
@@ -25,6 +25,7 @@
    <form id="owner-subscription-form"><fieldset id="owner-fields"><div class="owner-date-fields"><label>بداية الاشتراك<input name="starts_on" type="date" required></label><label>صالح لغاية<input name="valid_until" type="date" required></label></div><label>قيمة التجديد السنوي<input name="renewal_amount" type="number" min="0" max="9999999999.99" step="0.01" inputmode="decimal" dir="ltr" required></label><label>عملة التجديد<select name="currency" required><option value="">اختر العملة</option><option value="USD">دولار أمريكي — USD</option><option value="SYP">ليرة سورية — SYP</option><option value="EUR">يورو — EUR</option><option value="SAR">ريال سعودي — SAR</option><option value="AED">درهم إماراتي — AED</option><option value="IQD">دينار عراقي — IQD</option></select></label><button class="b" type="submit" id="owner-save">حفظ بيانات الاشتراك</button></fieldset></form>
   </section>
  </div>
+ <section class="owner-panel owner-history"><h2>الحسابات الإدارية للمشترك</h2><p class="owner-muted">أضف بريد الإداري لإرسال رابط تحقق يختار منه كلمة مروره. تُفعّل صلاحية الإدارة بعد تأكيد البريد وإكمال التعيين.</p><form id="owner-invite-form"><fieldset id="owner-invite-fields" disabled><div class="owner-date-fields"><label>البريد الإلكتروني للمشترك<input id="owner-invite-email" type="email" dir="ltr" inputmode="email" autocomplete="off" maxlength="254" required></label><label>اسم الإداري (اختياري)<input id="owner-invite-name" maxlength="100" autocomplete="off"></label></div><button class="b" type="submit">إضافة البريد وإرسال الدعوة</button></fieldset></form><p id="owner-invite-message" class="owner-muted" role="status" aria-live="polite"></p><div id="owner-invites-list"></div></section>
  <section class="owner-panel owner-history"><h2>آخر التعديلات</h2><div id="owner-history"></div></section>
 </section>
 <p id="owner-message" class="owner-message" role="status" aria-live="polite"></p>
