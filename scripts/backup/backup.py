@@ -10,7 +10,7 @@ import tempfile
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote
 from uuid import uuid4
 
 import boto3
@@ -32,20 +32,27 @@ def setting(name, pattern=None):
     return value
 
 
-def database_url():
-    value = setting("SUPABASE_DB_URL")
-    url = urlsplit(value)
-    direct = (url.hostname, unquote(url.username or "")) == (
-        f"db.{PROJECT}.supabase.co", "postgres"
+def database_connection():
+    value = setting("SUPABASE_DB_URL").strip()
+    # Parse the part containing the password separately. URL parsers otherwise
+    # treat characters such as brackets and unescaped @ signs as URI syntax.
+    uri = re.fullmatch(
+        r"(?:postgresql|postgres)://([^:]+):(.+)@([a-z0-9.-]+)(?::5432)?/postgres"
+        r"(?:[?]sslmode=(?:require|verify-ca|verify-full))?",
+        value,
     )
-    pooler = (url.hostname or "").endswith(".pooler.supabase.com") and (
-        unquote(url.username or "") == f"postgres.{PROJECT}"
-    )
-    if (url.scheme not in ("postgresql", "postgres") or not (direct or pooler)
-            or url.port not in (None, 5432) or url.path != "/postgres"
-            or url.query or url.fragment or not url.password):
+    if not uri:
+        raise BackupError("The database secret must be the production PostgreSQL connection URI.")
+
+    username, encoded_password, host = uri.groups()
+    if encoded_password == "[YOUR-DATABASE-PASSWORD]":
+        raise BackupError("The production database secret still contains the Supabase password placeholder.")
+    username = unquote(username)
+    direct = host == f"db.{PROJECT}.supabase.co" and username == "postgres"
+    pooler = host.endswith(".pooler.supabase.com") and username == f"postgres.{PROJECT}"
+    if not (direct or pooler):
         raise BackupError("Use the production direct or session pooler database URL.")
-    return url
+    return host, username, unquote(encoded_password)
 
 
 def run_client(command, env=None):
@@ -116,13 +123,14 @@ def copy_storage(path, inventory_rows):
             manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def export(path, url, started):
+def export(path, database, started):
+    host, username, password = database
     params = {
-        "host": url.hostname,
+        "host": host,
         "port": "5432",
         "dbname": "postgres",
-        "user": unquote(url.username),
-        "password": unquote(url.password),
+        "user": username,
+        "password": password,
         "sslmode": "verify-full",
         "sslrootcert": "system",
         "connect_timeout": "30",
@@ -161,7 +169,7 @@ def export(path, url, started):
 
 
 def backup():
-    url = database_url()
+    database = database_connection()
     recipient = setting("BACKUP_AGE_RECIPIENT", r"age1[023456789acdefghjklmnpqrstuvwxyz]{58}")
     region = setting("B2_REGION", r"[a-z]{2}-[a-z]+-[0-9]{3}")
     bucket = setting("B2_BUCKET", r"[A-Za-z0-9][A-Za-z0-9-]{5,62}")
@@ -177,7 +185,7 @@ def backup():
         root = Path(temp)
         export_path = root / "export"
         export_path.mkdir()
-        buckets, objects = export(export_path, url, started)
+        buckets, objects = export(export_path, database, started)
         encrypted = root / "backup.tar.gz.age"
         with subprocess.Popen(["tar", "-czf", "-", "-C", str(export_path), "."],
                               stdout=subprocess.PIPE) as archive:
