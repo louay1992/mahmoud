@@ -19,6 +19,7 @@ from botocore.config import Config
 
 PROJECT = "jabapvnmfdflysxfxwwf"
 CHUNK_SIZE = 1024 * 1024
+SUPABASE_CA = Path(__file__).with_name("supabase-prod-ca.crt").resolve()
 
 
 class BackupError(Exception):
@@ -158,7 +159,7 @@ def export(path, database, started):
         "user": username,
         "password": password,
         "sslmode": "verify-full",
-        "sslrootcert": "system",
+        "sslrootcert": str(SUPABASE_CA),
         "connect_timeout": "30",
     }
     connection = connect_database(params, bracketed)
