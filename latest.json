@@ -1,27 +1,27 @@
 {
   "schema": 1,
-  "sourceCommit": "a6f3d57855d6bda73d76c1403b916fd5d719509e",
-  "generatedAt": "2026-11-25T11:41:58.069Z",
+  "sourceCommit": "0f4973d8cff18d1359face981246aab5c9460092",
+  "generatedAt": "2026-11-26T23:27:22.431Z",
   "apps": {
     "admin": {
       "packageName": "app.hhyyw.admin",
-      "versionCode": 7,
-      "versionName": "1.4.0",
+      "versionCode": 8,
+      "versionName": "1.4.1",
       "minSdk": 23,
-      "size": 3198611,
-      "sha256": "9af2d0f2e88068136a23ecf181fde2f237f918159586f6189cfff8edea4d3c7e",
-      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.0/Delivery-Admin-1.4.0.apk",
-      "notes": "إضافة التحديث من داخل تطبيقي الإدارة والكابتن: تنبيه عند توفر نسخة أحدث، تنزيل مع نسبة تقدم، ثم تثبيت التحديث بتأكيد Android مع الحفاظ على الحساب والبيانات. يلزم تثبيت هذا الإصدار مرة واحدة لتفعيل التنزيل الداخلي للتحديثات القادمة."
+      "size": 3379233,
+      "sha256": "a3aacf9c916d6d430e9492e56c6c19f7b56e99a7e478e5cbe69cc01f19722fa3",
+      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.1/Delivery-Admin-1.4.1.apk",
+      "notes": "أيقونة جديدة لتطبيق الإدارة وأيقونة لكابتن التوصيل، لتسهيل التمييز بين التطبيقين على شاشة الهاتف."
     },
     "captain": {
       "packageName": "app.hhyyw.captain",
-      "versionCode": 7,
-      "versionName": "1.4.0",
+      "versionCode": 8,
+      "versionName": "1.4.1",
       "minSdk": 23,
-      "size": 3190419,
-      "sha256": "480429ff74c984530557c7993bdf56e3c981cfe98ebf4f1c346fc737f8870733",
-      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.0/Delivery-Captain-1.4.0.apk",
-      "notes": "إضافة التحديث من داخل تطبيقي الإدارة والكابتن: تنبيه عند توفر نسخة أحدث، تنزيل مع نسبة تقدم، ثم تثبيت التحديث بتأكيد Android مع الحفاظ على الحساب والبيانات. يلزم تثبيت هذا الإصدار مرة واحدة لتفعيل التنزيل الداخلي للتحديثات القادمة."
+      "size": 3391521,
+      "sha256": "e4709106fa76b15ca148c70e942c9026d3c02e2e3ae1a8ce7960bb08a59d81f9",
+      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.1/Delivery-Captain-1.4.1.apk",
+      "notes": "أيقونة جديدة لتطبيق الإدارة وأيقونة لكابتن التوصيل، لتسهيل التمييز بين التطبيقين على شاشة الهاتف."
     }
   }
 }
