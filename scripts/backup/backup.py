@@ -52,7 +52,8 @@ def database_connection():
     pooler = host.endswith(".pooler.supabase.com") and username == f"postgres.{PROJECT}"
     if not (direct or pooler):
         raise BackupError("Use the production direct or session pooler database URL.")
-    return host, username, unquote(encoded_password)
+    bracketed = encoded_password.startswith("[") and encoded_password.endswith("]")
+    return host, username, unquote(encoded_password), bracketed
 
 
 def run_client(command, env=None):
@@ -123,8 +124,33 @@ def copy_storage(path, inventory_rows):
             manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def connect_database(params, bracketed=False):
+    try:
+        return psycopg2.connect(**params)
+    except psycopg2.OperationalError as error:
+        message = str(error).lower()
+        rejected = any(term in message for term in (
+            "password authentication failed", "sasl authentication failed",
+            "wrong password", "invalid password",
+        ))
+        if rejected and bracketed:
+            # The dashboard template puts brackets around the placeholder.
+            # Retry without those brackets only after authentication failed.
+            params["password"] = params["password"][1:-1]
+            return connect_database(params)
+        if rejected:
+            raise BackupError("Supabase rejected the PostgreSQL password.") from None
+        if "tenant or user not found" in message:
+            raise BackupError("Supabase did not recognize the PostgreSQL pooler user.") from None
+        if "certificate" in message or "ssl" in message:
+            raise BackupError("Could not verify the Supabase PostgreSQL TLS connection.") from None
+        if "timeout" in message or "could not translate host" in message:
+            raise BackupError("Could not reach the Supabase PostgreSQL host.") from None
+        raise BackupError("PostgreSQL refused the Supabase connection.") from None
+
+
 def export(path, database, started):
-    host, username, password = database
+    host, username, password, bracketed = database
     params = {
         "host": host,
         "port": "5432",
@@ -135,11 +161,12 @@ def export(path, database, started):
         "sslrootcert": "system",
         "connect_timeout": "30",
     }
+    connection = connect_database(params, bracketed)
     env = dict(os.environ, PGHOST=params["host"], PGPORT=params["port"],
                PGDATABASE=params["dbname"], PGUSER=params["user"], PGPASSWORD=params["password"],
                PGSSLMODE=params["sslmode"], PGSSLROOTCERT=params["sslrootcert"],
                PGCONNECT_TIMEOUT=params["connect_timeout"])
-    with closing(psycopg2.connect(**params)) as connection:
+    with closing(connection):
         connection.set_session(isolation_level="REPEATABLE READ", readonly=True)
         with connection.cursor() as cursor:
             cursor.execute("select pg_export_snapshot()")
@@ -156,7 +183,7 @@ def export(path, database, started):
     (path / "storage.jsonl").touch()
     copy_storage(path, objects)
     # Reject a backup if file Storage changed while it was being exported.
-    with closing(psycopg2.connect(**params)) as connection, connection.cursor() as cursor:
+    with closing(connect_database(params)) as connection, connection.cursor() as cursor:
         connection.set_session(isolation_level="REPEATABLE READ", readonly=True)
         if inventory(cursor) != before:
             raise BackupError("Storage changed during export. Run the backup again.")
