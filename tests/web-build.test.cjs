@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
-test('build IDs are deterministic, embedded in HTML, and detect a stylesheet-only admin release',()=>{
+test('build IDs are deterministic, embedded in HTML, and detect stylesheet and icon updates per app',()=>{
  const base=path.resolve('.tools');fs.mkdirSync(base,{recursive:true});const root=fs.mkdtempSync(path.join(base,'refresh-build-'));
  try{
   for(const name of fs.readdirSync('.'))if(/\.(html|js|css)$/.test(name))fs.copyFileSync(name,path.join(root,name));
@@ -11,6 +11,9 @@ test('build IDs are deterministic, embedded in HTML, and detect a stylesheet-onl
   assert.ok(fs.readFileSync(path.join(root,'dist/admin.html'),'utf8').includes('content="'+first.admin+'"'));
   fs.appendFileSync(path.join(root,'admin-mobile.css'),'\n/* fixture stylesheet update */');const changed=build();
   assert.notEqual(changed.admin,first.admin);assert.equal(changed.captain,first.captain);
+  fs.copyFileSync(path.join(root,'icons/admin-512.png'),path.join(root,'icons/captain-512.png'));
+  const iconChanged=build();
+  assert.equal(iconChanged.admin,changed.admin);assert.notEqual(iconChanged.captain,changed.captain);
  }finally{
   const target=fs.realpathSync(root);assert.ok(target.startsWith(fs.realpathSync(base)+path.sep));fs.rmSync(target,{recursive:true,force:true});
  }
