@@ -309,19 +309,68 @@ function prBox(o){
   if(l.status!=="pending"&&(Date.now()-new Date(l.decided_at))>3*864e5) return "";
   return `<div class="pr-box" style="background:${st[1]};color:${st[2]}"><b>${ic(st[3])} ${st[0]}</b><div>الإجمالي: ${money(l.old_total)} ← <b>${money(l.new_total)}</b></div><div style="opacity:.85">السبب: ${esc(l.reason)}</div>${l.admin_note?`<div>ملاحظة الإداري: ${esc(l.admin_note)}</div>`:""}</div>`;
 }
-function oActs(o){
+function oActs(o, primaryOnly=false){
   const k=o.status;
+  const deliver=()=>`<button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button>`;
+  if(["no_answer","closed","other"].includes(k)){
+    const retry=`<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("refresh")} إعادة المحاولة</button>`;
+    return primaryOnly ? retry : retry+deliver();
+  }
   return k==="assigned" ? `<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("truck")} قيد التوصيل</button>`
-   : k==="in_delivery" ? `<button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button>`
-   : (k==="no_answer"||k==="closed"||k==="other") ? `<button class="btn btn-p" onclick="quick('${o.id}','in_delivery')">${ic("refresh")} إعادة المحاولة</button><button class="btn btn-g" onclick="quick('${o.id}','delivered')">${ic("checkc")} تم التسليم</button>`
+   : k==="in_delivery" ? deliver()
    : k==="cancelled" ? `<button class="btn btn-p" onclick="restore('${o.id}')">${ic("undo")} استرجاع الطلب</button>` : "";
+}
+let expandedOrderId=null;
+function compactOrder(o){
+  const phone=esc(o.customer_phone?.trim()), address=esc(o.customer_address?.trim()||"لا يوجد عنوان مسجّل");
+  const name=esc(o.customer_name), number=esc(o.order_no), status=esc(ST[o.status]||o.status);
+  return `<div class="order-compact">
+    <div class="order-compact-row">
+      <button type="button" class="order-toggle" aria-expanded="${expandedOrderId===o.id}" aria-controls="order-full-${o.id}" onclick="toggleOrderCard(this)">
+        <span class="no" dir="ltr">#${number}</span><b class="order-ellipsis" title="${name}">${name}</b><span class="tag">${status}</span>
+      </button>
+      ${phone?`<a class="order-call-icon" href="tel:${phone}" aria-label="اتصل بالزبون ${name}">${ic("phone")}</a>`:""}
+    </div>
+    <div class="order-compact-row order-contact">
+      ${phone?`<a dir="ltr" href="tel:${phone}">${phone}</a>`:'<span>لا يوجد رقم مسجّل</span>'}
+      <span class="order-ellipsis" title="${address}">${address}</span>
+    </div>
+    <div class="order-compact-row order-compact-footer">
+      <span class="order-amount">المطلوب <b>${money(o.total)}</b></span>
+      ${oActs(o,true)}
+      <span class="order-chevron" aria-hidden="true">${ic("chev")}</span>
+    </div>
+  </div>`;
+}
+function toggleOrderCard(source){
+  const card=source.closest(".oc2"), previous=$("groups").querySelector(".oc2.is-expanded");
+  if(previous){
+    previous.classList.remove("is-expanded");
+    previous.querySelector(".order-toggle").setAttribute("aria-expanded","false");
+  }
+  const opening=previous!==card;
+  card.classList.toggle("is-expanded",opening);
+  card.querySelector(".order-toggle").setAttribute("aria-expanded",String(opening));
+  expandedOrderId=opening?card.dataset.orderId:null;
+  card.querySelector(opening?".order-collapse":".order-toggle").focus({preventScroll:true});
+  if(card.getBoundingClientRect().top<document.querySelector("header").getBoundingClientRect().bottom){
+    card.scrollIntoView({block:"start",behavior:"instant"});
+  }
+}
+function openOrderCard(card){
+  if(card.querySelector(".order-toggle").getClientRects().length) toggleOrderCard(card);
+  else openOrder(card.dataset.orderId);
 }
 function oc2(o){
   const k=o.status, pp=prPending(o);
   const items=o.order_items.map(i=>`<div class="pi"><span class="q">×${i.qty}</span><span class="pn">${esc(i.products?.name)}</span><span class="pv">${money(Number(i.unit_price)*i.qty)}</span></div>`).join("");
-  return `<article class="oc2 s-${k}" style="cursor:pointer" onclick="if(!event.target.closest('a,button'))openOrder('${o.id}')">
+  return `<article class="oc2 s-${k}${expandedOrderId===o.id?" is-expanded":""}" data-order-id="${o.id}" style="cursor:pointer" onclick="if(!event.target.closest('a,button'))openOrderCard(this)">
+    ${compactOrder(o)}
+    <div class="order-full" id="order-full-${o.id}">
     <div class="r1"><span class="no">#${o.order_no}</span><div class="nm"><b>${esc(o.customer_name)}</b><span>أُنشئ ${when(o.created_at)}</span></div>
-      <div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div></div>
+      <div style="text-align:end"><span class="tag">${ic(SICO[k]||"box")}${ST[k]||k}</span><div class="mut" style="font-size:12px;margin-top:3px">بتاريخ ${when(o.status_at||o.created_at)}</div></div>
+      <button type="button" class="order-collapse" aria-label="طيّ الطلب #${o.order_no}" onclick="toggleOrderCard(this)">${ic("chev")}</button>
+    </div>
     <div class="info">
       <a class="ph" href="tel:${esc(o.customer_phone)}">${ic("phone")}<span dir="ltr">${esc(o.customer_phone)}</span></a>
       ${o.customer_address?`<div class="ad">${ic("pin")}<span>${esc(o.customer_address)}</span></div>`:'<div class="ad mut">لا يوجد عنوان مسجّل</div>'}
@@ -332,6 +381,7 @@ function oc2(o){
     ${o.captain_note&&k!=="delivered"?`<div class="flag">${ic("note")}<div><b>ملاحظتك</b> <span class="mut">· ${when(o.captain_note_at||o.status_at)}</span><br>${esc(o.captain_note)}</div></div>`:""}
     ${pp?`<div class="flag">${ic("hourglass")}<div>بانتظار موافقة الإداري على تعديل السعر (${money(pp.old_total)} ← ${money(pp.new_total)})</div></div>`:""}
     <div class="bar"><div class="ac">${oActs(o)}</div><div class="ic"><a class="ib w" href="${waUrl(o)}" target="_blank" rel="noopener" aria-label="واتساب">${waIc()}<span>واتساب</span></a>${mapUrl(o)?`<a class="ib m" href="${mapUrl(o)}" target="_blank" rel="noopener" aria-label="الخريطة">${ic("pin")}<span>الخريطة</span></a>`:""}${OPEN.includes(k)?`<button class="ib d" onclick="openStatus('${o.id}')" aria-label="تغيير الحالة">${ic("note")} تغيير حالة الطلب</button>`:""}</div></div>
+    </div>
   </article>`;
 }
 function oDetail(o){
@@ -368,8 +418,9 @@ function vOrders(){
 }
 function drawOrders(){
   const t=q.trim(), all=D.orders.filter(o=>o.status===TF), hint=(GROUPS.find(g=>g[0]===TF)||[])[2];
-  const list=(t?D.orders.filter(matches):all), lim=100;
-  $("groups").innerHTML=`${!t&&hint?`<div class="hint" style="padding:0 4px 10px;color:var(--mut);font-size:13.5px">${hint}</div>`:""}`+(list.length?`<div class="olist">${list.slice(0,lim).map(oc2).join("")}</div>`:`<div class="empty">${EMPTY_SVG}<b>لا توجد طلبات</b></div>`);
+  const list=(t?D.orders.filter(matches):all).slice(0,100);
+  if(!list.some(o=>o.id===expandedOrderId)) expandedOrderId=null;
+  $("groups").innerHTML=`${!t&&hint?`<div class="hint" style="padding:0 4px 10px;color:var(--mut);font-size:13.5px">${hint}</div>`:""}`+(list.length?`<div class="olist">${list.map(oc2).join("")}</div>`:`<div class="empty">${EMPTY_SVG}<b>لا توجد طلبات</b></div>`);
 }
 const jump=k=>{TF=k;vOrders()};
 let GO={};
