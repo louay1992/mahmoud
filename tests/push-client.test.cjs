@@ -15,7 +15,10 @@ function fixture(options = {}) {
     getSubscription: async () => existing,
     subscribe: async () => { calls.subscribe++; if (options.subscribeError) throw options.subscribeError; return existing = sub; }
   } };
+  const bell = { classList: { toggle() {} }, querySelector: () => null, insertAdjacentHTML() {}, removeAttribute() {} };
   const context = vm.createContext({ URL, Uint8Array, AbortController, atob, console: { warn() {} },
+    $: id => id === 'bell' ? bell : null,
+    D: { notifs: [] }, nUnread: () => false,
     setTimeout: (fn, ms) => ms === 100 ? setTimeout(fn, 0) : setTimeout(fn, ms), clearTimeout,
     location: { origin: 'https://app.example' }, PushManager: function () {},
     Notification: { permission: options.permission || 'granted', requestPermission: async () => 'granted' },
@@ -91,7 +94,7 @@ for (const role of ['captain', 'admin']) {
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => name.startsWith('save_') ?
         { error: { message: '<database failed>' } } : { error: null } },
-      $: () => ({ classList: { toggle() {} } }), ic: () => '', nBadge: () => '',
+      ic: () => '', nBadge: () => '',
       beep() {}, render() {}, toast: (text, kind) => f.calls.notices.push({ text, kind })
     });
     vm.runInContext(appSource.slice(start, end), f.context);
@@ -114,7 +117,6 @@ for (const role of ['captain', 'admin']) {
       SUPABASE_URL: 'https://api.example', SUPABASE_KEY: 'public', DELIVERY_CONFIG: { functionsPath: '/functions/v1' }, authGate: {blocked:false}, offline:{denied:()=>false},
       me: { id: 'captain' }, ME: 'admin@example.com', ACC: { role: 'full' },
       sb: { rpc: async (name, args) => { saved.push({ name, args }); return { error: null }; } },
-      $: id => id === 'bell' ? { classList: { toggle() {} } } : null,
       ic: () => '', nBadge: () => ''
     });
     vm.runInContext(appSource.slice(start, end), f.context);
