@@ -6,7 +6,7 @@ const {serve,route,populate}=require('./workspace-fixture.cjs');
   await fs.mkdir('test-results/admin-workspace/video',{recursive:true});browser=await chromium.launch({headless:true});
   const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block',timezoneId:'Asia/Amman',recordVideo:{dir:'test-results/admin-workspace/video',size:{width:390,height:844}}});await route(ctx,origin);
   const p=await ctx.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(origin+'/admin.html');await populate(p,'stock');
-  // Keep one indicator between destinations and keep the order actions above the bar during the fade.
+  // Move one indicator between destinations and keep the order actions above the bar during the blur.
   await p.evaluate(async()=>{
     go('home');
     const indicator=document.querySelector('.am-nav-indicator');
@@ -26,17 +26,30 @@ const {serve,route,populate}=require('./workspace-fixture.cjs');
     slide.finish();
     const destination=orders.getBoundingClientRect().left;
     const aligned=Math.abs(indicator.getBoundingClientRect().left-destination)<1;
+    const hasBlur=node=>{
+      const animation=node.getAnimations().find(a=>a.effect.getKeyframes()[0]?.filter==='blur(5px)');
+      if(!animation)return false;
+      animation.pause();
+      animation.currentTime=0;
+      const startsBlurred=getComputedStyle(node).filter==='blur(5px)';
+      animation.finish();
+      return startsBlurred&&getComputedStyle(node).filter==='none';
+    };
+    const pageBlur=hasBlur($('main').firstElementChild);
     go('new');
-    const fade=document.querySelector('.aw-order-content').getAnimations()[0];
     const footer=document.querySelector('.aw-form-footer'),bar=$('bnav');
     const docked=Math.abs(footer.getBoundingClientRect().bottom-bar.getBoundingClientRect().top)<1;
     document.documentElement.style.setProperty('--bot','24px');
     const safeArea=bar.getBoundingClientRect().height===95&&Math.abs(footer.getBoundingClientRect().bottom-bar.getBoundingClientRect().top)<1;
     document.documentElement.style.removeProperty('--bot');
-    const frames=fade?.effect.getKeyframes()||[];
-    return {sliding:true,sameButton:orders.isConnected,landed:aligned&&destination<midway&&midway<from,docked,safeArea,opacityOnly:frames.length===2&&frames.every(f=>'opacity'in f&&!('transform'in f)),footerMotion:footer.getAnimations().length};
+    const orderBlur=hasBlur(document.querySelector('.aw-order-content'));
+    $('on').value='زبون تجريبي';
+    $('op').value='0944123456';
+    footer.querySelector('[data-aw="new-next"]').click();
+    const stepBlur=hasBlur(document.querySelector('.aw-order-section[data-step="1"]:not([hidden])'));
+    return {sliding:true,sameButton:orders.isConnected,landed:aligned&&destination<midway&&midway<from,docked,safeArea,pageBlur,orderBlur,stepBlur,footerMotion:footer.getAnimations().length};
   });
-  assert.deepEqual(nav,{sliding:true,sameButton:true,landed:true,docked:true,safeArea:true,opacityOnly:true,footerMotion:0});
+  assert.deepEqual(nav,{sliding:true,sameButton:true,landed:true,docked:true,safeArea:true,pageBlur:true,orderBlur:true,stepBlur:true,footerMotion:0});
   const anchored=await p.evaluate(async()=>{
     const verify=(trigger,target)=>{
       const icon=trigger.querySelector('svg').getBoundingClientRect();
