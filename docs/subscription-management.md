@@ -36,3 +36,17 @@ To revoke owner access, a privileged operator sets `subscription_owners.active=f
 ## Future paid services
 
 The response has a schema version and a plan code so catalogues, plans and entitlements can be added later without changing the current single-company model. Future purchases should use server-owned catalogue prices and immutable order price snapshots, with separate payment confirmation. The current empty additions area has no purchase button and performs no financial action.
+
+## Subscriber administrator invitations
+
+The owner page has a separate subscriber-admin email form and an invitation list. `owner-invite-admin` verifies the caller's Auth identity and the private owner allowlist; a full company administrator cannot invoke it. Its service-only reservation serializes duplicate sends and enforces a one-minute cooldown per email. Owner accounts, including inactive owners, and captain emails cannot become subscriber administrators through this flow. An existing Auth email receives a recovery link; a new email receives an invitation. Both redirect to the exact deployed `/account-setup.html` URL, which must be added to Auth Redirect URLs. The owner Site URL remains `/owner.html`.
+
+`subscription_admin_invites` is private and has RLS with no direct client grants. No business-admin role is created on reservation or a failed email request. The setup page first requires a confirmed Auth email and a server-approved invitation. The user chooses the password through the Auth SDK, then `complete_admin_setup` checks the authoritative Auth row and creates the full company-admin role. Auth user metadata cannot grant roles. A revoked owner approval blocks a pending activation. Retrying activation does not resubmit a password, and an old activated invitation cannot restore a deleted or downgraded admin role. All owner invitation reads and sends are cleared or ignored after logout.
+
+The admin login has «نسيت كلمة المرور؟», and account settings can send a reset link to the current admin email. Requests use Supabase's generic result to avoid revealing account existence. The setup page also supports already-authorized staff/admin resets without granting new permissions. Successful setup signs out the temporary setup session and returns to a fresh admin login. Owner accounts use their separate owner recovery flow.
+
+### Hosted email delivery
+
+Configure custom SMTP in Supabase Auth before inviting external subscribers. The built-in service only sends to project-team addresses and is not a production email provider. This is a deployment dependency: request failures are shown honestly and recorded as failed invitation delivery. SMTP credentials belong only in the provider's secure settings, never in source or client assets. Do not add subscribers to the Supabase project team as a workaround.
+
+The `/account-setup*` paths use no-store/noindex/no-referrer headers, are excluded from offline shells and Android bundled assets, and never expose verification links through the owner endpoint. Tests cover actual migration permissions/activation, send failure, stale results and duplicate-send concurrency, plus phone layouts and the complete password/activation UI with synthetic Auth fixtures.

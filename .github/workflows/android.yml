@@ -1,7 +1,7 @@
 name: Build Android apps
 on:
   push:
-    paths: ['android/**', 'offline-*', 'vendor/**', 'scripts/build-web.cjs', 'app-updates*', 'app-config.js', 'admin.html', 'captain.html', 'admin.css', 'admin-app.js', 'admin-subscription*', 'subscription-utils.js', 'captain.css', 'captain-app.js', '.github/workflows/android.yml']
+    paths: ['android/**', 'offline-*', 'vendor/**', 'scripts/build-web.cjs', 'app-updates*', 'app-config.js', 'admin.html', 'captain.html', 'admin.css', 'admin-app.js', 'account-setup*', 'admin-email*', 'admin-subscription*', 'subscription-utils.js', 'captain.css', 'captain-app.js', '.github/workflows/android.yml']
   # Required native tests must also run on every PR to main.
   pull_request:
     branches: [main]

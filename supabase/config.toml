@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.webpage-text]
 verify_jwt = false
+
+[functions.owner-invite-admin]
+verify_jwt = false

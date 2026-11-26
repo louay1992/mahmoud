@@ -35,6 +35,11 @@ const {bootstrap,id,claims}=require('./database-fixture.cjs');
   assert.match(saves.find(x=>x.status==='rejected').reason.message,/جلسة أخرى/);
   assert.equal((await main.query('select count(*)::int n from subscription_changes')).rows[0].n,1);
   console.log('Real PostgreSQL: simultaneous subscription edits preserve one revision and one audit entry.');
+  for(const client of [a,b])await client.query('set role service_role');
+  const invitations=await Promise.allSettled([transaction(a,"select reserve_subscription_admin_invite($1,'race@example.test',null)",[id(901)]),transaction(b,"select reserve_subscription_admin_invite($1,'race@example.test',null)",[id(901)])]);
+  assert.equal(invitations.filter(x=>x.status==='fulfilled').length,1,'duplicate concurrent invitations reserve exactly one email send');
+  assert.match(invitations.find(x=>x.status==='rejected').reason.message,/انتظر دقيقة/);
+  console.log('Real PostgreSQL: duplicate concurrent invitations reserve one email send.');
   console.log('Real PostgreSQL: competing deliveries spend stock once; opposing transfers finish without a deadlock; totals are conserved.');
  }finally{await Promise.allSettled([a.end(),b.end(),main.end()]);}
 })().catch(error=>{console.error(error);process.exitCode=1;});

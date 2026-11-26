@@ -100,7 +100,9 @@ let D = {products:[], captains:[], warehouses:[], stock:[], orders:[], balances:
 let tab = "home", orderFilter = "all", orderQuery = "";
 
 function hideSplash(){ $("splash").classList.add("off") }
-function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
+function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; if(sessionStorage.getItem('delivery-admin-account-ready')==='1'){sessionStorage.removeItem('delivery-admin-account-ready');$('admin-account-ready').hidden=false;$('admin-account-ready').textContent='حُفظت كلمة المرور. سجّل دخولك بالبريد وكلمة المرور الجديدة.';} hideSplash() }
+function requestAdminEmailReset(){DeliveryAdminEmail.open({auth:sb.auth,email:ME||$('em').value.trim()});}
+$('admin-forgot-password').onclick=requestAdminEmailReset;
 function offlineLogin(){ME="";ACC={role:"none",perms:[]};D={products:[],captains:[],warehouses:[],stock:[],orders:[],balances:[],payments:[],invoices:[],movements:[],admins:[],settings:{},stats:null,ev:{},marketers:[],mbal:[],mpay:[],prof:{},notifs:[],carriers:[],prs:[],pr:{}};PDATA=null;SDATA=null;CUS={rows:null,q:""};SHIPS=null;CPAYS=[];globalThis.AdminWorkspace?.reset();showLogin();$("main").innerHTML="";$("modal").style.display="none";document.querySelectorAll(".dlg").forEach(d=>d.remove());Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});}
 function boot(){ return offline.boot(onlineBoot); }
 async function onlineBoot(){
@@ -1710,7 +1712,7 @@ function vSettings(){
     <button class="b" onclick="createStaff()">إنشاء الحساب</button>
     <p class="mut">الحساب بصلاحيات محدودة لا يرى رأس المال ولا الأرصدة ولا بقية الأقسام.</p></div>`,
     pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
-    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div></div>`,
+    <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div><button class="b o" type="button" style="margin-top:16px" onclick="requestAdminEmailReset()">إرسال رابط إعادة التعيين إلى بريدي</button></div>`,
   };
   const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"]];
   if(SSEC&&secs[SSEC]){

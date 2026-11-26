@@ -61,3 +61,10 @@ for = "/owner*"
 [headers.values]
 Cache-Control = "no-store"
 X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+for = "/account-setup*"
+[headers.values]
+Cache-Control = "no-store"
+X-Robots-Tag = "noindex, nofollow"
+Referrer-Policy = "no-referrer"
