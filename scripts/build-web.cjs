@@ -16,12 +16,13 @@ for (const file of files) {
   if(/\.(html|js|css|json|txt)$/.test(file))fs.writeFileSync(destination,fs.readFileSync(path.join(root,file),'utf8').replaceAll('\r\n','\n'));
   else fs.copyFileSync(path.join(root, file), destination);
 }
-// Deterministic per-app build IDs cover HTML, scripts and styles, including CSS-only updates.
+// Deterministic per-app build IDs cover code and the icons installed with each app.
 const versions={schema:1};
 for(const role of ['admin','captain']){
   const inputs=[role+'.html','app-config.js',role+'.css',role+'-app.js','auth-session.js','native-push.js','app-updates.js','app-updates.css','push-client.js','mobile-ui.js','mobile.css','app-refresh.js','app-refresh.css','offline-data.js','offline-data.css','vendor/supabase.js','sw.js','manifest-'+role+'.json',...(role==='admin'?['admin-email.js','admin-email.css','subscription-utils.js','admin-subscription.js','admin-subscription.css','admin-mobile.js','admin-mobile.css','admin-motion.js','admin-workspace.js','admin-workspace.css']:['push-diagnostics.js'])];
   const hash=createHash('sha256');
-  for(const name of inputs)hash.update(name+'\n'+fs.readFileSync(path.join(output,name),'utf8').replaceAll('\r\n','\n'));
+  inputs.push(...files.filter(name=>name.startsWith('icons/'+role+'-')).sort());
+  for(const name of inputs)hash.update(name+'\n').update(fs.readFileSync(path.join(output,name)));
   versions[role]=hash.digest('hex');
   const file=path.join(output,role+'.html');
   fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace('content="__APP_BUILD__"','content="'+versions[role]+'"'));
