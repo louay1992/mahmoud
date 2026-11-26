@@ -42,7 +42,7 @@ native-push.js         جسر مضيف Android الأصلي
 push-client.js         اشتراك Web Push المشترك
 push-diagnostics.js    تشخيصات الإشعارات (تطبيق الكابتن)
 sw.js                  حزمة العمل دون اتصال العامة والمتحقَّق منها ببصمات SHA-256
-schema.sql             مخطط Supabase الكامل (يُطبَّق من أعلاه إلى أسفله)
+schema.sql             مرجع تاريخي مجمع؛ لا يُطبق قبل سلسلة الترحيلات الكاملة
 supabase/migrations/   ترحيلات لاحقة: أجهزة FCM، تفضيلات الإشعارات الأصلية
 supabase/functions/    Edge Functions: send-push، native-device، admin-set-password، webpage-text
 android/               مضيف WebView أصلي بنكهتين (admin/captain) + FCM + اختبارات Robolectric
@@ -62,10 +62,10 @@ docs/                  قرارات التصميم والتحقق لكل إصد�
 
 ## قاعدة البيانات
 
-`schema.sql` هو المخطط الكامل لأي تركيب جديد، ويُطبَّق **من أعلاه إلى أسفله في دفعة واحدة**.
+`supabase/migrations` هو المسار المعتمد لأي تركيب جديد: طبّق الترحيلات كلها بترتيب النسخ، أو استخدم `supabase db reset` محليًا. استُعيدت الترحيلات الـ22 الأولى بنصوصها الأصلية من سجل الإنتاج، ولذلك لا يحتاج التركيب الجديد إلى تشغيل `schema.sql` أولًا. يبقى `schema.sql` مرجعًا تاريخيًا مجمعًا؛ لا تجمع تطبيقه مع سلسلة الترحيلات الكاملة على قاعدة جديدة.
 الدوال مكتوبة بـ `create or replace`، وتعريفها الأخير هو النافذ؛ لذلك تظهر `deliver_order` و`create_order` وغيرهما أكثر من مرة بوصفها مراحل تطوير. لا تعِد ترتيبها ولا تحذف نسخة قديمة قبل التحقق على قاعدة اختبار.
 
-- الترحيلات المنفصلة في `supabase/migrations` تُطبَّق **بعد** `schema.sql` ولا تُدمج فيه إلا إذا لزم أن يصل أثرها لأي تركيب من الصفر.
+- قواعد الإنتاج التي تملك سجل الترحيلات تستقبل النسخ الجديدة فقط. لا تُعد تطبيق الترحيلات القديمة يدويًا، ولا تمسح سجلها لإجبار النشر. تحفظ `supabase/historical-migrations.json` بصمات النصوص الأصلية المستعادة للمطابقة.
 - `npm run check` يفشل إذا استدعى العميل RPC غير معرّف في المخطط أو الترحيلات، ويسرد الدوال المُعاد تعريفها بلا فشل.
 - **أساس الإنتاج v17–v23**: `supabase/migrations/20261125091500_production_baseline_v17_v23.sql` يحمل نصًّا كل ما كان `schema.sql` يصفه بالتعليقات فقط: 18 دالة (`my_access`, `staff_lookups`, `create_order` بتوقيعه الكامل, `create_shipment`, `set_shipment_status`, `update_shipment`, `add_carrier_payment`, `mark_notifications_read`, `admin_profit_items`, `guard_once`, `notify`, `order_lines`, `fmt_money`, `has_perm`, `my_warehouse_id`, `norm_phone`, `trg_customer`, `trg_dup_guard`)، و6 جداول (`customers`, `op_guard`, `carriers`, `carrier_payments`, `shipment_events`, `notifications`)، وأعمدة الشحن وصلاحيات الموظفين والمحافظات، وسياسات RLS ومشغّلاتها وصلاحياتها. سُحب من المشروع بقراءة فقط في 2026-11-25 ويُختبر بتطبيقه مرتين على PGlite في `tests/schema-baseline.test.cjs`. `supabase/untracked-rpcs.txt` بقي فارغًا كحاجز ضد أي انحراف جديد.
 - **تكافؤ الإنتاج المتبقي**: `supabase/migrations/20261125103000_staff_policies_and_constraint_parity.sql` يضيف سياستي القراءة `staff_orders` و`staff_order_items` (الموظف يرى طلباته هو فقط) ويلغي قيد `main_no_captain` الذي حذفه الإنتاج في v19. قوبلت الكائنات كلها مع `pg_catalog` في المشروع: الفهارس (39) والمشغّلات (14) والـViews الثلاثة (`captain_balances`, `marketer_balances`, `order_profits` بـ `security_invoker=true`) مطابقة، ولم يبق فرق آخر.

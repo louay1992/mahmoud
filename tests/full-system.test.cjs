@@ -12,7 +12,7 @@ test('full schema: roles, pricing snapshots, warehouses, delivery, returns, ship
  const items=qty=>JSON.stringify([{product_id:id(1),qty,unit_price:100}]);
  const create=async(name,cap=id(2),qty=2,marketer=id(5))=>(await rows('select create_order($1,$2,null,$3::uuid,$4::jsonb,null,null,$5::uuid,$6) id',[name,'0900000000',cap,items(qty),marketer,'دمشق']))[0].id;
  try{
-  await bootstrap(db);await owner();
+  await bootstrap(db);assert.equal(await scalar("select to_regprocedure('public.create_order(text,text,text,uuid,jsonb,text,text,uuid)')"),null,'retired eight-argument RPC must not shadow the current order API');await owner();
   await db.exec(`insert into admins(email,perms) values('boss@test',null),('staff@test',array['view_orders','create_orders']);
    insert into products(id,name,price,cost) values('${id(1)}','منتج اختبار',60,40);
    update warehouses set is_main=false;
