@@ -2,6 +2,7 @@
  'use strict';
  const $=id=>document.getElementById(id),gate=new DeliverySession('sb-admin-setup-auth'),callback=new URLSearchParams(location.hash.slice(1));
  const incoming=['invite','recovery'].includes(callback.get('type'));
+ const callbackError=callback.has('error')||callback.has('error_code');
  if(incoming&&gate.blocked)gate.beginLogin();
  const client=supabase.createClient(DELIVERY_CONFIG.supabaseUrl,DELIVERY_CONFIG.supabaseAnonKey,{auth:{storageKey:'sb-admin-setup-auth'}});
  let epoch=0,user=null,saving=false,passwordSaved=false;
@@ -9,6 +10,7 @@
  async function request(query){let timer;try{return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('timeout')),15000);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
  function lock(){++epoch;user=null;saving=false;passwordSaved=false;$('setup-form').hidden=true;$('setup-form').reset();$('setup-fields').disabled=true;$('setup-email').textContent='';$('setup-cancel').hidden=true;}
  async function boot(){
+  if(callbackError){lock();status('رابط البريد غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا من شاشة دخول التطبيق أو من مالك النظام.',true);return;}
   const seq=++epoch;if(gate.blocked&&!incoming){gate.clearSession();lock();status('افتح رابط التحقق المرسل إلى بريدك، أو اطلب رابطًا جديدًا من شاشة دخول التطبيق.',true);return;}
   const {data,error}=await request(client.auth.getSession());if(seq!==epoch)return;
   if(error||!data?.session){lock();status('رابط البريد غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا من شاشة دخول التطبيق أو من مالك النظام.',true);return;}
