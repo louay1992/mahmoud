@@ -375,25 +375,47 @@ function vProducts(){
   if(PSV==="add"){
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="PSV='list';vProducts();scrollTo({top:0})">→ رجوع للمنتجات</button>
   <div class="card"><h2>إضافة منتج</h2><p class="mut" style="margin:0 0 8px"><b>رأس مال المسوّقة</b>: ما تدفعه المسوّقة للإدارة، وأي زيادة عليه عند البيع تُضاف لرصيدها.<br><b>رأس مال التاجر</b>: تكلفة المنتج الحقيقية عليك. الفرق بينهما هو ربح الإدارة.</p>
-    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="رأس مال المسوّقة"><input id="pc" type="number" min="0" step="0.01" placeholder="رأس مال التاجر (التكلفة)"></div>
+    <div class="row"><input id="pn" placeholder="اسم المنتج"><input id="pp" type="number" min="0" step="0.01" placeholder="رأس مال المسوّقة (ل.س)" aria-label="رأس مال المسوّقة بالليرة السورية"><input id="pc" type="number" min="0" step="0.01" placeholder="رأس مال التاجر (التكلفة)"></div>
+    <div class="setf"><label for="pusd">سعر المنتج بالدولار (اختياري)</label><input id="pusd" type="number" min="0" step="0.01" inputmode="decimal"><small>${cataloguePricingHint()}</small></div>
     <button class="b" onclick="addProduct()">إضافة</button></div>`; return }
   $("main").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0">المنتجات (${D.products.length})</h2><button class="b s" onclick="PSV='add';vProducts();scrollTo({top:0})">＋ إضافة منتج</button></div>
   ${D.products.length?D.products.map(p=>`<div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;${p.active?"":"opacity:.5"}">
-    <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="mut" style="font-size:13px">للمسوّقة: <b>${money(p.price)}</b> · للتاجر: <b>${money(p.cost||0)}</b> · هامش الإدارة: <b class="${Number(p.price)-Number(p.cost||0)>0?"up":"dn"}">${money(Number(p.price)-Number(p.cost||0))}</b>${Number(p.cost||0)===0?' <span style="color:#b45309">⚠ بلا رأس مال تاجر</span>':""}${p.active?"":" · موقوف"}</div></div>
+    <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="mut" style="font-size:13px">للمسوّقة: <b>${money(p.price)}</b> · للتاجر: <b>${money(p.cost||0)}</b> · هامش الإدارة: <b class="${Number(p.price)-Number(p.cost||0)>0?"up":"dn"}">${money(Number(p.price)-Number(p.cost||0))}</b>${Number(p.cost||0)===0?' <span style="color:#b45309">⚠ بلا رأس مال تاجر</span>':""}${p.active?"":" · موقوف"}</div>${p.price_usd==null?"":`<small class="mut">سعر المنتج بالدولار <b>${usdProductPrice(p.price_usd)}</b></small>`}</div>
     <button class="b s o" onclick="editProduct('${p.id}')">تعديل</button>
     <button class="b s o" onclick="toggleProduct('${p.id}',${!p.active})">${p.active?"إيقاف":"تفعيل"}</button></div>`).join(""):`<div class="card mut" style="text-align:center">لا توجد منتجات بعد. اضغط "إضافة منتج".</div>`}`;
 }
+const usdProductPrice = n => new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n));
+function cataloguePricingHint(){
+  const rate=D.settings.usd_exchange_rate;
+  return rate
+    ? `سعر الصرف الحالي ${money(rate)} لكل دولار. عند إدخال سعر بالدولار يحسب النظام سعر الليرة تلقائيًا.`
+    : "لتسعير المنتج بالدولار، حدّد سعر الصرف من الإعدادات أولًا. يمكنك حفظ سعر بالليرة مباشرة.";
+}
+async function saveCatalogProduct(id,name,priceInput,costInput,usdInput){
+  const usd=usdInput===""?null:Number(usdInput), cost=Number(costInput||0);
+  const price=usd===null&&priceInput!==""?Number(priceInput):null;
+  if(!name||!Number.isFinite(cost)||cost<0
+    ||(usd===null?price===null||!Number.isFinite(price)||price<0:!Number.isFinite(usd)||usd<0))
+    return toast("راجع اسم المنتج والأسعار المدخلة","err"), false;
+  if(usd!==null&&!D.settings.usd_exchange_rate)
+    return toast("حدّد سعر صرف الدولار من الإعدادات أولًا","err"), false;
+  return run(sb.rpc("save_catalog_product",{p_id:id,p_name:name,p_price:price,p_cost:cost,p_price_usd:usd}),id?"تم الحفظ":"تمت الإضافة");
+}
 async function addProduct(){
-  const name=$("pn").value.trim(), price=parseFloat($("pp").value), cost=parseFloat($("pc").value||"0");
-  if(!name||isNaN(price)) return toast("أدخل الاسم ورأس مال المسوّقة");
-  if(isNaN(cost)||cost<0) return toast("رأس مال التاجر غير صحيح","err");
-  if(await run(sb.from("products").insert({name,price,cost}),"تمت الإضافة")){ PSV="list"; refresh() }
+  if(await saveCatalogProduct(null,$("pn").value.trim(),$("pp").value,$("pc").value,$("pusd").value)){
+    PSV="list"; refresh();
+  }
 }
 async function editProduct(id){
   const p=D.products.find(x=>x.id===id);
-  const f=await askf("تعديل المنتج",[{k:"name",l:"اسم المنتج",v:p.name},{k:"price",l:"رأس مال المسوّقة",t:"number",v:p.price},{k:"cost",l:"رأس مال التاجر (التكلفة عليك)",t:"number",v:p.cost||0}],"حفظ",{msg:"التعديل يسري على الطلبات الجديدة فقط، والطلبات السابقة تحتفظ بأسعارها."}); if(!f) return;
-  const price=parseFloat(f.price), cost=parseFloat(f.cost||"0"); if(!f.name.trim()||isNaN(price)||price<0||isNaN(cost)||cost<0) return toast("بيانات غير صحيحة","err");
-  if(await run(sb.from("products").update({name:f.name.trim(),price,cost}).eq("id",id),"تم الحفظ")) refresh();
+  if(!p) return;
+  const f=await askf("تعديل المنتج",[
+    {k:"name",l:"اسم المنتج",v:p.name},
+    {k:"price",l:"رأس مال المسوّقة (ل.س)",t:"number",v:p.price},
+    {k:"usd",l:"سعر المنتج بالدولار (اختياري)",t:"number",v:p.price_usd},
+    {k:"cost",l:"رأس مال التاجر (التكلفة)",t:"number",v:p.cost||0}
+  ],"حفظ",{msg:cataloguePricingHint()+" الطلبات المسجّلة تحتفظ بأسعارها."});
+  if(f&&await saveCatalogProduct(id,f.name.trim(),f.price,f.cost,f.usd)) refresh();
 }
 async function toggleProduct(id,v){ if(await run(sb.from("products").update({active:v}).eq("id",id))) refresh() }
 
@@ -1690,10 +1712,14 @@ function vSettings(){
     biz:`<div class="card"><h2>🏪 بيانات النشاط</h2>
     <p class="mut" style="margin:0 0 10px">هذه المعلومات تظهر في التطبيق والفواتير والرسائل. عدّلها ثم اضغط «حفظ».</p>
     <div class="setf"><label for="sb">اسم النشاط</label><input id="sb" placeholder="مثال: عمرة بلس" value="${esc(st.business_name)}"><small>يظهر في أعلى التطبيق وعلى ملصقات الشحن.</small></div>
-    <div class="setf"><label for="sc">رمز العملة</label><input id="sc" placeholder="مثال: ر.س" value="${esc(st.currency)}"><small>يُكتب بعد كل مبلغ في كل الأقسام.</small></div>
+    <div class="setf"><label for="sc">رمز العملة</label><input id="sc" placeholder="مثال: ر.س" value="${esc(st.currency)}" ${st.usd_exchange_rate?"readonly":""}><small>يُكتب بعد كل مبلغ في كل الأقسام.</small></div>
     <div class="setf"><label for="sl">حد تنبيه المخزون المنخفض</label><input id="sl" type="number" min="0" placeholder="3" value="${esc(st.low_stock)}"><small>إذا نزلت كمية منتج في مستودع إلى هذا الرقم أو أقل يظهر تنبيه «مخزون منخفض».</small></div>
     <div class="setf"><label for="spc">رمز الدولة للواتساب</label><input id="spc" placeholder="963" dir="ltr" value="${esc(st.phone_country||"963")}"><small>يُضاف تلقائياً لأرقام الزبائن عند فتح واتساب. سوريا 963، الأردن 962، السعودية 966.</small></div>
     <button class="b" onclick="saveSettings()">💾 حفظ</button></div>`,
+    exchange:`<div class="card"><h2>سعر صرف الدولار</h2>
+    <div class="setf"><label for="usd-rate">كم ليرة سورية لكل دولار واحد؟</label><input id="usd-rate" type="number" min="0" step="any" inputmode="decimal" value="${esc(st.usd_exchange_rate)}">
+    <small>يُحدّث سعر المنتجات المسعّرة بالدولار للطلبات الجديدة. الطلبات المسجّلة تحتفظ بأسعارها.</small></div>
+    <button class="b" onclick="saveExchangeRate()">حفظ وتحديث الأسعار</button></div>`,
     price:`<div class="card"><h2>حساب فروقات الأسعار</h2>
     <div class="row"><select id="spm"><option value="actual" ${st.price_mode!=="list"?"selected":""}>الفعلي: الكابتن يسلّمني ما قبضه فعلياً</option><option value="list" ${st.price_mode==="list"?"selected":""}>المثبت: الكابتن يسلّمني سعر المنتج المثبت (الزيادة له والنقص عليه)</option></select>
     <select id="sce"><option value="false" ${st.captain_can_edit_price!=="true"?"selected":""}>الإداري فقط يعدّل أسعار الطلبات</option><option value="true" ${st.captain_can_edit_price==="true"?"selected":""}>يُسمح للكابتن بتعديل السعر (بسبب إلزامي)</option></select></div>
@@ -1714,7 +1740,7 @@ function vSettings(){
     pw:`<div class="card"><h2>تغيير كلمة المرور</h2>
     <div class="row"><input id="np" type="password" dir="ltr" placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"><button class="b" style="flex:0 0 auto" onclick="changePw()">تغيير</button></div><button class="b o" type="button" style="margin-top:16px" onclick="requestAdminEmailReset()">إرسال رابط إعادة التعيين إلى بريدي</button></div>`,
   };
-  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"]];
+  const meta=[["biz", "بيانات النشاط", "اسم النشاط، العملة، تنبيه المخزون، رمز الدولة", "store"], ["exchange", "سعر صرف الدولار", "تحديث أسعار المنتجات بالليرة السورية", "tag"], ["price", "حساب فروقات الأسعار", "نمط الحساب وصلاحية الكابتن", "tag"], ["admins", "الإداريون", "إضافة وحذف الإداريين", "users"], ["pw", "كلمة المرور", "تغيير كلمة مرور حسابك", "gear"]];
   if(SSEC&&secs[SSEC]){
     const m=meta.find(x=>x[0]===SSEC);
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
@@ -1722,11 +1748,18 @@ function vSettings(){
   }
   $("main").innerHTML=`<div class="card"><h2>الإعدادات</h2><div class="more" style="grid-template-columns:1fr">${meta.map(([k,t,d,i])=>`<button onclick="SSEC='${k}';vSettings();scrollTo({top:0})" style="flex-direction:row;justify-content:flex-start;gap:12px;text-align:right"><span>${ic(i)}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>${t}</b><small class="mut">${d}</small></span></button>`).join("")}</div></div>`;
 }
+async function saveExchangeRate(){
+  const rate=Number($("usd-rate").value);
+  if(!Number.isFinite(rate)||rate<=0) return toast("أدخل سعر صرف أكبر من الصفر","err");
+  if(!await askc("سيُعاد حساب أسعار المنتجات المسعّرة بالدولار، وستظهر الطلبات بالليرة السورية. الطلبات المسجّلة تحتفظ بمبالغها.",{title:"تحديث سعر الصرف",ok:"حفظ وتحديث الأسعار"})) return;
+  if(await run(sb.rpc("set_usd_exchange_rate",{p_rate:rate}),"تم حفظ سعر الصرف وتحديث أسعار المنتجات")) refresh();
+}
 async function savePriceSettings(){
   if(await run(sb.from("settings").upsert([{key:"price_mode",value:$("spm").value},{key:"captain_can_edit_price",value:$("sce").value}]),"تم الحفظ")) refresh();
 }
 async function saveSettings(){
   const rows=[{key:"business_name",value:$("sb").value.trim()},{key:"currency",value:$("sc").value.trim()},{key:"low_stock",value:String(parseInt($("sl").value)||0)},{key:"phone_country",value:($("spc").value||"").replace(/\D/g,"")}];
+  if(D.settings.usd_exchange_rate) rows.splice(1,1);
   if(await run(sb.from("settings").upsert(rows),"تم الحفظ")) refresh();
 }
 const PERM_L={create_orders:"إنشاء طلبات",view_orders:"عرض الطلبات التي أنشأها",pick_captain:"اختيار الكابتن عند الإنشاء",pick_marketer:"اختيار المسوّقة عند الإنشاء"};
