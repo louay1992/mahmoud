@@ -16,7 +16,7 @@ async function populate(page,screen='home'){
   D.captains=[{id:'captain-1',name:'أحمد خالد',active:true,warehouse_id:'warehouse-1'}];D.marketers=[{id:'marketer-1',name:'نور',active:true}];D.warehouses=[{id:'warehouse-1',name:'المستودع الرئيسي',is_main:true}];D.carriers=[{id:'carrier-1',name:'قدموس',phone:'0944000000',active:true}];
   D.stats={delivered_today:12,sales_today:2140000,owed_total:975000,low_stock:[{warehouse:'المستودع الرئيسي',product:'سيروم العناية',qty:2}]};
   D.prs=[{id:'request-1',order_id:id(2),captain_id:'captain-1',status:'pending',old_total:185000,new_total:180000,reason:'حسم متفق عليه',created_at:base.created_at}];D.pr={[id(2)]:D.prs};D.prof={};D.ev={};D.notifs=[];D.balances=[];D.stock=[];
-  window.rpcCalls=[];sb.rpc=async(name,args)=>{rpcCalls.push({name,args});return {data:null,error:{message:'اختبار محلي دون حفظ'}}};
+  window.rpcCalls=[];sb.rpc=async(name,args)=>{rpcCalls.push({name,args});return name==='working_orders'?{data:D.orders,error:null}:name==='carrier_balances'?{data:[{carrier_id:'carrier-1',col:185000,fees:7000,paid:0,owed:178000,fly:2,pend:370000,n:6,dl:1,rt:0}],error:null}:{data:null,error:{message:'اختبار محلي دون حفظ'}}};
   sb.from=name=>{let selectedId;const q={select:()=>q,eq:(key,value)=>{if(key==='id')selectedId=value;return q},order:()=>q,limit:()=>q,maybeSingle:async()=>({data:fixtureShips.find(o=>o.id===selectedId)||null,error:null}),then:resolve=>Promise.resolve({data:name==='orders'?fixtureShips:[],error:null}).then(resolve)};return q};
   ACC={role:'full'};ME='admin@example.test';$('hn').textContent=D.settings.business_name;$('login').style.display='none';$('app').style.display='block';hideSplash();renderNav();go(screen);
  },screen);
@@ -70,11 +70,11 @@ async function populate(page,screen='home'){
    await page.locator('#bnr [data-value="more"]').click();await page.locator('[data-am="logout"]').click();await page.locator('.dlg #dc').click();assert.equal(await page.locator('#app').isVisible(),true);
    if(width===390){
     // A slow or failed shipment load must never replace a newer destination.
-    await page.evaluate(()=>{window.savedFrom=sb.from;sb.from=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>name==='orders'?new Promise(done=>window.completeShipping=done).then(resolve):Promise.resolve({data:[],error:null}).then(resolve)};return q};go('ship')});
+    await page.evaluate(()=>{window.savedRpc=sb.rpc;sb.rpc=(name,args)=>name==='working_orders'?new Promise(done=>window.completeShipping=done):savedRpc(name,args);window.savedFrom=sb.from;sb.from=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>name==='orders'?new Promise(done=>window.completeShipping=done).then(resolve):Promise.resolve({data:[],error:null}).then(resolve)};return q};go('ship')});
     await page.locator('.am-loading').waitFor();await page.locator('#bnr [data-value="orders"]').click();
     await page.evaluate(()=>completeShipping({data:fixtureShips,error:null}));assert.equal(await page.locator('#am-delivery').count(),1);
-    await page.evaluate(()=>{sb.from=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:[],error:{message:'fixture offline'}}).then(resolve)};return q};go('ship')});
-    await page.locator('.am-load-error').waitFor();await page.evaluate(()=>{sb.from=savedFrom});await page.locator('[data-am="retry-shipping"]').click();await page.locator('#am-shipping').waitFor();
+    await page.evaluate(()=>{sb.rpc=(name,args)=>name==='working_orders'?Promise.resolve({data:[],error:{message:'fixture offline'}}):savedRpc(name,args);sb.from=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:[],error:{message:'fixture offline'}}).then(resolve)};return q};go('ship')});
+    await page.locator('.am-load-error').waitFor();await page.evaluate(()=>{sb.from=savedFrom;sb.rpc=savedRpc});await page.locator('[data-am="retry-shipping"]').click();await page.locator('#am-shipping').waitFor();
     await page.evaluate(()=>{go('orders');orderFilter='all';const original=D.orders.find(o=>o.fulfillment==='delivery');D.orders=Array.from({length:75},(_,n)=>({...original,id:'fixture-'+n,order_no:3000+n,customer_name:n===0?'<img src=x onerror="window.injected=true">':'زبون '+n}));renderOrderList()});
     assert.equal(await page.locator('#olist .am-order').count(),30);await page.locator('[data-am="load-more"]').click();assert.equal(await page.locator('#olist .am-order').count(),60);
     assert.equal(await page.locator('#olist img').count(),0);assert.equal(await page.evaluate(()=>!!window.injected),false);
@@ -93,7 +93,7 @@ async function populate(page,screen='home'){
    if(screen==='ship')for(const page of [before,after])await page.locator('#shlist').waitFor();
    const height=Math.max(1100,...await Promise.all([before,after].map(p=>p.evaluate(()=>document.documentElement.scrollHeight))));
    for(const p of [before,after])await p.setViewportSize({width:1440,height});
-   const a=await before.screenshot({fullPage:true}),b=await after.screenshot({path:`test-results/admin-redesign-desktop-${screen}.png`,fullPage:true});
+   const a=await before.screenshot({path:`test-results/admin-redesign-desktop-${screen}-before.png`,fullPage:true}),b=await after.screenshot({path:`test-results/admin-redesign-desktop-${screen}.png`,fullPage:true});
    assert.equal(Buffer.compare(a,b),0,screen+' desktop changed');await before.close();await after.close();
   }
   const staff=await context.newPage();await staff.setViewportSize({width:390,height:844});await staff.goto(origin+'/admin.html');await populate(staff);

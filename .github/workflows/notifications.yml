@@ -19,6 +19,26 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: python3 tests/check_android_notifications.py
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: delivery_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm ci --ignore-scripts
+      - run: npm run test:database
+        env:
+          PG_TEST_URL: postgresql://postgres:isolated-test-only@localhost:5432/delivery_test
   browser:
     runs-on: ubuntu-latest
     steps:

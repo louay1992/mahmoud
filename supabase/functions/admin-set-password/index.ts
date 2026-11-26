@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.89.0";
 import { corsHeaders, normalizeOrigin, originRejected, passwordProblem } from "../_shared/admin-set-password.ts";
 
 // CORS مقصور على أصل التطبيق (APP_ORIGIN) لا على '*': أي صفحة أخرى لا تستطيع

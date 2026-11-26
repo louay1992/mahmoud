@@ -1,0 +1,111 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const {bootstrap,id,claims}=require('./database-fixture.cjs');
+test('full schema: roles, pricing snapshots, warehouses, delivery, returns, shipping, ledgers and notification routes',async t=>{
+ const {PGlite}=await import('@electric-sql/pglite');const db=new PGlite();
+ const as=async(email)=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[claims(email)]);};
+ const owner=async()=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[claims('boss@test')]);};
+ const rows=async(sql,args)=>(await db.query(sql,args)).rows;
+ const scalar=async(sql,args)=>Object.values((await rows(sql,args))[0])[0];
+ const items=qty=>JSON.stringify([{product_id:id(1),qty,unit_price:100}]);
+ const create=async(name,cap=id(2),qty=2,marketer=id(5))=>(await rows('select create_order($1,$2,null,$3::uuid,$4::jsonb,null,null,$5::uuid,$6) id',[name,'0900000000',cap,items(qty),marketer,'دمشق']))[0].id;
+ try{
+  await bootstrap(db);await owner();
+  await db.exec(`insert into admins(email,perms) values('boss@test',null),('staff@test',array['view_orders','create_orders']);
+   insert into products(id,name,price,cost) values('${id(1)}','منتج اختبار',60,40);
+   update warehouses set is_main=false;
+   insert into warehouses(id,name,is_main) values('${id(3)}','رئيسي',true),('${id(4)}','ثانوي',false);
+   insert into captains(id,name,email,warehouse_id,delivery_fee) values('${id(2)}','كابتن اختبار','captain@test','${id(3)}',5);
+   insert into marketers(id,name) values('${id(5)}','مسوّقة اختبار');
+   insert into stock values('${id(3)}','${id(1)}',20);
+   insert into carriers(id,name) values('${id(6)}','شركة اختبار');
+   insert into push_config values('fn_url','https://test.invalid'),('push_secret','synthetic-only') on conflict(key)do update set value=excluded.value;
+   insert into push_subscriptions(endpoint,p256dh,auth,admin_email) values('https://test.invalid/admin','key','auth','boss@test');
+   insert into push_subscriptions(endpoint,p256dh,auth,captain_id) values('https://test.invalid/captain','key','auth','${id(2)}');`);
+  const unassigned=await create('طلب غير مسند',null),order=await create('دورة التوصيل');
+  await t.test('server roles reject privilege escalation, NULL ownership and inactive captains',async()=>{
+   await as('staff@test');assert.equal(await scalar('select is_admin()'),false);
+   await db.query("update admins set perms=null where email='staff@test'");
+   assert.equal(await scalar('select is_admin()'),false);
+   assert.deepEqual(await rows('select * from admin_products()'),[]);
+   const own=await create('طلب الموظف',null,2,null);const visible=await scalar('select working_orders(200)');
+   assert.equal(visible.length,1);assert.equal(visible[0].id,own);assert.equal(visible[0].order_items[0].products.name,'منتج اختبار');
+   await as('ordinary@test');await assert.rejects(db.query('select cancel_order($1,null)',[unassigned]),/غير مسموح/);
+   await owner();await db.exec(`update captains set active=false where id='${id(2)}'`);
+   await as('captain@test');assert.equal(await scalar('select my_captain_id()'),null);
+   await assert.rejects(db.query("select set_order_status($1,'in_delivery',null)",[order]),/غير مسموح/);
+   await owner();await db.exec(`update captains set active=true where id='${id(2)}'`);
+  });
+  await t.test('catalogue changes and editing preserve original capital and merchant cost',async()=>{
+   assert.deepEqual(await rows('select capital::text,cost::text from order_item_capital c join order_items i on i.id=c.item_id where i.order_id=$1',[order]),[{capital:'60.00',cost:'40'}]);
+   await db.exec(`update products set price=80,cost=50 where id='${id(1)}'`);
+   await db.query('select edit_order($1,null,$2::jsonb)',[order,items(2)]);
+   assert.deepEqual(await rows('select capital::text,cost::text from order_item_capital c join order_items i on i.id=c.item_id where i.order_id=$1',[order]),[{capital:'60.00',cost:'40'}]);
+  });
+  await t.test('shared warehouse access, one-time delivery, historical return and payments',async()=>{
+   await as('captain@test');assert.equal(Number(await scalar('select qty from stock')),20);
+   await db.query('select deliver_order($1,null)',[order]);assert.equal(Number(await scalar('select qty from stock')),18);
+   assert.equal(Number(await scalar('select balance from captain_balances')),200);
+   await assert.rejects(db.query('select deliver_order($1,null)',[order]),/جاهز للتسليم/);
+   await owner();await db.exec(`update captains set warehouse_id='${id(4)}' where id='${id(2)}'`);
+   await db.query('select return_order($1,true,null)',[order]);
+   assert.equal(Number(await scalar(`select qty from stock where warehouse_id='${id(3)}'`)),20);
+   assert.equal(Number(await scalar('select balance from captain_balances')),0);
+   await db.exec(`update captains set warehouse_id='${id(3)}' where id='${id(2)}'`);
+   await db.query('select create_stock_invoice($1,null,$2::jsonb,true)',[id(4),JSON.stringify([{product_id:id(1),qty:3}])]);
+   await db.query('select transfer_stock($1,$2,$3,1,null)',[id(4),id(3),id(1)]);
+   assert.equal(Number(await scalar(`select qty from stock where warehouse_id='${id(3)}'`)),18);
+   await db.query('select adjust_stock($1,$2,20,null)',[id(3),id(1)]);
+   await assert.rejects(db.query(`update stock set qty=-1 where warehouse_id='${id(3)}'`),/stock_nonnegative/);
+  });
+  await t.test('captain price requests, approval, settlement and marketer balances',async()=>{
+   const priced=await create('طلب سعر خاص');await as('captain@test');
+   const request=await scalar('select request_price_change($1,170,$2)',[priced,'خصم متفق عليه']);
+   await owner();await db.query('select decide_price_request($1,true,null)',[request]);
+   await as('captain@test');await db.query('select deliver_order($1,null)',[priced]);
+   assert.equal(Number(await scalar('select owed_amount from orders where id=$1',[priced])),165);
+   await owner();await db.query('insert into captain_payments(captain_id,amount)values($1,165)',[id(2)]);
+   assert.equal(Number(await scalar('select balance from captain_balances')),0);
+   assert.equal(Number(await scalar('select earned from marketer_balances where marketer_id=$1',[id(5)])),5);
+  });
+  await t.test('shipping deducts once, rejects editing shipped items and restores returns',async()=>{
+   const before=Number(await scalar('select qty from stock where warehouse_id=$1',[id(3)]));
+   const shipment=await scalar('select create_shipment($1,$2,null,$3::jsonb,null,null,$4,null,$5,null,10,15,$6)', ['شحنة اختبار','0900000001',items(2),id(5),id(6),id(3)]);
+   await db.query("select set_shipment_status($1,'handed',null,true)",[shipment]);
+   assert.equal(Number(await scalar('select qty from stock where warehouse_id=$1',[id(3)])),before-2);
+   await assert.rejects(db.query('select edit_order($1,null,$2::jsonb)',[shipment,items(3)]),/خروج الشحنة/);
+   await db.query("select set_shipment_status($1,'in_transit',null,true)",[shipment]);
+   assert.equal(Number(await scalar('select qty from stock where warehouse_id=$1',[id(3)])),before-2);
+   await db.query("select set_shipment_status($1,'delivered',null,true)",[shipment]);
+   await db.query("select set_shipment_status($1,'returned',null,true)",[shipment]);
+   assert.equal(Number(await scalar('select qty from stock where warehouse_id=$1',[id(3)])),before);
+   const payload=await scalar('select payload from net.calls order by id desc limit 1');
+   assert.equal(payload.order_id,shipment);assert.match(payload.tag,/^notification:/);
+   assert.equal(new URL(payload.url,'https://test.invalid').searchParams.get('order'),shipment);
+   const {notificationUrl}=await import('../supabase/functions/_shared/fcm.ts');
+   assert.equal(new URL(notificationUrl('admin',payload),'https://test.invalid').searchParams.get('order'),shipment);
+  });
+  await t.test('full carrier ledger and old open orders survive the previous client limits',async()=>{
+   const before=(await scalar('select carrier_balances()')).find(x=>x.carrier_id===id(6));
+   await db.exec(`insert into orders(customer_name,customer_phone,status,fulfillment,carrier_id,ship_status,total,items_total,shipping_cost,created_at)
+    select 'bulk-'||n,'bulk-'||n,'delivered','shipping','${id(6)}','delivered',100,90,10,now() from generate_series(1,3005)n;
+    insert into carrier_payments(carrier_id,amount)select '${id(6)}',1 from generate_series(1,3005);
+    insert into orders(customer_name,customer_phone,status,created_at)values('old-open','old-open','new','2000-01-01');`);
+   const after=(await scalar('select carrier_balances()')).find(x=>x.carrier_id===id(6));
+   assert.equal(Number(after.owed)-Number(before.owed),3005*(100-10-1));
+   const statement=await scalar('select carrier_statement($1)',[id(6)]);
+   assert.equal(statement.payments.length,3005);assert.equal(statement.orders.length,3006);assert.equal(Number(statement.balance.owed),Number(after.owed));
+   await as('boss@test');const working=await scalar('select working_orders(200)');
+   assert.ok(working.some(x=>x.customer_name==='old-open'));assert.equal(working.filter(x=>['delivered','returned','cancelled'].includes(x.status)).length,200);
+   await as('staff@test');assert.equal((await scalar('select working_orders(200)')).every(x=>x.created_by==='staff@test'),true);
+   await assert.rejects(db.query('select carrier_balances()'),/غير مسموح/);
+   await assert.rejects(db.query('select carrier_statement($1)',[id(6)]),/غير مسموح/);
+   await assert.rejects(db.query('select reset_test_data()'),/permission denied/);
+   await owner();const migration=fs.readdirSync(path.join(root,'supabase/migrations')).find(x=>x.endsWith('_production_review_integrity.sql'));
+   await db.exec(fs.readFileSync(path.join(root,'supabase/migrations',migration),'utf8'));
+   assert.equal(Number(await scalar('select count(*) from orders'))>3005,true,'reapplying schema repair must preserve business data');
+  });
+ }finally{await db.close();}
+});

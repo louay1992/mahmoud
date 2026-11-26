@@ -148,7 +148,7 @@ let firstLoad=true, ALOAD=0, INITIAL_LOAD_FAILED=false;
 async function loadStaff(initial,{signal}={}){
   const seq=++ALOAD,who=ME;
   const [lk,od,st]=await Promise.all([ can("create_orders")?sb.rpc("staff_lookups"):Promise.resolve({data:null}),
-    can("view_orders")?sb.from("orders").select("*, order_items(id, qty, unit_price, products(name))").order("created_at",{ascending:false}).limit(200):Promise.resolve({data:[]}),
+    can("view_orders")?sb.rpc("working_orders",{p_history_limit:200}):Promise.resolve({data:[]}),
     sb.from("settings").select("*") ].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
   if(signal?.aborted||seq!==ALOAD||who!==ME||authGate.blocked)return false;
   if([lk,od,st].some(x=>x.error)){if(!initial)throw new Error('تعذّر تحميل البيانات');toast('تعذّر تحميل البيانات. حاول مجددًا.','err');return false;}
@@ -166,7 +166,7 @@ async function loadAll(initial,{signal}={}){
     sb.from("captains").select("*").order("name"),
     sb.from("warehouses").select("*").order("name"),
     sb.from("stock").select("*"),
-    sb.from("orders").select("*, order_items(id, qty, unit_price, list_price, products(name))").order("created_at",{ascending:false}).limit(300),
+    sb.rpc("working_orders",{p_history_limit:300}),
     sb.from("captain_balances").select("*"),
     sb.from("captain_payments").select("*").order("created_at",{ascending:false}).limit(2000),
     sb.from("stock_invoices").select("*, stock_invoice_items(qty, products(name))").order("created_at",{ascending:false}).limit(50),
@@ -1000,17 +1000,15 @@ async function vShip(mode,{quiet=false,signal}={}){
   if(mode==="ship"&&globalThis.AdminMobile?.enabled()) AdminMobile.shippingLoading();
   }
   const my=++SHLOAD;
-  const [o,p]=await Promise.all([sb.from("orders").select("*, order_items(qty, unit_price, products(name))").eq("fulfillment","shipping").order("created_at",{ascending:false}).limit(3000), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000)].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
+  const [o,p,b]=await Promise.all([sb.rpc("working_orders",{p_history_limit:1000}), sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000),sb.rpc("carrier_balances")].map(x=>signal&&x.abortSignal?x.abortSignal(signal):x));
   if(signal?.aborted||my!==SHLOAD||tab!==mode||who!==ME||authGate.blocked) return false;
-  if(quiet&&(o.error||p.error))throw new Error('تعذّر تحميل الشحنات');
-  if(o.error||p.error){ if(mode==="carriers"&&globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError("شركات الشحن","carriers"); if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc((o.error||p.error).message)}</div>`; return }
-  SHIPS=o.data; CPAYS=p.data||[]; if(quiet&&!appRefresh.safe())return false;
-  const y=scrollY; if(mode==="carriers") drawCarriers(); else drawShip(); if(quiet)scrollTo({top:y,behavior:'instant'});
+  if(quiet&&(o.error||p.error||b.error))throw new Error('تعذّر تحميل الشحنات');
+  if(o.error||p.error||b.error){ if(mode==="carriers"&&globalThis.AdminWorkspace?.full())return AdminWorkspace.loadError("شركات الشحن","carriers"); if(mode==="ship"&&globalThis.AdminMobile?.enabled()) return AdminMobile.shippingError(); $("shbody").innerHTML=`<div class="card" style="color:#b91c1c">${esc((o.error||p.error||b.error).message)}</div>`; return }
+  SHIPS=(o.data||[]).filter(x=>x.fulfillment==="shipping"); CPAYS=p.data||[]; D.carrierBalances=b.data||[]; if(quiet&&!appRefresh.safe())return false;
+  const y=scrollY; if(mode==="carriers") drawCarriers(); else drawShip(); if(quiet)scrollTo({top:y,behavior:'instant'}); return true;
 }
-const carBal=cid=>{ const L=(SHIPS||[]).filter(o=>o.carrier_id===cid), P=CPAYS.filter(x=>x.carrier_id===cid);
-  const col=L.filter(o=>o.status==="delivered").reduce((a,o)=>a+Number(o.total),0), fees=L.filter(o=>["delivered","returned"].includes(o.status)).reduce((a,o)=>a+Number(o.shipping_cost),0), paid=P.reduce((a,x)=>a+Number(x.amount),0);
-  const fly=L.filter(o=>["handed","in_transit","at_branch"].includes(o.ship_status)), pend=fly.reduce((a,o)=>a+Number(o.total),0);
-  return {col,fees,paid,owed:col-fees-paid,fly:fly.length,pend,n:L.length,dl:L.filter(o=>o.status==="delivered").length,rt:L.filter(o=>o.status==="returned").length} };
+const carBal=cid=>{const row=(D.carrierBalances||[]).find(x=>x.carrier_id===cid)||{};
+  return Object.fromEntries(['col','fees','paid','owed','fly','pend','n','dl','rt'].map(k=>[k,Number(row[k]||0)]));};
 const shFilt=()=>{ const isOpen=o=>!["delivered","returned","cancelled"].includes(o.ship_status||"preparing"), q=nrm(SHF.q), n=new Date(), d0=new Date(n.getFullYear(),n.getMonth(),n.getDate()).getTime();
   const from=SHF.per==="today"?d0:SHF.per==="week"?d0-6*864e5:SHF.per==="month"?new Date(n.getFullYear(),n.getMonth(),1).getTime():0;
   return (SHIPS||[]).filter(o=>(SHF.st==="all"||(SHF.st==="open"?isOpen(o):NS(o.ship_status)===SHF.st))&&(!SHF.car||o.carrier_id===SHF.car)&&(!SHF.mk||(SHF.mk==="none"?!o.marketer_id:o.marketer_id===SHF.mk))&&(!SHF.gov||o.governorate===SHF.gov)&&(!from||new Date(o.created_at).getTime()>=from)&&(!q||[o.customer_name,o.customer_phone,o.waybill,String(o.order_no),o.governorate,mname(o.marketer_id)].some(v=>nrm(v).includes(q)))) };
@@ -1071,18 +1069,26 @@ async function carPay(cid){
   const a=parseFloat(f.a); if(isNaN(a)||a<=0) return toast("مبلغ غير صحيح","err");
   if(await run(sb.rpc("add_carrier_payment",{p_carrier:cid,p_amount:a,p_note:f.n.trim()||null}),"تم تسجيل التحويل")) (tab==="carriers"?vCarriers():vShip());
 }
-function carPays(cid){
-  const L=CPAYS.filter(x=>x.carrier_id===cid), t=L.reduce((a,x)=>a+Number(x.amount),0);
+async function carPays(cid){
+  const who=ME,{data,error}=await sb.rpc("carrier_statement",{p_carrier:cid});
+  if(who!==ME||authGate.blocked)return;
+  if(error)return toast("تعذّر تحميل التحويلات: "+error.message);
+  const L=data.payments, t=L.reduce((a,x)=>a+Number(x.amount),0);
   $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>تحويلات ${esc(carName(cid))}</b><button class="x" onclick="closeStatus()">${ic("x")}</button></div><div class="mut" style="margin-bottom:8px">العدد: <b>${L.length}</b> · المجموع: <b>${money(t)}</b></div>
    ${L.length?`<table><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr>${L.map(x=>`<tr><td>${dt(x.created_at)}</td><td><b>${money(x.amount)}</b></td><td>${esc(x.note)}</td><td><button class="b s r" onclick="carPayDel('${x.id}','${cid}')">حذف</button></td></tr>`).join("")}</table>`:'<p class="mut">لا توجد تحويلات</p>'}</div>`;
   $("modal").style.display="flex";
 }
 async function carPayDel(id,cid){ if(!await askc("سيزيد المستحق لك عند الشركة بقيمتها.",{title:"حذف التحويل؟",ok:"حذف",cls:"r"})) return;
-  if(await run(sb.from("carrier_payments").delete().eq("id",id),"تم الحذف")){ const {data}=await sb.from("carrier_payments").select("*").order("created_at",{ascending:false}).limit(3000); CPAYS=data||[]; carPays(cid); tab==="carriers"?drawCarriers():drawShip() } }
-function carStatement(cid){
-  const c=D.carriers.find(x=>x.id===cid), b=carBal(cid);
-  const L=(SHIPS||[]).filter(o=>o.carrier_id===cid&&["delivered","returned"].includes(o.status)).sort((x,y)=>new Date(x.status_at)-new Date(y.status_at)), P=CPAYS.filter(x=>x.carrier_id===cid).slice().reverse();
+  if(await run(sb.from("carrier_payments").delete().eq("id",id),"تم الحذف")){ if(await vShip(tab==="carriers"?"carriers":"ship"))carPays(cid); } }
+async function carStatement(cid){
+  const c=D.carriers.find(x=>x.id===cid);
   const w=window.open("","_blank"); if(!w) return toast("اسمح بالنوافذ المنبثقة لطباعة الكشف");
+  w.document.write('<html lang="ar" dir="rtl"><body>جارٍ تحميل كشف الحساب الكامل…</body></html>');w.document.close();
+  const who=ME,{data,error}=await sb.rpc("carrier_statement",{p_carrier:cid});
+  if(error||who!==ME||authGate.blocked){w.close();if(error)toast("تعذّر تحميل الكشف: "+error.message);return;}
+  if(w.closed)return;
+  const L=data.orders,P=data.payments.slice().reverse(),b=data.balance;
+  w.document.open();
   w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف حساب ${esc(c.name)}</title><style>body{font-family:Tahoma,Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin:8px 0 20px}th,td{border:1px solid #ccc;padding:6px;text-align:right;font-size:13px}th{background:#f3f3f3}.t{font-size:17px;font-weight:700;line-height:1.9}</style></head><body>
   <h1>${esc(D.settings.business_name||"")} — كشف حساب شركة الشحن: ${esc(c.name)}</h1><div>التاريخ: ${new Date().toLocaleDateString("ar-EG")}</div>
   <h2>الشحنات المنتهية</h2><table><tr><th>التاريخ</th><th>#</th><th>البوليصة</th><th>الزبون</th><th>الحالة</th><th>المحصَّل (COD)</th><th>أجور الشركة</th></tr>
