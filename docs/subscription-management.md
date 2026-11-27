@@ -18,7 +18,7 @@ insert into public.subscription_owners(user_id) values ('OWNER_USER_UUID');
 
 ### Password setup by email
 
-Set the project's Auth Site URL to the deployed HTTPS `/owner.html` URL. The login page can request a password setup email with that exact redirect. Existing verified owner accounts use Supabase's password recovery flow; the link proves mailbox access before showing the password form. The Supabase SDK validates the callback session, and the server owner check must succeed before the form is enabled. Expired links show a request-again state. A new recovery callback can start a new session after a local logout, while clearing any old stored session first.
+Add `https://owner.nature-care.net/` to the project's Auth Redirect URLs. The owner login page requests a password setup email with that exact redirect. Existing verified owner accounts use Supabase's password recovery flow; the link proves mailbox access before showing the password form. The Supabase SDK validates the callback session, and the server owner check must succeed before the form is enabled. Expired links show a request-again state. A new recovery callback can start a new session after a local logout, while clearing any old stored session first.
 
 The owner enters and confirms the new password themselves. The page calls `updateUser`, clears both password fields and signs out locally after success, then asks for a fresh login. Passwords never enter the repository, subscription tables or logs. The recovery screen survives a refresh within the same tab; cancelling clears it and signs out. There is no public registration or role assignment route.
 

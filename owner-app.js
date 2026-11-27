@@ -1,6 +1,7 @@
 (function(){
  'use strict';
  const $=id=>document.getElementById(id),ui=DeliverySubscription,gate=new DeliverySession('sb-subscription-owner-auth');
+ const ownerHome=location.hostname==='owner.nature-care.net'?'/':'/owner.html';
  const callback=new URLSearchParams(location.hash.slice(1)),callbackError=callback.has('error')||callback.has('error_code');
  const recoveryCallback=callback.get('type')==='recovery';
  let recovering=recoveryCallback||sessionStorage.getItem('delivery-owner-recovery')==='1';
@@ -45,11 +46,11 @@
  $('owner-reset-request').onclick=async()=>{
   const email=$('owner-email');if(!email.reportValidity())return;
   const seq=epoch,button=$('owner-reset-request');button.disabled=true;message('جارٍ إرسال رابط تعيين كلمة المرور…');
-  const {error}=await request(client.auth.resetPasswordForEmail(email.value.trim(),{redirectTo:new URL('/owner.html',location.origin).href}));button.disabled=false;
+  const {error}=await request(client.auth.resetPasswordForEmail(email.value.trim(),{redirectTo:new URL(ownerHome,location.origin).href}));button.disabled=false;
   if(seq!==epoch)return;
   message(error?'تعذّر إرسال الرابط. حاول مجددًا لاحقًا.':'إذا كان البريد مرتبطًا بحساب، ستصلك رسالة تحتوي رابط تعيين كلمة المرور.',error?'error':'success');
  };
- $('owner-recovery-exit').onclick=()=>gate.logout({auth:client.auth,detach:()=>{},lock:()=>{lock();message('');},reload:()=>location.replace('/owner.html')});
+ $('owner-recovery-exit').onclick=()=>gate.logout({auth:client.auth,detach:()=>{},lock:()=>{lock();message('');},reload:()=>location.replace(ownerHome)});
  $('owner-recovery-form').addEventListener('submit',async event=>{
   event.preventDefault();if(!recovering||!user||saving||gate.blocked)return;
   const password=$('owner-new-password').value;
@@ -60,7 +61,7 @@
   saving=false;$('owner-recovery-fields').disabled=false;
   if(error){message('تعذّر حفظ كلمة المرور. تحقق من صلاحية الرابط وحاول مجددًا.','error');return;}
   sessionStorage.setItem('delivery-owner-password-updated','1');
-  await gate.logout({auth:client.auth,detach:()=>{},lock:()=>{lock();message('');},reload:()=>location.replace('/owner.html')});
+  await gate.logout({auth:client.auth,detach:()=>{},lock:()=>{lock();message('');},reload:()=>location.replace(ownerHome)});
  });
  $('owner-login-form').addEventListener('submit',async event=>{
   event.preventDefault();const button=$('owner-login-button');button.disabled=true;message('جارٍ تسجيل الدخول…');if(gate.blocked)gate.beginLogin();
