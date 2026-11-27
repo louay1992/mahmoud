@@ -1,0 +1,46 @@
+name: Owner operations worker
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/backup/operations.py', 'supabase/migrations/*owner_operations_console.sql', '.github/workflows/owner-operations.yml']
+permissions:
+  contents: read
+concurrency:
+  group: delivery-production-backup
+  cancel-in-progress: false
+jobs:
+  operations:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false }
+      - name: Install database, S3 and encryption tools
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/backup-pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-18 python3-psycopg2 python3-boto3 python3-cryptography age
+          echo '/usr/lib/postgresql/18/bin' >> "$GITHUB_PATH"
+      - name: Process authorized owner requests
+        env:
+          SUPABASE_DB_URL: ${{ secrets.BACKUP_SUPABASE_DB_URL }}
+          SUPABASE_STORAGE_KEY_ID: ${{ secrets.BACKUP_SUPABASE_STORAGE_KEY_ID }}
+          SUPABASE_STORAGE_KEY: ${{ secrets.BACKUP_SUPABASE_STORAGE_KEY }}
+          SUPABASE_STORAGE_REGION: ${{ vars.BACKUP_SUPABASE_STORAGE_REGION }}
+          B2_KEY_ID: ${{ secrets.BACKUP_B2_KEY_ID }}
+          B2_KEY: ${{ secrets.BACKUP_B2_KEY }}
+          B2_REGION: ${{ vars.BACKUP_B2_REGION }}
+          B2_BUCKET: ${{ vars.BACKUP_B2_BUCKET }}
+          BACKUP_AGE_RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+          VERIFY_BACKUP: ${{ github.event_name == 'push' && 'true' || 'false' }}
+          WORKER_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: /usr/bin/python3 scripts/backup/operations.py
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with: { name: owner-backup-verification, path: artifacts/verification/ }

@@ -147,6 +147,7 @@ class DeliveryOffline {
       result=write?await target:await Promise.race([Promise.resolve(target),new Promise(resolve=>{timer=setTimeout(()=>{abort?.abort();resolve({data:null,error:{message:'network timeout'},status:0});},12000);onAbort=()=>{abort?.abort();resolve(cancelled());};signal?.addEventListener('abort',onAbort,{once:true});if(signal?.aborted)onAbort();})]);
     }catch(e){result={data:null,error:{message:String(e)},status:0};}finally{clearTimeout(timer);if(onAbort)signal?.removeEventListener('abort',onAbort);}
     if(signal?.aborted)return cancelled();
+    if(result?.error?.code==='PT503'){this.subscription.lock({...this.subscription.state,allowed:false,reason:'maintenance'});return result;}
     if(result?.status===402||result?.error?.code==='PT402'){this.subscription.lock();return result;}
     if(this.networkError(result))this.lost();
     // An authoritative permission rejection must never unlock a stale copy.
