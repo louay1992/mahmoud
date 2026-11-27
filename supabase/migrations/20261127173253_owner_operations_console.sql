@@ -224,19 +224,19 @@ begin
  return jsonb_build_object('active',true);
 end $$;
 
-create function public.owner_backup_console(p_limit integer default 50,p_before timestamptz default null) returns jsonb
+create function public.owner_backup_console(p_limit integer default 50,p_before timestamptz default null,p_before_key text default null) returns jsonb
 language plpgsql stable security definer set search_path=public,owner_private,pg_temp as $$
 begin
  if not is_subscription_owner() then raise exception 'غير مسموح'; end if;
- return jsonb_build_object('files',(select coalesce(jsonb_agg(to_jsonb(x) order by created_at desc),'[]'::jsonb)
-  from(select object_key,created_at,size_bytes,sha256,verified,metadata from backup_catalog where p_before is null or created_at<p_before order by created_at desc limit greatest(1,least(p_limit,100)))x),
+ return jsonb_build_object('files',(select coalesce(jsonb_agg(to_jsonb(x) order by created_at desc,object_key desc),'[]'::jsonb)
+  from(select object_key,created_at,size_bytes,sha256,verified,metadata from backup_catalog where p_before is null or created_at<p_before or(created_at=p_before and object_key<coalesce(p_before_key,'')) order by created_at desc,object_key desc limit greatest(1,least(p_limit,100)))x),
   'total_files',(select count(*) from backup_catalog),
   'jobs',(select coalesce(jsonb_agg(to_jsonb(x) order by created_at desc),'[]'::jsonb) from(select id,action,object_key,status,stage,case when action='download' and (result->>'expires_at')::timestamptz<now() then result-'url' else result end result,error_code,created_at,started_at,finished_at,heartbeat_at from backup_jobs order by created_at desc limit 30)x),
   'worker',(select jsonb_build_object('last_seen_at',worker_seen_at,'maintenance',maintenance,'current_job',current_job) from runtime_state where id),
   'transport_key',(select jsonb_build_object('id',id,'jwk',public_jwk) from backup_keys order by created_at desc limit 1));
 end $$;
-revoke all on function owner_backup_console(integer,timestamptz) from public,anon;
-grant execute on function owner_backup_console(integer,timestamptz) to authenticated;
+revoke all on function owner_backup_console(integer,timestamptz,text) from public,anon;
+grant execute on function owner_backup_console(integer,timestamptz,text) to authenticated;
 
 create function public.owner_request_backup(p_action text,p_object_key text default null,p_encrypted_identity text default null,p_transport_key uuid default null,p_confirmation text default null) returns jsonb
 language plpgsql security definer set search_path=public,owner_private,pg_temp as $$
