@@ -10,13 +10,13 @@
  let epoch=0,user=null,snapshot=null,saving=false,dirty=false;
  const message=(text,kind='')=>{$('owner-message').textContent=text;$('owner-message').className='owner-message '+kind;};
  async function request(query){const controller=new AbortController();let timer;try{if(query.abortSignal)query=query.abortSignal(controller.signal);return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('انتهت مهلة الاتصال'));},15000);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
- function lock(){++epoch;user=null;snapshot=null;dirty=false;saving=false;recovering=false;globalThis.OwnerInvitations?.reset();sessionStorage.removeItem('delivery-owner-recovery');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=true;$('owner-recovery-fields').disabled=true;$('owner-recovery-form').reset();$('owner-login').hidden=false;$('owner-preview').replaceChildren();$('owner-history').replaceChildren();$('owner-subscription-form').reset();$('owner-password').value='';}
+ function lock(){++epoch;user=null;snapshot=null;dirty=false;saving=false;recovering=false;globalThis.OwnerInvitations?.reset();globalThis.OwnerDashboard?.reset();sessionStorage.removeItem('delivery-owner-recovery');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=true;$('owner-recovery-fields').disabled=true;$('owner-recovery-form').reset();$('owner-login').hidden=false;$('owner-preview').replaceChildren();$('owner-history').replaceChildren();$('owner-subscription-form').reset();$('owner-password').value='';}
  function draw(payload){
   snapshot=payload;const s=payload.subscription,form=$('owner-subscription-form');
   $('owner-preview').innerHTML=ui.card(s);for(const k of ['starts_on','valid_until','renewal_amount','currency'])form.elements[k].value=s.configured?s[k]:'';
   $('owner-updated').textContent=s.updated_at?'آخر تحديث: '+new Date(s.updated_at).toLocaleString('ar-SY'):'أدخل بيانات الاشتراك للمرة الأولى.';
   $('owner-history').innerHTML=(payload.changes||[]).map(x=>`<div class="owner-history-entry"><div><b>الصلاحية حتى ${ui.date(x.new_value.valid_until)}</b><br><span>${ui.esc(ui.amount(x.new_value.renewal_amount,x.new_value.currency))}</span></div><small>${ui.esc(new Date(x.created_at).toLocaleString('ar-SY'))}</small></div>`).join('')||'<p class="owner-muted">لا توجد تعديلات مسجلة بعد.</p>';
-  dirty=false;$('owner-fields').disabled=false;
+  dirty=false;$('owner-fields').disabled=false;globalThis.OwnerDashboard?.draw(payload);
  }
  async function load(){
   if(!user||gate.blocked)return;const seq=++epoch,who=user.id;$('owner-refresh').disabled=true;
@@ -69,11 +69,12 @@
  });
  $('owner-logout').onclick=()=>gate.logout({auth:client.auth,detach:()=>{},lock:()=>{lock();message('');},reload:()=>location.reload()});
  $('owner-refresh').onclick=()=>{if(dirty){message('توجد تعديلات غير محفوظة. احفظها أو أعد فتح الصفحة لتجاهلها.','error');return;}load();};
- $('owner-subscription-form').addEventListener('input',()=>{dirty=true;});
+ $('owner-subscription-form').addEventListener('input',()=>{dirty=globalThis.OwnerDashboard?.changed()??true;});
  $('owner-subscription-form').addEventListener('submit',async event=>{
   event.preventDefault();if(saving||!user||!snapshot||gate.blocked)return;
   const form=event.currentTarget,values=Object.fromEntries(['starts_on','valid_until','renewal_amount','currency'].map(k=>[k,form.elements[k].value.trim()]));
   const invalid=ui.validate(values);if(invalid){message(invalid,'error');return;}
+  const beforeConfirm=epoch,confirmUser=user.id;if(!await OwnerDashboard.confirm(values)||beforeConfirm!==epoch||user?.id!==confirmUser||gate.blocked)return;
   saving=true;$('owner-fields').disabled=true;$('owner-refresh').disabled=true;message('جارٍ حفظ بيانات الاشتراك…');const seq=++epoch,who=user.id;
   const {data,error}=await request(client.rpc('save_subscription',{p_starts_on:values.starts_on,p_valid_until:values.valid_until,p_renewal_amount:values.renewal_amount,p_currency:values.currency,p_expected_revision:snapshot.subscription.revision||0}));
   if(seq!==epoch||gate.blocked||user?.id!==who)return;

@@ -32,7 +32,7 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
      if(networkOffline)return route.abort('internetdisconnected');
      if(url.hostname!=='jabapvnmfdflysxfxwwf.supabase.co')return route.abort();
      calls++;if(url.searchParams.get('limit')==='42')await new Promise(resolve=>setTimeout(resolve,500));let data=[];if(denied)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Access revoked',code:'42501'})});
-     if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='working_orders'?tables.orders:rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
+     if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='subscription_access'?{schema:1,allowed:true,configured:true,expires_at:new Date(Date.now()+864e5*30).toISOString()}:rpc==='working_orders'?tables.orders:rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
      else {const table=url.pathname.split('/').pop();data=tables[table]||[];if(table==='orders'&&url.searchParams.get('fulfillment')==='eq.shipping')data=[];}
      return route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify(data)});
     });const page=context.pages()[0]||await context.newPage();page.on('pageerror',e=>errors.push(e.message));return page;

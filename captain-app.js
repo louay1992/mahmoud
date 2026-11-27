@@ -79,6 +79,7 @@ async function onlineBoot(){
   const {data:{session}} = await offline.onlineSession(sb.auth);
   if(authGate.blocked){ showLogin(); return }
   if(!session){ await offline.invalidate(); showLogin(); return }
+  if(!await offline.subscription.verify())return;
   const em=String(session.user.email||"").toLowerCase();
   const {data,error:profileError} = await sb.from("captains").select("*").eq("email",em).limit(1);
   if(profileError)throw Object.assign(new Error(profileError.message),{code:offline.networkError({error:profileError})?"NETWORK":"ACCESS_DENIED"});

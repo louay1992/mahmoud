@@ -3,6 +3,7 @@ class DeliveryOffline {
   constructor({role,storageKey,blocked=()=>false}) {
     this.role=role;this.storageKey=storageKey;this.blocked=blocked;this.generation=0;
     this.purgeKey=storageKey+'-offline-purge';this.readonly=false;this.savedAt=null;
+    this.subscription=new DeliverySubscriptionAccess(this);
     this.ready=this.open().then(async()=>{if(localStorage.getItem(this.purgeKey))await this.purge();}).catch(()=>{this.unavailable=true;});
     addEventListener('offline',()=>this.lost());
     addEventListener('online',()=>this.paint());
@@ -25,7 +26,7 @@ class DeliveryOffline {
     if(!session?.user?.id||!session.access_token)return null;
     try{const payload=JSON.parse(atob(session.access_token.split('.')[1].replaceAll('-','+').replaceAll('_','/')));return payload.sub===session.user.id?session.user.id:null;}catch(_){return null;}
   }
-  denied(){return this.readonly||navigator.onLine===false||this.blocked();}
+  denied(){return this.readonly||navigator.onLine===false||this.blocked()||this.subscription.locked;}
   error(code='OFFLINE_READ_ONLY'){return {data:null,error:{code,message:code==='OFFLINE_NOT_CACHED'?'هذه البيانات غير محفوظة على هذا الجهاز. افتحها عند الاتصال أولاً.':'هذه العملية تتطلب اتصالاً بالإنترنت. وضع عدم الاتصال للعرض فقط.'},status:0};}
   networkError(result){return !!result?.error&&(result.status===0||/fetch|network|offline|connection|timeout/i.test(result.error.message||''));}
   async attach(session,profile){
@@ -37,7 +38,7 @@ class DeliveryOffline {
     // Re-check server permissions each online boot. Old query caches are discarded,
     // including when the same account's permissions/profile have changed.
     if(previous?.owner!==owner||JSON.stringify(previous?.profile)!==JSON.stringify(profile)){await this.purge();this.savedAt=null;}
-    this.ownerId=owner;this.profile=structuredClone(profile);this.generation++;this.readonly=false;
+    this.ownerId=owner;this.profile=structuredClone({...profile,subscription:this.subscription.state});this.generation++;this.readonly=false;
     await this.tx('readwrite',s=>s.put({key:'owner',owner,profile:this.profile}));return true;
     }catch(_){this.cacheError=true;this.paint();return false;}
   }
@@ -55,6 +56,7 @@ class DeliveryOffline {
     let stored;try{stored=await this.get('snapshot');}catch(_){return false;}
     if(!stored||stored.record.schema!==1||stored.record.owner!==owner||await this.digest(stored.record)!==stored.checksum)return false;
     if(this.blocked()||localStorage.getItem(this.purgeKey))return false;
+    if(!this.subscription.restore(stored.record.profile.subscription))return true;
     this.ownerId=owner;this.profile=stored.record.profile;this.savedAt=stored.record.savedAt;this.readonly=true;this.generation++;
     await this.options.restore(structuredClone(stored.record));this.paint();return true;
   }
@@ -104,6 +106,7 @@ class DeliveryOffline {
     sessionStorage.removeItem('delivery-refresh-view-'+this.role);localStorage.removeItem(this.purgeKey);
   }
   wrap(client){
+    this.client=client;
     const offline=this,readRPC=new Set(['get_subscription','working_orders','carrier_balances','carrier_statement','my_access','staff_lookups','admin_products','dashboard_stats','admin_profit_items','marketer_return_impact']);
     const overrides=new Map();
     const builder=(target,path,write=false,signal)=>new Proxy(target,{
@@ -128,6 +131,7 @@ class DeliveryOffline {
   async execute(target,path,write,signal){
     const cancelled=()=>({data:null,error:{code:'ABORTED',message:'Read cancelled'},status:0});
     if(signal?.aborted)return cancelled();
+    if(this.subscription.locked)return {data:null,error:{code:'SUBSCRIPTION_EXPIRED',message:'انتهى اشتراك الشركة'},status:402};
     const detach=path[0]?.[0]==='rpc'&&['remove_push_subscription','remove_admin_push_subscription'].includes(path[0]?.[1]?.[0]);
     if(write&&this.denied()&&!(detach&&!this.readonly&&navigator.onLine!==false))return this.error();
     const generation=this.generation,owner=this.ownerId,key='query:'+JSON.stringify(path);
@@ -143,6 +147,7 @@ class DeliveryOffline {
       result=write?await target:await Promise.race([Promise.resolve(target),new Promise(resolve=>{timer=setTimeout(()=>{abort?.abort();resolve({data:null,error:{message:'network timeout'},status:0});},12000);onAbort=()=>{abort?.abort();resolve(cancelled());};signal?.addEventListener('abort',onAbort,{once:true});if(signal?.aborted)onAbort();})]);
     }catch(e){result={data:null,error:{message:String(e)},status:0};}finally{clearTimeout(timer);if(onAbort)signal?.removeEventListener('abort',onAbort);}
     if(signal?.aborted)return cancelled();
+    if(result?.status===402||result?.error?.code==='PT402'){this.subscription.lock();return result;}
     if(this.networkError(result))this.lost();
     // An authoritative permission rejection must never unlock a stale copy.
     if([401,403].includes(result?.status)&&owner){void this.invalidate();this.options?.login();return result;}

@@ -7,23 +7,30 @@
  async function load(){
   if(!client||!current())return;const seq=++readSequence,gen=generation;
   const {data,error}=await request(client.rpc('owner_admin_invites'));if(gen!==generation||seq!==readSequence||!current())return;
-  if(error){$('owner-invites-list').textContent='تعذّر تحميل حالة الدعوات. حدّث بيانات اللوحة للمحاولة مجددًا.';return;}
-  records=Array.isArray(data)?data:[];const labels={active:'حساب مفعّل',pending:'بانتظار تأكيد البريد والتعيين',failed:'تعذّر إرسال البريد',sending:'جارٍ تجهيز الدعوة'};
-  $('owner-invites-list').innerHTML=records.map(x=>`<div class="owner-invite-row"><div><b>${esc(x.name||'الحساب الإداري')}</b><span dir="ltr">${esc(x.email)}</span><small class="owner-invite-status ${esc(x.status)}">${labels[x.status]||'بانتظار التفعيل'}</small></div><button class="b secondary" type="button" data-resend="${esc(x.email)}" ${busy?'disabled':''}>${x.status==='active'?'إرسال رابط كلمة المرور':'إعادة إرسال رابط التفعيل'}</button></div>`).join('')||'<p class="owner-muted">لا توجد حسابات مضافة من لوحة المالك بعد.</p>';
+  if(error){document.dispatchEvent(new CustomEvent('owner-invites-change',{detail:{records,error:true}}));$('owner-invites-list').textContent='تعذّر تحميل حالة الدعوات. حدّث بيانات اللوحة للمحاولة مجددًا.';return;}
+  records=Array.isArray(data)?data:[];render();document.dispatchEvent(new CustomEvent('owner-invites-change',{detail:{records,error:false}}));
+
  }
- async function send(email,name){
+ function render(){
+  const query=$('owner-invite-search').value.trim().toLowerCase(),filter=$('owner-invite-filter').value;
+  const visible=records.filter(x=>(filter==='all'||x.status===filter)&&(!query||(x.email+' '+(x.name||'')).toLowerCase().includes(query)));
+  const labels={active:'حساب مفعّل',pending:'بانتظار تأكيد البريد والتعيين',failed:'تعذّر إرسال البريد',sending:'جارٍ تجهيز الدعوة'};
+  $('owner-invites-list').innerHTML=visible.map(x=>`<div class="owner-invite-row"><div><b>${esc(x.name||'الحساب الإداري')}</b><span dir="ltr">${esc(x.email)}</span><small class="owner-invite-status ${esc(x.status)}">${labels[x.status]||'بانتظار التفعيل'}</small>${x.email_sent_at?`<small class="owner-invite-date">آخر إرسال: ${esc(new Date(x.email_sent_at).toLocaleString('ar-SY',{timeZone:'Asia/Damascus'}))}</small>`:''}</div><button class="b secondary" type="button" data-resend="${esc(x.email)}" ${busy?'disabled':''}>${x.status==='active'?'إرسال رابط كلمة المرور':'إعادة إرسال رابط التفعيل'}</button></div>`).join('')||'<p class="owner-empty">'+(records.length?'لا توجد حسابات تطابق البحث أو الحالة.':'لا توجد حسابات مضافة من لوحة المالك بعد.')+'</p>';
+ }
+ $('owner-invite-search').oninput=render;$('owner-invite-filter').onchange=render;$('owner-invites-refresh').onclick=()=>{if(!busy)void load();};
+ async function send(email,name,fromForm=false){
   if(!client||!current()||busy)return;const gen=generation;busy=true;controls(true);message('جارٍ إرسال رسالة التحقق وتعيين كلمة المرور…');
   try{
    const {data,error}=await request(client.functions.invoke('owner-invite-admin',{body:{email,name}}));
    if(gen!==generation||!current())return;
    if(error||data?.ok!==true){let detail='تعذّر تأكيد إرسال الدعوة. حدّث الحالة قبل المحاولة مجددًا.';if(error?.context?.json){try{const body=await error.context.json();if(typeof body.error==='string')detail=body.error;}catch{}}if(gen===generation&&current())message(detail,true);return;}
-   $('owner-invite-form').reset();message('أُرسلت رسالة التحقق وتعيين كلمة المرور إلى '+data.email+'. تظهر حالة التفعيل في القائمة.');
+   if(fromForm)$('owner-invite-form').reset();message('أُرسلت رسالة التحقق وتعيين كلمة المرور إلى '+data.email+'. تظهر حالة التفعيل في القائمة.');
   }finally{if(gen===generation&&current()){busy=false;controls(false);await load();}}
  }
- $('owner-invite-form').onsubmit=event=>{event.preventDefault();void send($('owner-invite-email').value.trim(),$('owner-invite-name').value.trim());};
+ $('owner-invite-form').onsubmit=event=>{event.preventDefault();void send($('owner-invite-email').value.trim(),$('owner-invite-name').value.trim(),true);};
  $('owner-invites-list').onclick=event=>{const button=event.target.closest('button[data-resend]');if(!button)return;const record=records.find(x=>x.email===button.dataset.resend);if(record)void send(record.email,record.name||'');};
  global.OwnerInvitations={
   activate(nextClient,nextKey,valid){if(client!==nextClient||key!==nextKey){++generation;client=nextClient;key=nextKey;}current=valid;controls(busy);void load();},
-  reset(){++generation;++readSequence;client=null;key=null;current=()=>false;busy=false;records=[];$('owner-invite-form').reset();$('owner-invites-list').replaceChildren();message('');controls(true);},
+  reset(){++generation;++readSequence;client=null;key=null;current=()=>false;busy=false;records=[];$('owner-invite-search').value='';$('owner-invite-filter').value='all';$('owner-invite-form').reset();$('owner-invites-list').replaceChildren();message('');controls(true);},
  };
 })(globalThis);
