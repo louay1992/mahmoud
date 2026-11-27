@@ -1,14 +1,14 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {bootstrap,id,claims}=require('./database-fixture.cjs');
+const {bootstrap,id,claims,userId,seedAccount}=require('./database-fixture.cjs');
 test('expiry stops admin, staff and captain business access; owner renewal immediately restores it',async()=>{
  const {PGlite}=await import('@electric-sql/pglite');const db=new PGlite();
  const scalar=async(sql,args)=>Object.values((await db.query(sql,args)).rows[0])[0];
- const as=async(email,uid=id(900))=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({...JSON.parse(claims(email)),sub:uid})]);};
+ const as=async(email,uid)=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[claims(email,uid)]);};
  try{
   await db.exec('create role authenticator');await bootstrap(db);
-  await db.exec(`insert into auth.users(id,email)values('${id(901)}','owner@test'),('${id(900)}','company@test');
-   insert into subscription_owners(user_id)values('${id(901)}');insert into admins(email,perms)values('company@test',null),('staff@test',array['create_orders','view_orders']);
-   insert into captains(id,name,email)values('${id(2)}','Captain','captain@test');insert into products(id,name,price)values('${id(1)}','Product',100);`);
+  await seedAccount(db,'owner@test',id(901));for(const email of ['company@test','staff@test','captain@test'])await seedAccount(db,email);
+  await db.exec(`insert into subscription_owners(user_id)values('${id(901)}');insert into admins(email,perms,auth_user_id)values('company@test',null,'${userId('company@test')}'),('staff@test',array['create_orders','view_orders'],'${userId('staff@test')}');
+   insert into captains(id,name,email,auth_user_id)values('${id(2)}','Captain','captain@test','${userId('captain@test')}');insert into products(id,name,price)values('${id(1)}','Product',100);`);
   await as('company@test');assert.equal((await scalar('select subscription_access()')).allowed,true,'unconfigured subscriptions preserve existing operation until owner sets terms');
   await as('owner@test',id(901));await db.query("select save_subscription((now() at time zone 'Asia/Damascus')::date-30,(now() at time zone 'Asia/Damascus')::date,1000,'USD',0)");
   await as('company@test');let access=await scalar('select subscription_access()');assert.equal(access.allowed,true,'last contract day remains valid');assert.equal(access.renewal_amount,1000);

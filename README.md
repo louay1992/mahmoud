@@ -58,7 +58,7 @@ docs/                  قرارات التصميم والتحقق لكل إصد�
 - **Edge Functions**: تُقرأ الأسرار من بيئة Supabase فقط: `SUPABASE_URL`، `SUPABASE_ANON_KEY`، `APY_TOKEN` (ApyHub)، واختياريًا `APP_ORIGIN` (أصل CORS وأصل روابط الإشعارات، افتراضيًا `https://hhyyw.netlify.app`). أمّا الإعدادات الحسّاسة لخدمة Firebase فتُضاف من لوحة Supabase وحدها، ولا تُكتب قيمها في المستودع ولا في هذه الوثيقة.
 - **قيم فارغة للتوثيق**: `.env.example` يسرد أسماء الأسرار بقيم فارغة فقط؛ لا يُوضع فيه أي قيمة حقيقية.
 - **النشر**: `netlify.toml` ينشر `dist/`، ويضيف تحويلات `/admin` و`/captain`، ورؤوس عدم التخزين المؤقت لملفات الإصدار، ورؤوس أمان لكل المسارات: `X-Content-Type-Options: nosniff`، `Referrer-Policy: strict-origin-when-cross-origin`، `X-Frame-Options: DENY`، `Permissions-Policy` تعطّل الكاميرا والميكروفون والموقع والدفع، و`Content-Security-Policy` تقصر المصادر على `self` و`*.supabase.co` (HTTPS وWebSocket) و`raw.githubusercontent.com` (بيان تحديث APK) وتمنع الإطارات. تُبقي CSP `'unsafe-inline'` للنصوص والأنماط لأن الصفحات تستخدم `<style>` ومعالجات `onclick` ونافذة طباعة تكتب HTML داخليًا؛ لذلك تبقى الحماية الفعلية من XSS في `esc()` لكل إدخال مستخدم، وCSP هنا حاجز ضد المصادر الخارجية.
-- **كلمة المرور**: `admin-set-password` تقبل الطلبات من `APP_ORIGIN` وحده (التحقق من `Origin` يسبق الردّ على `OPTIONS`، والاستجابة تحمل `Access-Control-Allow-Origin` مساويًا له لا `*`)، والحد الأدنى 8 محارف داخل الدالة وفي `admin-app.js`. إعداد Supabase Auth `password_min_length` على 8 أيضًا، ليُطبَّق الحد نفسه على `auth.updateUser` من العميل.
+- **كلمة المرور**: `admin-set-password` تقبل أصلَي تطبيقات الإنتاج المحدّدين `https://hhyyw.netlify.app` و`https://applications.nature-care.net`. إذا ضُبط `APP_ORIGIN` لبيئة منفصلة، تقبل أصل تلك البيئة فقط. الحد الأدنى 8 محارف داخل الدالة وفي `admin-app.js` وإعداد Supabase Auth `password_min_length`.
 
 ## قاعدة البيانات
 
@@ -108,11 +108,11 @@ npx supabase functions deploy webpage-text
 
 تحقق بعد كل نشر أن الإعداد مطابق: `verify_jwt` يجب أن يكون `false` للدوال الأربع.
 
-`admin-set-password` ترفض أي `Origin` غير `APP_ORIGIN` قبل الردّ على `OPTIONS`، وتحمل استجابتها `Access-Control-Allow-Origin` مساويًا له بدل `*`. تحقق بعد النشر:
+تتحقق `admin-set-password` و`native-device` و`webpage-text` من أصل الطلب قبل الردّ على `OPTIONS` وتعيد أصل التطبيق المقبول في `Access-Control-Allow-Origin`. للتحقق بعد النشر، افحص كلا أصلَي التطبيق في الإنتاج وأصلًا خارجيًا.
 
 ```bash
 curl -si -X OPTIONS "$SUPABASE_URL/functions/v1/admin-set-password" -H "Origin: https://example.com" | head -1   # 403
-curl -si -X OPTIONS "$SUPABASE_URL/functions/v1/admin-set-password" -H "Origin: $APP_ORIGIN" | head -1          # 200
+curl -si -X OPTIONS "$SUPABASE_URL/functions/v1/admin-set-password" -H "Origin: https://applications.nature-care.net" | head -1   # 200
 ```
 
 `send-push` يولّد مفاتيح VAPID تلقائيًا ويحفظها في `push_config`، ويتحقق من كلمة سرّ مشتركة؛ لا تصل هذه القيم إلى أي تطبيق.

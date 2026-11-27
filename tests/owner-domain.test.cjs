@@ -17,6 +17,12 @@ test('owner host serves the dashboard at its root and legacy owner bookmarks red
     assert.equal(request(`https://${oldHost}/account-setup.html`), undefined);
   }
   assert.equal(request('https://owner.nature-care.net/owner.html'), undefined);
+  for (const path of ['/admin', '/captain/', '/account-setup.html']) {
+    const response = request(`https://owner.nature-care.net${path}?code=example`);
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), `https://applications.nature-care.net${path.replace(/\/$/, '')}?code=example`);
+  }
+  assert.equal(request('https://hhyyw.netlify.app/captain'), undefined);
 });
 
 test('owner account functions allow the new origin without granting anonymous access', async () => {

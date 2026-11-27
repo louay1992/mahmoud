@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {bootstrap, id, claims} = require('./database-fixture.cjs');
+const {bootstrap, id, claims, userId, seedAccount} = require('./database-fixture.cjs');
 
 test('USD pricing reprices the catalogue and preserves existing order amounts', async () => {
   const {PGlite} = await import('@electric-sql/pglite');
@@ -20,7 +20,8 @@ test('USD pricing reprices the catalogue and preserves existing order amounts', 
   );
   try {
     await bootstrap(db);
-    await db.exec(`insert into admins(email,perms) values ('admin@test',null), ('staff@test',array['create_orders']);
+    for(const email of ['admin@test','staff@test'])await seedAccount(db,email);
+    await db.exec(`insert into admins(email,perms,auth_user_id) values ('admin@test',null,'${userId('admin@test')}'), ('staff@test',array['create_orders'],'${userId('staff@test')}');
       insert into products(id,name,price,cost) values ('${id(1)}','منتج',200,100), ('${id(2)}','منتج ثابت',500,300)`);
     await as('admin@test');
     await assert.rejects(db.query("select save_catalog_product($1,'منتج',null,100,2.35)",[id(1)]), /حدّد سعر صرف/);

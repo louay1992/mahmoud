@@ -2,9 +2,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),http=require('node:http');
 const {execFileSync}=require('node:child_process'),{chromium}=require('playwright');
 const root=process.cwd(),uid='00000000-0000-0000-0000-000000000001',captainId='00000000-0000-0000-0000-000000000002';
-const token=id=>Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:id,exp:Math.floor(Date.now()/1000)+86400})).toString('base64url')+'.fixture';
+const token=(id,exp=Math.floor(Date.now()/1000)+86400)=>Buffer.from('{}').toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:id,exp})).toString('base64url')+'.fixture';
 const session=id=>({access_token:token(id),refresh_token:'fixture-refresh',expires_at:Math.floor(Date.now()/1000)+86400,expires_in:86400,token_type:'bearer',user:{id,email:'offline@example.test',aud:'authenticated',role:'authenticated',app_metadata:{},user_metadata:{}}});
-const captain={id:captainId,email:'offline@example.test',name:'كابتن محفوظ',active:true,warehouse_id:'warehouse-1'};
+const captain={id:captainId,auth_user_id:uid,email:'offline@example.test',name:'كابتن محفوظ',active:true,warehouse_id:'warehouse-1'};
 const product={id:'product-1',name:'منتج محفوظ',price:50000,cost:25000,active:true};
 const order={id:'order-1',order_no:501,fulfillment:'delivery',status:'assigned',captain_id:captainId,customer_name:'عميل محفوظ للاختبار',customer_phone:'0944000000',customer_address:'دمشق',created_at:'2026-11-25T09:00:00Z',total:55000,items_total:50000,delivery_fee:5000,order_items:[{id:'item-1',qty:1,unit_price:50000,products:{name:product.name}}]};
 const tables={captains:[captain],orders:[order],settings:[{key:'business_name',value:'متجر محفوظ'},{key:'currency',value:'ل.س'}],warehouses:[{id:'warehouse-1',name:'مستودع محفوظ',is_main:true}],stock:[{warehouse_id:'warehouse-1',product_id:product.id,qty:12,products:{name:product.name}}],captain_balances:[{captain_id:captainId,balance:55000,delivered_count:1}],stock_movements:[{id:'movement-1',qty:2,kind:'invoice',warehouse_id:'warehouse-1',product_id:product.id,created_at:order.created_at,products:{name:product.name}}]};
@@ -32,8 +32,10 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
      if(networkOffline)return route.abort('internetdisconnected');
      if(url.hostname!=='jabapvnmfdflysxfxwwf.supabase.co')return route.abort();
      calls++;if(url.searchParams.get('limit')==='42')await new Promise(resolve=>setTimeout(resolve,500));let data=[];if(denied)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Access revoked',code:'42501'})});
-     if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='subscription_access'?{schema:1,allowed:true,configured:true,expires_at:new Date(Date.now()+864e5*30).toISOString()}:rpc==='working_orders'?tables.orders:rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
+     if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='subscription_access'?{schema:1,allowed:true,configured:true,checked_at:new Date().toISOString(),expires_at:new Date(Date.now()+864e5*30).toISOString()}:rpc==='working_orders'?tables.orders:rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
      else {const table=url.pathname.split('/').pop();data=tables[table]||[];if(table==='orders'&&url.searchParams.get('fulfillment')==='eq.shipping')data=[];}
+     const offset=Number(url.searchParams.get('offset')||0),limit=Number(url.searchParams.get('limit')||0);
+     if(Array.isArray(data)&&limit>0)data=data.slice(offset,offset+limit);
      return route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify(data)});
     });const page=context.pages()[0]||await context.newPage();page.on('pageerror',e=>errors.push(e.message));return page;
    }
@@ -49,6 +51,10 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    }
    // Cache a separately loaded page and distinguish it from an unopened page.
    await page.evaluate(async()=>{const r=await sb.from('stock_movements').select('*').range(0,19);if(r.error)throw Error(r.error.message);});
+   const cacheKey=await page.evaluate(async()=> 'query:'+await offline.digest([['from',['stock_movements']],['select',['*']],['range',[0,19]]]));
+   await page.reload();await page.waitForFunction(()=>!!offline.savedAt);
+   assert.ok(await page.evaluate(key=>offline.get(key).then(item=>item?.body instanceof ArrayBuffer&&!item.result),cacheKey),'an unchanged verified role retains encrypted detail rows across online boots');
+   assert.ok(await page.evaluate(()=>offline.get('owner').then(item=>item.cryptoKey.extractable===false)));
    await page.waitForFunction(async()=>{const names=await caches.keys();return names.some(n=>n.startsWith('offline-bundle-'));});
    await page.evaluate(()=>navigator.serviceWorker.ready);
    // A failed package update must keep the previous complete shell intact.
@@ -56,8 +62,8 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    const installation=await page.evaluate(async()=>{const registration=await navigator.serviceWorker.ready;return new Promise(resolve=>{const channel=new MessageChannel();channel.port1.onmessage=e=>resolve(e.data);registration.active.postMessage('PREPARE_OFFLINE',[channel.port2]);});});
    assert.equal(installation.ok,false);assert.equal(await page.evaluate(()=>caches.keys().then(keys=>keys.some(k=>k.endsWith('b'.repeat(64))))),false);shellBroken=false;fakeRelease=false;
    await page.close();await context.close();
-   // Cold browser process, expired access token, no network, same private storage.
-   page=await launch();await page.goto(origin+'/');await page.evaluate(role=>{const key='sb-'+role+'-auth',s=JSON.parse(localStorage.getItem(key));s.expires_at=1;localStorage.setItem(key,JSON.stringify(s));},role);
+   // Cold browser process, bounded verified session, no network, same private storage.
+   page=await launch();await page.goto(origin+'/');
    networkOffline=true;await context.setOffline(true);await page.goto(origin+'/'+role);await page.waitForFunction(()=>offline.readonly&&!!offline.savedAt);
    await page.locator('#delivery-offline-state').waitFor();await page.locator('#splash').waitFor({state:'hidden'});assert.ok(await page.locator('#main').innerText());
    await page.evaluate(()=>go('stock'));assert.match(await page.locator('#main').innerText(),/منتج محفوظ/);
@@ -77,7 +83,7 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    }));
    assert.equal(results.cached.data[0].id,'movement-1');assert.equal(results.missing.error.code,'OFFLINE_NOT_CACHED');
    for(const name of ['rpc','insert','auth'])assert.equal(results[name].error.code,'OFFLINE_READ_ONLY');assert.equal(calls,before);
-   assert.equal(await page.evaluate(async()=>{const original=await offline.get('snapshot'),broken=structuredClone(original);broken.record.data.orders[0].customer_name='CORRUPT';await offline.tx('readwrite',s=>s.put(broken));const restored=await offline.restore();await offline.tx('readwrite',s=>s.put(original));return restored;}),false);
+   assert.equal(await page.evaluate(async()=>{const original=await offline.get('snapshot'),broken=structuredClone(original);new Uint8Array(broken.body)[0]^=1;await offline.tx('readwrite',s=>s.put(broken));const restored=await offline.restore();await offline.tx('readwrite',s=>s.put(original));return restored;}),false);
    await page.evaluate(()=>document.getElementById('toast')?.classList.remove('on'));await page.screenshot({path:path.join(root,'test-results',role+'-offline.png'),fullPage:true,animations:'disabled'});
    // Account mismatch cannot restore the old data, even when a session is present.
    await page.evaluate(({role,s})=>localStorage.setItem('sb-'+role+'-auth',JSON.stringify(s)),{role,s:session('00000000-0000-0000-0000-000000000099')});
@@ -94,16 +100,23 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
    denied=true;await page.evaluate(()=>offline.lost());await page.evaluate(()=>offline.retry());
    await page.locator('#login').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>offline.ownerId),null);
-   // A cold offline start cannot restore a snapshot whose verified subscription has expired.
+   // A cold offline start cannot use a snapshot with an expired access token.
    denied=false;await page.reload();await page.waitForFunction(()=>!!offline.savedAt);
-   await page.evaluate(async()=>{const snapshot=await offline.get('snapshot');snapshot.record.profile.subscription.expires_at=new Date(Date.now()-864e5).toISOString();snapshot.checksum=await offline.digest(snapshot.record);await offline.tx('readwrite',s=>s.put(snapshot));});
-   networkOffline=true;await context.setOffline(true);await page.reload();await page.locator('#subscription-lock').waitFor();
+   await page.evaluate(({role,session})=>localStorage.setItem('sb-'+role+'-auth',JSON.stringify(session)),{role,session:{...session(uid),access_token:token(uid,1)}});
+   networkOffline=true;await context.setOffline(true);await page.reload();await page.locator('#subscription-lock,#login').filter({visible:true}).first().waitFor();
+   assert.equal(await page.locator('#app').isVisible(),false);await page.waitForFunction(async()=>!await offline.get('snapshot'));
+   networkOffline=false;await context.setOffline(false);await page.goto(origin+'/');await page.evaluate(({role,session})=>localStorage.setItem('sb-'+role+'-auth',JSON.stringify(session)),{role,session:session(uid)});
+   // A short remaining subscription expires with the view already open and the device disconnected.
+   await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
+   await page.clock.install();await page.evaluate(()=>{const state=offline.subscription.state;offline.subscription.accept({...state,expires_at:new Date(Date.now()+500+(Number(state.clock_offset)||0)).toISOString()});});
+   networkOffline=true;await context.setOffline(true);await page.clock.fastForward(700);await page.locator('#subscription-lock').waitFor();
+   assert.match(await page.locator('#subscription-lock').innerText(),/انتهى اشتراك الشركة/);
    assert.equal(await page.locator('#app').isVisible(),false);await page.waitForFunction(async()=>!await offline.get('snapshot'));
    assert.equal(await page.evaluate(()=>document.getElementById('main').textContent),'');
    assert.deepEqual(errors,[]);await context.close();context=null;
    // Only remove the known generated profile in our test workspace.
    assert.ok(path.resolve(profile).startsWith(path.join(root,'.tools')+path.sep));await fs.rm(profile,{recursive:true,force:true});
-   console.log(role+': cold offline startup, expired session, exact cached queries, missing data, blocked writes, account isolation, logout purge, revoked access and expired-subscription snapshot denial passed');
+   console.log(role+': encrypted cache continuity, cold offline startup, expired session denial, exact cached queries, blocked writes, account isolation, logout purge, revocation and offline expiry passed');
   }
  }finally{await context?.close();await new Promise(r=>server.close(r));}
 })().catch(error=>{console.error(error);process.exitCode=1});

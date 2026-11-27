@@ -5,12 +5,13 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['scripts/backup/operations.py', 'supabase/migrations/*owner_operations_console.sql', '.github/workflows/owner-operations.yml']
+    paths: ['scripts/backup/**', 'supabase/migrations/*owner_operations_console.sql', 'supabase/migrations/*owner_recovery_safety.sql', '.github/workflows/owner-operations.yml']
 permissions:
   contents: read
 concurrency:
   group: delivery-production-backup
   cancel-in-progress: false
+  queue: max
 jobs:
   operations:
     if: github.ref == 'refs/heads/main'

@@ -14,14 +14,18 @@ const unauthed=await fetch(base+'native-device',{method:'POST',headers:{'content
 assert.equal(unauthed.status,403); summary.nativeConfiguredAndRejectsUnauthorized='passed';
 const blocked=await fetch(base+'native-device',{method:'OPTIONS',headers:{origin:'https://example.com'}});
 assert.equal(blocked.status,403); summary.foreignOriginRejected='passed';
-// admin-set-password: preflight من أصل آخر يُرفض، ومن أصل التطبيق يُجاب بأصله لا بـ'*'.
+// Business app preflight allows both exact production origins.
 const passwordForeign=await fetch(base+'admin-set-password',{method:'OPTIONS',headers:{origin:'https://example.com'}});
 assert.equal(passwordForeign.status,403);
-const passwordAllowed=await fetch(base+'admin-set-password',{method:'OPTIONS',headers:{origin:'https://hhyyw.netlify.app'}});
-assert.equal(passwordAllowed.status,200);
-assert.equal(passwordAllowed.headers.get('access-control-allow-origin'),'https://hhyyw.netlify.app');
-assert.equal(passwordForeign.headers.get('access-control-allow-origin'),'https://hhyyw.netlify.app');
-summary.adminPasswordOriginPinned='passed';
+for(const fn of ['admin-set-password','native-device','webpage-text']){
+ for(const origin of ['https://hhyyw.netlify.app','https://applications.nature-care.net']){
+  const allowed=await fetch(base+fn,{method:'OPTIONS',headers:{origin}});
+  assert.equal(allowed.status,200);
+  assert.equal(allowed.headers.get('access-control-allow-origin'),origin);
+  assert.match(allowed.headers.get('vary')||'',/\bOrigin\b/i);
+ }
+}
+summary.businessAppOrigins='passed';
 if(process.argv[2]){
  const account=parseFcmAccount(fs.readFileSync(process.argv[2],'utf8')); assert.ok(account);
  let oauthOk=false,validation;

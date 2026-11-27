@@ -32,9 +32,9 @@ if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(T
    };return query;
   };
   sb.rpc=(name,args)=>{
-   fixtures.calls.push({rpc:name,args});let signal;const query={abortSignal:s=>{signal=s;return query;},then:(resolve,reject)=>{
-    const isWrite=['create_order','create_shipment'].includes(name);if(isWrite&&fixtures.hold)return new Promise(done=>{fixtures.complete=done;signal?.addEventListener('abort',()=>done({data:null,error:{message:'aborted'}}),{once:true});}).then(resolve,reject);
-    return Promise.resolve({data:name==='working_orders'?fixtures.tables.orders:name==='carrier_balances'?[]:name==='admin_profit_items'?profitItems:name==='admin_products'?D.products:name==='dashboard_stats'?D.stats:isWrite?fixtures.created:[],error:isWrite?fixtures.writeError:null}).then(resolve,reject);
+   fixtures.calls.push({rpc:name,args});let signal, range;const query={order:()=>query,range:(from,to)=>{range=[from,to];return query;},abortSignal:s=>{signal=s;return query;},then:(resolve,reject)=>{
+    const isWrite=name==='submit_order';if(isWrite&&fixtures.hold)return new Promise(done=>{fixtures.complete=done;signal?.addEventListener('abort',()=>done({data:null,error:{message:'aborted'}}),{once:true});}).then(resolve,reject);
+    return Promise.resolve({data:name==='working_orders'?fixtures.tables.orders:name==='carrier_balances'?[]:name==='admin_profit_items'?(range?profitItems.slice(range[0],range[1]+1):profitItems):name==='admin_products'?D.products:name==='dashboard_stats'?D.stats:isWrite?fixtures.created:[],error:isWrite?fixtures.writeError:null}).then(resolve,reject);
    }};return query;
   };
   sb.auth.getSession=async()=>({data:{session:{user:{email:'admin@example.test'},access_token:'fixture-only'}}});

@@ -1,4 +1,5 @@
 import type { NativeTarget, PushPayload } from "./fcm.ts";
+import { businessRequestOrigin, normalizeAppOrigin } from "./app-origins.ts";
 type Account = { userId: string; captainId: string | null; email: string | null };
 type Services = {
   configured?: boolean;
@@ -9,19 +10,20 @@ type Services = {
 };
 export function nativeDeviceHandler(services: Services) {
   return async (request: Request) => {
-    const origin = request.headers.get("origin");
-    const allowedOrigin = services.allowedOrigin || "https://hhyyw.netlify.app";
-    const headers = { "content-type": "application/json", "access-control-allow-origin": allowedOrigin,
-      "access-control-allow-headers": "authorization,apikey,content-type", "access-control-allow-methods": "POST, OPTIONS" };
+    const allowedOrigin = businessRequestOrigin(request.headers.get("origin"), services.allowedOrigin);
+    const headers = { "content-type": "application/json", "access-control-allow-origin": allowedOrigin || normalizeAppOrigin(services.allowedOrigin),
+      "access-control-allow-headers": "authorization,apikey,content-type", "access-control-allow-methods": "POST, OPTIONS",
+      "cache-control": "no-store", "vary": "Origin" };
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
-    if (origin && origin !== allowedOrigin) return json({ error: "forbidden origin" }, 403);
+    if (!allowedOrigin) return json({ error: "forbidden origin" }, 403);
     if (request.method === "OPTIONS") return new Response(null, { headers });
     if (request.method !== "POST") return json({ error: "method" }, 405);
     try {
       const text = await request.text();
       if (text.length > 16000) return json({ error: "request too large" }, 413);
       const body = JSON.parse(text);
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.installation_id || "") ||
+      if (!body || typeof body !== "object" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.installation_id || "") ||
         !/^[0-9a-f]{64}$/.test(body.secret || "") || !["admin", "captain"].includes(body.app_scope) ||
         !["bind", "sync", "unbind", "test"].includes(body.action)) return json({ error: "invalid device" }, 400);
       if (["bind", "sync"].includes(body.action) && (typeof body.fcm_token !== "string" || body.fcm_token.length < 20 || body.fcm_token.length > 4096)) return json({ error: "invalid token" }, 400);

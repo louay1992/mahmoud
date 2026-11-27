@@ -21,6 +21,7 @@
  async function send(email,name,fromForm=false){
   if(!client||!current()||busy)return;const gen=generation;busy=true;controls(true);message('جارٍ إرسال رسالة التحقق وتعيين كلمة المرور…');
   try{
+   if(!await OwnerMfa.ensure()||gen!==generation||!current()){if(gen===generation)message('');return;}
    const {data,error}=await request(client.functions.invoke('owner-invite-admin',{body:{email,name}}));
    if(gen!==generation||!current())return;
    if(error||data?.ok!==true){let detail='تعذّر تأكيد إرسال الدعوة. حدّث الحالة قبل المحاولة مجددًا.';if(error?.context?.json){try{const body=await error.context.json();if(typeof body.error==='string')detail=body.error;}catch{}}if(gen===generation&&current())message(detail,true);return;}
@@ -33,7 +34,8 @@
   editing={record,deleting};dialog.innerHTML=`<form id="owner-account-form" class="owner-confirm-inner"><h2>${deleting?'حذف الحساب الإداري':'تعديل معلومات الإداري'}</h2><p>${deleting?'سيُلغى وصول الحساب ودعواته، وتُحذف بيانات تسجيل دخوله. تبقى الطلبات والسجلات التشغيلية محفوظة.':'تعديل البريد يرسل رابطًا للبريد الجديد. تنتقل الصلاحيات بعد تأكيده وتعيين كلمة المرور؛ يبقى الحساب الحالي حتى ذلك الوقت.'}</p><p dir="ltr">${esc(record.email)}</p>${deleting?'<label>اكتب البريد لتأكيد الحذف<input name="confirmation" type="email" dir="ltr" required autocomplete="off"></label>':`<label>الاسم<input name="name" maxlength="100" value="${esc(record.name||'')}"></label><label>البريد الإلكتروني<input name="email" type="email" dir="ltr" required maxlength="254" value="${esc(record.email)}"></label>`}<p id="owner-account-message" role="status"></p><div class="owner-form-actions"><button class="b ${deleting?'danger':''}" type="submit">${deleting?'تأكيد الحذف':'حفظ التعديل'}</button><button class="b secondary" type="button" id="owner-account-cancel">إلغاء</button></div></form>`;
   dialog.querySelector('#owner-account-cancel').onclick=()=>dialog.close();dialog.querySelector('form').onsubmit=async event=>{
    event.preventDefault();if(busy||!current())return;const gen=generation,form=event.currentTarget;busy=true;controls(true);form.querySelectorAll('button').forEach(b=>b.disabled=true);
-   try{const {data,error}=await request(client.functions.invoke('owner-manage-admin',{body:{action:deleting?'delete':'update',email:record.email,name:form.elements.name?.value||'',new_email:form.elements.email?.value||record.email,confirmation:form.elements.confirmation?.value||''}}));if(gen!==generation||!current())return;
+   try{if(!await OwnerMfa.ensure()||gen!==generation||!current())return;
+    const {data,error}=await request(client.functions.invoke('owner-manage-admin',{body:{action:deleting?'delete':'update',email:record.email,name:form.elements.name?.value||'',new_email:form.elements.email?.value||record.email,confirmation:form.elements.confirmation?.value||''}}));if(gen!==generation||!current())return;
     let detail=data?.message||data?.error;if(error?.context?.json)try{detail=(await error.context.json()).error;}catch{}
     if(error||data?.ok!==true){dialog.querySelector('#owner-account-message').textContent=detail||'تعذّر تأكيد العملية. حدّث القائمة قبل المحاولة مجددًا.';if(data?.access_revoked)message(detail,true);return;}
     dialog.close();message(detail||'تم حفظ العملية');

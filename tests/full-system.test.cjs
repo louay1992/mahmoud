@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');const path=require('node:path');
 const root=path.resolve(__dirname,'..');
-const {bootstrap,id,claims}=require('./database-fixture.cjs');
+const {bootstrap,id,claims,userId,seedAccount,seedSession}=require('./database-fixture.cjs');
 test('full schema: roles, pricing snapshots, warehouses, delivery, returns, shipping, ledgers and notification routes',async t=>{
  const {PGlite}=await import('@electric-sql/pglite');const db=new PGlite();
  const as=async(email)=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[claims(email)]);};
@@ -13,11 +13,12 @@ test('full schema: roles, pricing snapshots, warehouses, delivery, returns, ship
  const create=async(name,cap=id(2),qty=2,marketer=id(5))=>(await rows('select create_order($1,$2,null,$3::uuid,$4::jsonb,null,null,$5::uuid,$6) id',[name,'0900000000',cap,items(qty),marketer,'دمشق']))[0].id;
  try{
   await bootstrap(db);assert.equal(await scalar("select to_regprocedure('public.create_order(text,text,text,uuid,jsonb,text,text,uuid)')"),null,'retired eight-argument RPC must not shadow the current order API');await owner();
-  await db.exec(`insert into admins(email,perms) values('boss@test',null),('staff@test',array['view_orders','create_orders']);
+  for(const email of ['boss@test','staff@test','captain@test','ordinary@test'])await seedAccount(db,email);
+  await db.exec(`insert into admins(email,perms,auth_user_id) values('boss@test',null,'${userId('boss@test')}'),('staff@test',array['view_orders','create_orders'],'${userId('staff@test')}');
    insert into products(id,name,price,cost) values('${id(1)}','منتج اختبار',60,40);
    update warehouses set is_main=false;
    insert into warehouses(id,name,is_main) values('${id(3)}','رئيسي',true),('${id(4)}','ثانوي',false);
-   insert into captains(id,name,email,warehouse_id,delivery_fee) values('${id(2)}','كابتن اختبار','captain@test','${id(3)}',5);
+   insert into captains(id,name,email,warehouse_id,delivery_fee,auth_user_id) values('${id(2)}','كابتن اختبار','captain@test','${id(3)}',5,'${userId('captain@test')}');
    insert into marketers(id,name) values('${id(5)}','مسوّقة اختبار');
    insert into stock values('${id(3)}','${id(1)}',20);
    insert into carriers(id,name) values('${id(6)}','شركة اختبار');
@@ -36,7 +37,7 @@ test('full schema: roles, pricing snapshots, warehouses, delivery, returns, ship
    await owner();await db.exec(`update captains set active=false where id='${id(2)}'`);
    await as('captain@test');assert.equal(await scalar('select my_captain_id()'),null);
    await assert.rejects(db.query("select set_order_status($1,'in_delivery',null)",[order]),/غير مسموح/);
-   await owner();await db.exec(`update captains set active=true where id='${id(2)}'`);
+   await owner();await db.exec(`update captains set active=true where id='${id(2)}'`);await seedSession(db,userId('captain@test'));
   });
   await t.test('catalogue changes and editing preserve original capital and merchant cost',async()=>{
    assert.deepEqual(await rows('select capital::text,cost::text from order_item_capital c join order_items i on i.id=c.item_id where i.order_id=$1',[order]),[{capital:'60.00',cost:'40'}]);

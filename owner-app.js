@@ -11,7 +11,7 @@
  let epoch=0,user=null,snapshot=null,saving=false,dirty=false;
  const message=(text,kind='')=>{$('owner-message').textContent=text;$('owner-message').className='owner-message '+kind;};
  async function request(query){const controller=new AbortController();let timer;try{if(query.abortSignal)query=query.abortSignal(controller.signal);return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('انتهت مهلة الاتصال'));},15000);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
- function lock(){++epoch;user=null;snapshot=null;dirty=false;saving=false;recovering=false;globalThis.OwnerInvitations?.reset();globalThis.OwnerOperations?.reset();globalThis.OwnerDashboard?.reset();sessionStorage.removeItem('delivery-owner-recovery');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=true;$('owner-recovery-fields').disabled=true;$('owner-recovery-form').reset();$('owner-login').hidden=false;$('owner-preview').replaceChildren();$('owner-history').replaceChildren();$('owner-subscription-form').reset();$('owner-password').value='';}
+ function lock(){++epoch;user=null;snapshot=null;dirty=false;saving=false;recovering=false;OwnerMfa.reset();globalThis.OwnerInvitations?.reset();globalThis.OwnerOperations?.reset();globalThis.OwnerDashboard?.reset();sessionStorage.removeItem('delivery-owner-recovery');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=true;$('owner-recovery-fields').disabled=true;$('owner-recovery-form').reset();$('owner-login').hidden=false;$('owner-preview').replaceChildren();$('owner-history').replaceChildren();$('owner-subscription-form').reset();$('owner-password').value='';}
  function draw(payload){
   snapshot=payload;const s=payload.subscription,form=$('owner-subscription-form');
   $('owner-preview').innerHTML=ui.card(s);for(const k of ['starts_on','valid_until','renewal_amount','currency'])form.elements[k].value=s.configured?s[k]:'';
@@ -39,6 +39,7 @@
   if(access.data!==true){lock();message('هذا الحساب لا يملك صلاحية لوحة المالك. استخدم حساب المالك المعتمد.','error');return;}
   user=data.session.user;$('owner-password').value='';$('owner-login').hidden=true;
   if(recovering){gate.completeLogin();sessionStorage.setItem('delivery-owner-recovery','1');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=false;$('owner-recovery-fields').disabled=false;message('تم التحقق من رابط البريد. عيّن كلمة المرور الجديدة.');return;}
+  const who=user.id;OwnerMfa.activate(client,()=>user?.id===who&&!gate.blocked&&!recovering);
   $('owner-recovery').hidden=true;$('owner-dashboard').hidden=false;$('owner-fields').disabled=true;await load();
  }
  // Do not await SDK calls inside this callback: Supabase holds its auth lock while notifying listeners.
@@ -75,7 +76,7 @@
   event.preventDefault();if(saving||!user||!snapshot||gate.blocked)return;
   const form=event.currentTarget,values=Object.fromEntries(['starts_on','valid_until','renewal_amount','currency'].map(k=>[k,form.elements[k].value.trim()]));
   const invalid=ui.validate(values);if(invalid){message(invalid,'error');return;}
-  const beforeConfirm=epoch,confirmUser=user.id;if(!await OwnerDashboard.confirm(values)||beforeConfirm!==epoch||user?.id!==confirmUser||gate.blocked)return;
+  const beforeConfirm=epoch,confirmUser=user.id;if(!await OwnerDashboard.confirm(values)||!await OwnerMfa.ensure()||beforeConfirm!==epoch||user?.id!==confirmUser||gate.blocked)return;
   saving=true;$('owner-fields').disabled=true;$('owner-refresh').disabled=true;message('جارٍ حفظ بيانات الاشتراك…');const seq=++epoch,who=user.id;
   const {data,error}=await request(client.rpc('save_subscription',{p_starts_on:values.starts_on,p_valid_until:values.valid_until,p_renewal_amount:values.renewal_amount,p_currency:values.currency,p_expected_revision:snapshot.subscription.revision||0}));
   if(seq!==epoch||gate.blocked||user?.id!==who)return;

@@ -94,7 +94,7 @@ jobs:
           curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
           echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/recovery-pgdg.list >/dev/null
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-17 python3-psycopg2 python3-boto3 python3-cryptography
+          sudo apt-get install -y -qq postgresql-17 python3-psycopg2 python3-boto3 python3-cryptography age
           echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
       - run: node tests/prepare-owner-restore.cjs
         env:

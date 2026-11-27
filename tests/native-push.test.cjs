@@ -107,6 +107,11 @@ test('FCM endpoint rejects account binding without authorization and cross-origi
   assert.equal(unauthorized.status, 403); assert.equal(actions, 0);
   const crossOrigin = await handler(new Request('https://api.example', { method: 'POST', headers: { origin: 'https://evil.example' }, body: JSON.stringify(data) }));
   assert.equal(crossOrigin.status, 403); assert.equal(actions, 0);
+  const origin = 'https://applications.nature-care.net';
+  const preflight = await handler(new Request('https://api.example', { method: 'OPTIONS', headers: { origin } }));
+  assert.equal(preflight.status, 200); assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+  const unauthenticated = await handler(new Request('https://api.example', { method: 'POST', headers: { origin }, body: JSON.stringify(data) }));
+  assert.equal(unauthenticated.status, 403); assert.equal(actions, 0);
 });
 test('FCM activation is refused while the server service account is missing', async()=>{
   const {nativeDeviceHandler}=await import('../supabase/functions/_shared/native-device.ts');
