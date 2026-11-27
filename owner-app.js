@@ -10,7 +10,7 @@
  let epoch=0,user=null,snapshot=null,saving=false,dirty=false;
  const message=(text,kind='')=>{$('owner-message').textContent=text;$('owner-message').className='owner-message '+kind;};
  async function request(query){const controller=new AbortController();let timer;try{if(query.abortSignal)query=query.abortSignal(controller.signal);return await Promise.race([Promise.resolve(query),new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('انتهت مهلة الاتصال'));},15000);})]);}catch(error){return {data:null,error};}finally{clearTimeout(timer);}}
- function lock(){++epoch;user=null;snapshot=null;dirty=false;saving=false;recovering=false;globalThis.OwnerInvitations?.reset();globalThis.OwnerDashboard?.reset();sessionStorage.removeItem('delivery-owner-recovery');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=true;$('owner-recovery-fields').disabled=true;$('owner-recovery-form').reset();$('owner-login').hidden=false;$('owner-preview').replaceChildren();$('owner-history').replaceChildren();$('owner-subscription-form').reset();$('owner-password').value='';}
+ function lock(){++epoch;user=null;snapshot=null;dirty=false;saving=false;recovering=false;globalThis.OwnerInvitations?.reset();globalThis.OwnerOperations?.reset();globalThis.OwnerDashboard?.reset();sessionStorage.removeItem('delivery-owner-recovery');$('owner-dashboard').hidden=true;$('owner-recovery').hidden=true;$('owner-recovery-fields').disabled=true;$('owner-recovery-form').reset();$('owner-login').hidden=false;$('owner-preview').replaceChildren();$('owner-history').replaceChildren();$('owner-subscription-form').reset();$('owner-password').value='';}
  function draw(payload){
   snapshot=payload;const s=payload.subscription,form=$('owner-subscription-form');
   $('owner-preview').innerHTML=ui.card(s);for(const k of ['starts_on','valid_until','renewal_amount','currency'])form.elements[k].value=s.configured?s[k]:'';
@@ -24,7 +24,7 @@
   if(seq!==epoch||gate.blocked||user?.id!==who)return;
   $('owner-refresh').disabled=false;
   if(error){message('تعذّر تحميل بيانات الاشتراك. حاول مجددًا.','error');return;}
-  draw(data);message('');globalThis.OwnerInvitations?.activate(client,who,()=>user?.id===who&&!gate.blocked);
+  draw(data);message('');globalThis.OwnerInvitations?.activate(client,who,()=>user?.id===who&&!gate.blocked);globalThis.OwnerOperations?.activate(client,who,()=>user?.id===who&&!gate.blocked);
  }
  async function boot(){
   const seq=++epoch;if(gate.blocked&&!recovering){gate.clearSession();lock();if(callbackError)message('رابط البريد غير صالح أو انتهت صلاحيته. أدخل بريدك واطلب رابطًا جديدًا.','error');return;}

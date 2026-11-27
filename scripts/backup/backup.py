@@ -196,7 +196,7 @@ def export(path, database, started):
     return len(buckets), len(objects)
 
 
-def backup():
+def backup(export_root=None):
     database = database_connection()
     recipient = setting("BACKUP_AGE_RECIPIENT", r"age1[023456789acdefghjklmnpqrstuvwxyz]{58}")
     region = setting("B2_REGION", r"[a-z]{2}-[a-z]+-[0-9]{3}")
@@ -211,8 +211,8 @@ def backup():
     key = f"delivery-production/{started:%Y/%m/%d/%Y%m%dT%H%M%SZ}-{uuid4().hex}.tar.gz.age"
     with tempfile.TemporaryDirectory(prefix="delivery-backup-") as temp:
         root = Path(temp)
-        export_path = root / "export"
-        export_path.mkdir()
+        export_path = Path(export_root) if export_root else root / "export"
+        export_path.mkdir(mode=0o700)
         buckets, objects = export(export_path, database, started)
         encrypted = root / "backup.tar.gz.age"
         with subprocess.Popen(["tar", "-czf", "-", "-C", str(export_path), "."],
@@ -236,7 +236,8 @@ def backup():
             Body=json.dumps({"size": expected[0], "sha256": expected[1]}).encode("utf-8"),
         )
 
-    print(f"Verified {key} ({expected[0]} bytes, {buckets} buckets, {objects} files).")
+    print(f"Verified backup ({expected[0]} bytes, {buckets} buckets, {objects} files).")
+    return {"object_key": key, "size_bytes": expected[0], "sha256": expected[1], "created_at": started.isoformat(), "metadata": {"buckets": buckets, "files": objects}}
 
 
 if __name__ == "__main__":

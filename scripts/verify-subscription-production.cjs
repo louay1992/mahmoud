@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {Client}=require('pg');
 const {bootstrap}=require('../tests/database-fixture.cjs');
-const names=['subscription_is_current','subscription_access','enforce_subscription_request','get_subscription','is_admin','has_perm','my_captain_id','native_push_targets','web_push_targets'];
+const names=['subscription_is_current','subscription_access','enforce_subscription_request','get_subscription','is_admin','has_perm','my_captain_id','native_push_targets','web_push_targets','owner_project_resources','owner_backup_console','owner_request_backup','owner_runtime_available','owner_admin_invites','owner_update_admin_profile','owner_begin_admin_email_change','owner_prepare_admin_delete','owner_admin_delete_target','owner_finish_admin_delete','complete_admin_setup','protect_owner_auth_delete','owner_storage_file_available'];
 const metadata=`select p.proname as name,pg_get_function_identity_arguments(p.oid) as args,md5(p.prosrc) as body_md5,p.prosecdef as security_definer,p.proconfig as config from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname=any($1::text[]) order by p.proname`;
 async function main(){
  const uri=(process.env.SUPABASE_DB_URL||'').trim(),match=uri.match(/^(?:postgresql|postgres):\/\/([^:]+):(.+)@([a-z0-9.-]+)(?::5432)?\/postgres(?:[?]sslmode=(?:require|verify-ca|verify-full))?$/);
@@ -19,24 +19,25 @@ async function main(){
    await client.end();client=new Client({...connectionOptions,password:password.slice(1,-1)});await client.connect();
   }
   await client.query('set default_transaction_read_only=on');
-  const file='20261127164402_enforce_subscription_expiry.sql',version=file.split('_')[0],source=fs.readFileSync(path.join(__dirname,'../supabase/migrations',file),'utf8');
+  const file='20261127173253_owner_operations_console.sql',version=file.split('_')[0],source=fs.readFileSync(path.join(__dirname,'../supabase/migrations',file),'utf8');
   let record;
   for(let attempt=0;attempt<36;attempt++){
    const result=await client.query('select name,statements from supabase_migrations.schema_migrations where version=$1',[version]);record=result.rows[0];if(record)break;
    if(attempt<35)await new Promise(resolve=>setTimeout(resolve,5000));
   }
-  assert.ok(record,'The Supabase deployment has not recorded the subscription migration');assert.equal(record.name,'enforce_subscription_expiry');
+  assert.ok(record,'The Supabase deployment has not recorded the subscription migration');assert.equal(record.name,'owner_operations_console');
   const canonical=text=>text.replace(/--[^\n]*/g,'').replace(/[\s;]/g,'');
   assert.equal(canonical(record.statements.join('\n')),canonical(source),'Live migration statements differ from source');
   const liveFunctions=(await client.query(metadata,[names])).rows,expectedFunctions=(await expected.query(metadata,[names])).rows;
   assert.deepEqual(liveFunctions,expectedFunctions,'Deployed function bodies/security settings differ from source');
   const missing=(await client.query("select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and c.relrowsecurity and ((n.nspname='public' and c.relname not in ('subscription_owners','project_subscription','subscription_changes','subscription_admin_invites')) or (n.nspname='storage' and c.relname='objects')) and not exists(select 1 from pg_policy p where p.polrelid=c.oid and p.polname='subscription_required' and not p.polpermissive)")).rows;
   assert.deepEqual(missing,[],'Some business tables lack the restrictive expiry policy');
+  const missingRuntime=(await client.query("select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and c.relrowsecurity and ((n.nspname='public' and c.relname not in ('subscription_owners','project_subscription','subscription_changes','subscription_admin_invites')) or(n.nspname='storage' and c.relname='objects')) and not exists(select 1 from pg_policy p where p.polrelid=c.oid and p.polname='owner_runtime_required' and not p.polpermissive)")).rows;assert.deepEqual(missingRuntime,[]);
   const settings=(await client.query("select rolconfig from pg_roles where rolname='authenticator'")).rows[0].rolconfig;assert.ok(settings.includes('pgrst.db_pre_request=public.enforce_subscription_request'));
   const journal=(await client.query("select version,name,md5(array_to_string(statements,'')) as statements_md5 from supabase_migrations.schema_migrations order by version")).rows;
   const report={sourceCommit:process.env.GITHUB_SHA,migration:version,migrationSourceSHA256:require('node:crypto').createHash('sha256').update(source).digest('hex'),migrationStatementsMatch:true,functions:liveFunctions,missingRestrictivePolicies:missing,preRequestHookMatches:true,migrationJournal:journal};
   fs.mkdirSync('artifacts/verification',{recursive:true});fs.writeFileSync('artifacts/verification/subscription-production.json',JSON.stringify(report,null,2)+'\n');
-  console.log('Verified production migration text, nine function bodies/security settings, restrictive policies and the API request hook. No production business data was changed.');
+  console.log('Verified production migration text, owner/expiry function bodies/security settings, restrictive policies and the API request hook. No production business data was changed.');
  }finally{await client.end();await expected.close();}
 }
 main().catch(error=>{console.error('Production subscription verification failed:',String(error.code||error.message).slice(0,180));process.exitCode=1;});

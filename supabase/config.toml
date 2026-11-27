@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.owner-invite-admin]
 verify_jwt = false
+
+[functions.owner-manage-admin]
+verify_jwt = false

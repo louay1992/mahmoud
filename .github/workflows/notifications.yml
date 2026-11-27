@@ -54,6 +54,7 @@ jobs:
       - run: node tests/subscription-browser.cjs
       - run: node tests/owner-auth-browser.cjs
       - run: node tests/owner-dashboard-browser.cjs
+      - run: node tests/owner-operations-browser.cjs
       - run: node tests/subscriber-onboarding-browser.cjs
       - run: node tests/admin-workspace-browser.cjs
       - run: node tests/admin-motion-browser.cjs
@@ -69,3 +70,35 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: owner-dashboard-screenshots, path: test-results/owner-dashboard/, if-no-files-found: ignore }
+
+  owner-recovery:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: delivery_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm ci --ignore-scripts
+      - name: Install recovery test tools
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main' | sudo tee /etc/apt/sources.list.d/recovery-pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-17 python3-psycopg2 python3-boto3 python3-cryptography
+          echo '/usr/lib/postgresql/17/bin' >> "$GITHUB_PATH"
+      - run: node tests/prepare-owner-restore.cjs
+        env:
+          OWNER_TEST_URL: postgresql://postgres:isolated-test-only@localhost:5432/delivery_test
+      - run: /usr/bin/python3 tests/owner_backup_test.py
+        env:
+          OWNER_TEST_URL: postgresql://postgres:isolated-test-only@localhost:5432/delivery_test

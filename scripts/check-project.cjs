@@ -51,7 +51,7 @@ const sql = read('schema.sql') + '\n' + fs.readdirSync(path.join(root, 'supabase
 const defined = new Set([...sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z0-9_]+)/gi)]
   .map(match => match[1].toLowerCase()));
 const called = new Set();
-for (const file of ['subscription-access.js','account-setup.js','owner-invitations.js','admin-subscription.js','owner-app.js','admin-app.js', 'captain-app.js', 'admin-workspace.js', 'admin-mobile.js', 'push-client.js', 'offline-data.js']) {
+for (const file of ['subscription-access.js','account-setup.js','owner-operations.js','owner-invitations.js','admin-subscription.js','owner-app.js','admin-app.js', 'captain-app.js', 'admin-workspace.js', 'admin-mobile.js', 'push-client.js', 'offline-data.js']) {
   for (const match of read(file).matchAll(/\.rpc\(\s*["']([a-zA-Z0-9_]+)["']/g)) called.add(match[1].toLowerCase());
 }
 const baselinePath = 'supabase/untracked-rpcs.txt';
