@@ -1846,11 +1846,11 @@ function vSettings(){
     admins:`<div class="card"><h2>الحسابات الإدارية</h2>
     ${D.admins.map(a=>`<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #eef2f7"><div style="flex:1;min-width:0"><b>${esc(a.name||a.email)}</b><div class="mut" dir="ltr" style="text-align:start;font-size:12px">${esc(a.email)}</div>
       <div style="margin-top:4px">${a.perms?a.perms.map(p=>`<span class="tag" style="margin-inline-end:4px">${esc(PERM_L[p]||p)}</span>`).join("")||'<span class="mut">بلا صلاحيات</span>':'<span class="tag">إداري كامل</span>'}</div></div>
-      ${a.email.toLowerCase()===ME?'<span class="mut">أنت</span>':`${a.perms?`<button class="b s o" onclick="editStaff('${esc(a.email)}')">الصلاحيات</button>`:""}<button class="b s o" onclick="staffPw('${esc(a.email)}')">كلمة مرور</button><button class="b s r" onclick="delAdmin('${esc(a.email)}')">حذف</button>`}</div>`).join("")}
+      ${a.email.toLowerCase()===ME?'<span class="mut">أنت</span>':`${a.perms?`<button class="b s o" data-email="${esc(a.email)}" onclick="editStaff(this.dataset.email)">الصلاحيات</button>`:""}<button class="b s o" data-email="${esc(a.email)}" onclick="staffPw(this.dataset.email)">كلمة مرور</button><button class="b s r" data-email="${esc(a.email)}" onclick="delAdmin(this.dataset.email)">حذف</button>`}</div>`).join("")}
     </div>
     <div class="card"><h2>إنشاء حساب إداري</h2>
     <div class="row"><input id="sn" placeholder="الاسم (للتمييز)"><input id="nae" type="email" dir="ltr" placeholder="البريد الإلكتروني"></div>
-    <div class="row"><input id="spw" dir="ltr" placeholder="كلمة المرور (8 أحرف على الأقل)"></div>
+    <div class="row"><input id="spw" type="password" dir="ltr" autocomplete="new-password" placeholder="كلمة المرور (8 أحرف على الأقل)"></div>
     <div style="margin:8px 0"><label style="display:block;margin:4px 0"><input type="checkbox" id="sfull" onchange="document.getElementById('sperms').style.display=this.checked?'none':'block'"> إداري كامل (كل الصلاحيات)</label>
     <div id="sperms">${Object.entries(PERM_L).map(([k,l])=>`<label style="display:block;margin:4px 0"><input type="checkbox" class="sp" value="${k}" ${k==="create_orders"?"checked":""}> ${l}</label>`).join("")}</div></div>
     <button class="b" onclick="createStaff()">إنشاء الحساب</button>
