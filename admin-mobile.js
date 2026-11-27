@@ -42,10 +42,11 @@
       return false;
     }
     const entries=[['home','الرئيسية','home'],['orders','التوصيل','truck'],['ship','الشحن','box'],['new','طلب جديد','plus'],['more','المزيد','menu']];
-    const active=MAIN_TABS.includes(tab)?tab:'more';
+    const moreOpen=Boolean(globalThis.AdminWorkspace?.isMoreOpen());
+    const active=!moreOpen&&MAIN_TABS.includes(tab)?tab:'more';
     if(!strip.querySelector('.am-nav-indicator')){
       strip.innerHTML='<span class="am-nav-indicator" aria-hidden="true"></span>'+entries.map(([key,label,glyph])=>{
-        const attributes=key==='more'?'aria-haspopup="dialog"':'';
+        const attributes=key==='more'?'id="admin-more-toggle" aria-haspopup="dialog" aria-controls="admin-more-panel"':'';
         return button(`${icon(glyph)}<span>${label}</span>${key==='home'?'<i class="bd" hidden></i>':''}`,'navigate',key,'',attributes);
       }).join('');
       strip.classList.add('am-nav-tabs');
@@ -54,7 +55,8 @@
     for(const item of strip.querySelectorAll('button')){
       const key=item.dataset.value;
       item.classList.toggle('on',key===active);
-      if(key===tab)item.setAttribute('aria-current','page');
+      if(key==='more')item.setAttribute('aria-expanded',String(moreOpen));
+      if(key===tab&&!moreOpen)item.setAttribute('aria-current','page');
       else item.removeAttribute('aria-current');
     }
     const badge=strip.querySelector('.bd'), pending=pendingPR();
@@ -310,7 +312,6 @@
     filters, 'apply-filters':applyFilters,'reset-filters':resetFilters,
     'captain-filter':()=>quickOwnerFilter('captain'),'choose-captain':chooseCaptain,
     'carrier-filter':()=>quickOwnerFilter('carrier'),'choose-carrier':chooseCarrier,close:()=>closeStatus(),
-    logout:()=>{closeStatus();logout();},
     'search-orders':()=>{deliveryStatus('all');$('oq')?.focus();},
     'show-all':()=>{resetFilters('delivery');deliveryStatus('all');},
     'all-shipments':()=>{resetFilters('shipping');shippingFilter('all');},
@@ -335,8 +336,7 @@
     else if(!dialog.contains(document.activeElement)){event.preventDefault();(event.shiftKey?last:first).focus();}
   });
   compact.addEventListener('change',()=>{if(typeof ACC==='undefined'||ACC.role!=='full'||$('app')?.style.display==='none')return;renderNav();if(['home','orders','ship'].includes(tab))render();});
-  function more(){if(enabled())$('modal').querySelector('.sheet')?.insertAdjacentHTML('beforeend',button(icon('logout')+'تسجيل الخروج','logout','','am-option am-logout'));}
   function viewState(){return {sort:state.sort};}
   function restoreView(view){state.deliverySeen=true;state.shippingSeen=true;if(['priority','recent','oldest'].includes(view?.sort))state.sort=view.sort;}
-  globalThis.AdminMobile={enabled,navigation,home,orders,orderList,shipping,shippingList,shippingLoading,shippingError,resetLimit,more,viewState,restoreView};
+  globalThis.AdminMobile={enabled,navigation,home,orders,orderList,shipping,shippingList,shippingLoading,shippingError,resetLimit,viewState,restoreView};
 })();

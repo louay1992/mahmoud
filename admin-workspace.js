@@ -284,11 +284,57 @@
     $('main').insertAdjacentHTML('beforeend','<div id="shbody" hidden></div>');
   }
   function settings(){
-    mount('settings',header('الإعدادات','النشاط والحسابات وتجربة جهازك')+`<div class="aw-list">${[['biz','بيانات النشاط','الاسم والعملة وحد المخزون','store'],['exchange','سعر صرف الدولار','تحديث أسعار المنتجات بالليرة السورية','tag'],['price','التسعير والحساب','نمط الحساب وصلاحيات تعديل السعر','tag'],['admins','الحسابات والصلاحيات','إدارة الوصول للنظام','users'],['pw','كلمة المرور','تحديث كلمة مرور حسابك','lock']].map(([k,l,s,i])=>`<button class="aw-record aw-record-header" style="text-align:start;font:inherit;color:inherit" data-aw="settings-section" data-value="${k}"><span class="aw-avatar">${icon(i)}</span><span class="aw-record-info"><h2>${l}</h2><p>${s}</p></span>${icon('arrow')}</button>`).join('')}</div><section class="aw-panel"><h2>تنبيهات داخل التطبيق</h2><label class="aw-preference"><span>صوت قصير للتنبيه أثناء الاستخدام</span><input id="aw-pref-sound" type="checkbox" ${feedback('sound')?'checked':''}></label><label class="aw-preference"><span>اهتزاز خفيف للتنبيه أثناء الاستخدام</span><input id="aw-pref-haptic" type="checkbox" ${feedback('haptic')?'checked':''}></label><p class="aw-footnote">اختيارات لهذا الجهاز. إشعارات Android والصوت الخاص بها تُدار من إعدادات النظام.</p></section>`);
+    mount('settings',header('الإعدادات','النشاط والحسابات وتجربة جهازك')+`<div class="aw-list">${[['biz','بيانات النشاط','الاسم والعملة وحد المخزون','store'],['exchange','سعر صرف الدولار','تحديث أسعار المنتجات بالليرة السورية','tag'],['price','التسعير والحساب','نمط الحساب وصلاحيات تعديل السعر','tag'],['admins','الحسابات والصلاحيات','إدارة الوصول للنظام','users'],['pw','كلمة المرور','تحديث كلمة مرور حسابك','lock']].map(([k,l,s,i])=>`<button class="aw-record aw-record-header" style="text-align:start;font:inherit;color:inherit" data-aw="settings-section" data-value="${k}"><span class="aw-avatar">${icon(i)}</span><span class="aw-record-info"><h2>${l}</h2><p>${s}</p></span>${icon('arrow')}</button>`).join('')}</div><section class="aw-panel"><h2>تنبيهات داخل التطبيق</h2><label class="aw-preference"><span>صوت قصير للتنبيه أثناء الاستخدام</span><input id="aw-pref-sound" type="checkbox" ${feedback('sound')?'checked':''}></label><label class="aw-preference"><span>اهتزاز خفيف للتنبيه أثناء الاستخدام</span><input id="aw-pref-haptic" type="checkbox" ${feedback('haptic')?'checked':''}></label><p class="aw-footnote">اختيارات لهذا الجهاز. إشعارات Android والصوت الخاص بها تُدار من إعدادات النظام.</p></section>${settingsLogoutButton()}`);
+  }
+  function isMoreOpen(){
+    const modal=$('modal');
+    return modal?.style.display==='flex'&&modal.firstElementChild?.classList.contains('aw-more-sheet');
+  }
+  function syncMoreTrigger(){
+    const trigger=$('admin-more-toggle');
+    if(!trigger)return;
+    if(AdminMobile.enabled()){AdminMobile.navigation();return;}
+    const open=isMoreOpen();
+    trigger.setAttribute('aria-expanded',String(Boolean(open)));
+    trigger.classList.toggle('on',open||!MAIN_TABS.includes(tab));
   }
   function more(origin){
-    const groups=[['العمليات',['customers','carriers']],['المخزون والمستودعات',['stock','warehouses','products']],['الفريق والحسابات',['captains','marketers','stats','profit']],['التفضيلات والوصول',['subscription','settings']]];
-    sheet('مساحة العمل',groups.map(([name,keys])=>`<h3 style="margin:16px 0 8px">${name}</h3><div class="aw-more-grid">${keys.map(k=>{const t=TABS.find(t=>t[0]===k);return `<button type="button" data-aw="more-navigate" data-value="${k}">${icon(t[2])}<span>${t[1]}</span></button>`;}).join('')}</div>`).join('')+`<button type="button" class="am-option am-logout" data-am="logout">${icon('logout')}تسجيل الخروج</button>`,origin);
+    if(isMoreOpen())return closeStatus();
+    if(ACC.role==='none')return;
+    const modal=$('modal'), trigger=$('admin-more-toggle');
+    const destinations=new Map(visTabs().map(([key,label,glyph])=>[key,{label,glyph}]));
+    const groups=[
+      ['العمليات',['customers','carriers']],
+      ['المخزون والمستودعات',['stock','warehouses','products']],
+      ['الفريق والحسابات',['captains','marketers','stats','profit']],
+      ['الإعدادات والاشتراك',['subscription','settings']]
+    ];
+    modal.innerHTML=`<div class="sheet aw-sheet aw-more-sheet" id="admin-more-panel">
+      <div class="aw-more-heading">
+        <div class="aw-grabber" aria-hidden="true"></div>
+        <div class="aw-more-title">
+          <span class="aw-more-symbol">${icon('menu')}</span><h2>المزيد</h2>
+          <button type="button" class="x aw-more-close" aria-label="إغلاق المزيد" onclick="closeStatus()">${icon('x')}</button>
+        </div>
+      </div>
+      <div class="aw-more-sections">${groups.map(([name,keys])=>{
+        const tiles=keys.filter(key=>destinations.has(key)).map(key=>{
+          const {label,glyph}=destinations.get(key);
+          return `<button type="button" class="aw-more-tile" data-aw-more-destination="${key}">
+            <span class="aw-more-tile-icon">${icon(glyph)}</span><span>${esc(label)}</span>${icon('arrow')}
+          </button>`;
+        }).join('');
+        return tiles?`<section><h3>${name}</h3><div class="aw-more-grid">${tiles}</div></section>`:'';
+      }).join('')}</div>
+    </div>`;
+    modal.querySelector('.aw-more-sections').addEventListener('click',event=>{
+      const button=event.target.closest('[data-aw-more-destination]');
+      if(button)void go(button.dataset.awMoreDestination,{fromMore:true});
+    });
+    const anchor=origin||(trigger&&AdminMotion.anchor(trigger));
+    modal.style.display='flex';
+    syncMoreTrigger();
+    AdminMotion.sync(anchor);
   }
   const arrivals={owner:'',seen:new Set(),orders:new Map(),highlight:new Set(),changed:new Set(),queue:[],timer:null,hide:null};
   const feedback=key=>{try{return localStorage.getItem('admin-feedback-'+key)==='1';}catch(_){return false;}};
@@ -344,7 +390,7 @@
   function preserveFocus(draw){const el=document.activeElement,id=el?.id,start=el?.selectionStart,end=el?.selectionEnd,y=scrollY;draw();if(id){const next=$(id);next?.focus({preventScroll:true});if(next&&typeof start==='number')try{next.setSelectionRange(start,end);}catch(_){}}scrollTo({top:y,behavior:'instant'});}
   function legacyForm(next){if(needsGuard())return confirmLeave(()=>legacyForm(next));state.dirty=false;return next();}
   const actions={
-    close:()=>closeStatus(),navigate:k=>go(k),warehouses:()=>go('warehouses'),'more-navigate':k=>{closeStatus();return go(k);},
+    close:()=>closeStatus(),navigate:k=>go(k),warehouses:()=>go('warehouses'),
     product, 'stock-filters':stockFilters,'stock-status':v=>{state.stock.availability=v;state.stock.limit=30;stock();},'stock-reset':()=>{Object.assign(state.stock,{q:'',wh:'',availability:'all',limit:30});stock();},'stock-more':()=>{state.stock.limit+=30;drawStockList();},'stock-apply':()=>{state.stock.wh=$('aw-stock-wh').value;closeStatus();stock();},
     warehouse:openWarehouse,'warehouse-add':()=>legacyForm(()=>{tab='warehouses';CV='addw';renderNav();render();}),'warehouse-edit':id=>legacyForm(()=>{tab='warehouses';EWID=id;CV='editw';renderNav();render();}),
     'warehouse-tab':v=>{if(!['stock','invoices','movements'].includes(v))return;state.wh.seq++;Object.assign(state.wh,{tab:v,rows:[],more:false,error:'',loading:false});state.productLimit=30;warehouse();if(v!=='stock')return loadWarehouse();},
@@ -410,6 +456,9 @@
   function reset(){state.wh.seq++;state.wh.rows=[];state.wh.id='';state.wh.recordQ='';state.wh.product='';state.submission=null;state.stock.q='';state.stock.wh='';state.stock.availability='all';Object.values(state.people).forEach(f=>Object.assign(f,{q:'',status:'all',gov:'',wh:'',limit:25}));catalogue.q='';carrier.q='';profile={type:'',id:'',section:'overview',limit:25};state.dirty=false;state.newStep=0;state.created=null;state.uncertain=false;state.saving=false;arrivals.seen.clear();arrivals.orders.clear();arrivals.highlight.clear();arrivals.changed.clear();arrivals.queue=[];arrivals.owner='';clearTimeout(arrivals.timer);clearTimeout(arrivals.hide);document.getElementById('aw-arrival')?.remove();AdminMotion.reset();}
   function viewState(){return {stock:{...state.stock},wh:{id:tab==='stock'&&SV.v==='wh'?state.wh.id:'',tab:state.wh.tab,q:state.wh.q,recordQ:state.wh.recordQ,product:state.wh.product,kind:state.wh.kind,from:state.wh.from,to:state.wh.to,source:state.wh.source},people:state.people,profit:{...PF},stats:{...finance.stats,period:STP},group:finance.group};}
   function restoreView(v){if(!v||!full())return;for(const [target,data] of [[state.stock,v.stock],[state.wh,v.wh],[state.people.marketers,v.people?.marketers],[state.people.captains,v.people?.captains],[finance.stats,v.stats]])if(data)for(const k of Object.keys(target))if(typeof data[k]==='string')target[k]=data[k].slice(0,200);if(v.profit)for(const k of Object.keys(PF))if(typeof v.profit[k]==='string')PF[k]=v.profit[k].slice(0,200);if(v.stats?.period)STP=v.stats.period;if(['product','order','marketer','captain','governorate','month'].includes(v.group))finance.group=v.group;if(state.wh.id&&D.warehouses.some(w=>w.id===state.wh.id)){SV={v:'wh',wh:state.wh.id};}}
-  function afterNavigation(k,origin){state.dirty=false;if(mobile())AdminMotion.enter($('main').querySelector(':scope > [data-aw-screen]')?.dataset.awScreen||k,origin);}
-  globalThis.AdminWorkspace={full,mobile,dispatch,newOrder,decorateNew,people,person,profit,stats,products,customers,carriers,settings,more,prepare,loadError,stock,warehouse,warehouses,loadWarehouse,refreshWarehouse,announce,realtimeNotification,observeOrders,decorateEvents,needsGuard,confirmLeave,hasDraft,back,reset,afterNavigation,viewState,restoreView,captureAnchor,restoreAnchor,openAnyOrder,saveNewOrder,profitSummary};
+  function afterNavigation(k,{origin,fromMore}={}){
+    state.dirty=false;
+    if(mobile()||fromMore)AdminMotion.enter($('main').querySelector(':scope > [data-aw-screen]')?.dataset.awScreen||k,origin,fromMore);
+  }
+  globalThis.AdminWorkspace={full,mobile,dispatch,newOrder,decorateNew,people,person,profit,stats,products,customers,carriers,settings,more,isMoreOpen,syncMoreTrigger,prepare,loadError,stock,warehouse,warehouses,loadWarehouse,refreshWarehouse,announce,realtimeNotification,observeOrders,decorateEvents,needsGuard,confirmLeave,hasDraft,back,reset,afterNavigation,viewState,restoreView,captureAnchor,restoreAnchor,openAnyOrder,saveNewOrder,profitSummary};
 })();

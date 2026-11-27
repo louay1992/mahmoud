@@ -50,6 +50,11 @@ const {serve,route,populate}=require('./workspace-fixture.cjs');
   // Reduced motion and 200% text preserve usable layouts.
   await p.evaluate(()=>{AdminWorkspace.reset();go('marketers');document.documentElement.style.fontSize='200%';});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.evaluate(()=>document.documentElement.style.fontSize='');
   await p.evaluate(()=>{ACC={role:'staff',perms:['create_orders']};AdminWorkspace.reset();renderNav();go('new');});assert.equal(await p.locator('[data-aw="customer-pick"],#omk,#oc,#shpbox').count(),0);assert.equal(await p.locator('.aw-metrics').count(),0);await p.evaluate(()=>go('profit'));assert.equal(await p.locator('#aw-order-form').count(),1);
+  await p.locator('#admin-more-toggle').click();
+  assert.equal(await p.locator('[data-aw-more-destination]').count(),1);
+  await p.locator('[data-aw-more-destination="settings"]').click();
+  assert.equal(await p.locator('#main').getByRole('button',{name:'تسجيل الخروج'}).isVisible(),true);
+  assert.equal(await p.locator('#main').getByRole('button',{name:'الحسابات والصلاحيات'}).count(),0);
   await p.close();assert.deepEqual(errors,[]);await context.close();console.log('Filters, warehouse pagination/error/retry, financial scope, dialogs, drafts, live events, single submit, confirmation, large text and staff authorization passed.');
   // Before screenshots use the exact pre-change source with the same fixtures.
   const beforeContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block',reducedMotion:'reduce',timezoneId:'Asia/Amman'});await route(beforeContext,origin);

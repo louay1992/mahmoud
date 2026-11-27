@@ -14,6 +14,12 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
  const channel={on:()=>channel,subscribe:()=>channel};
  return {auth,from:table,rpc:name=>name==='working_orders'?table('orders'):Promise.resolve({data:name==='subscription_access'?{schema:1,allowed:true,configured:false}:name==='my_access'?{role:'full'}:[],error:null}),channel:()=>channel,removeAllChannels:async()=>{}};
 }};`;
+async function clickLogout(page,role){
+ if(role==='admin'){
+  await page.locator('#side').getByRole('button',{name:'الإعدادات'}).click();
+  await page.getByRole('button',{name:'تسجيل الخروج'}).click();
+ }else await page.locator('#lo').click();
+}
 (async()=>{
  const root=process.cwd();
  const server=http.createServer(async(req,res)=>{try{
@@ -33,7 +39,7 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
    await page.locator('#em').fill(role==='admin'?'first@example.test':'0944000000');await page.locator('#pw').fill('correct-password');await page.locator('#lbtn').click();
    await page.waitForFunction(()=>getComputedStyle(document.querySelector('#app')).display!=='none');
    const key='sb-'+role+'-auth';assert.ok(await page.evaluate(key=>localStorage.getItem(key),key));
-   await page.locator('#lo').click();
+   await clickLogout(page,role);
    await Promise.all([page.waitForNavigation(),page.locator('.dlg #dk').click()]);
    await page.locator('#login').waitFor({state:'visible'});
    assert.equal(await page.locator('#app').isVisible(),false);
@@ -63,7 +69,7 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
    await page.waitForFunction(()=>getComputedStyle(document.querySelector('#app')).display!=='none');
    assert.equal(await page.evaluate(key=>localStorage.getItem(key+'-signed-out'),key),null);
    await page.waitForFunction(()=>window.nativeCalls.includes('bind'));
-   await page.locator('#lo').click();await page.locator('.dlg #dc').click();assert.equal(await page.locator('#app').isVisible(),true);
+   await clickLogout(page,role);await page.locator('.dlg #dc').click();assert.equal(await page.locator('#app').isVisible(),true);
    assert.deepEqual(errors,[]);await context.close();
    console.log(role+': offline logout, native-channel failure, reload, stale refresh, invalid credentials, new account, native unbind-before-bind and cancel verified');
   }

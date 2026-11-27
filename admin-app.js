@@ -7,7 +7,7 @@ const sb = offline.wrap(supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:
 let _lc=0,_le=null;
 document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b || b.id==="bell" || b.closest("#delivery-notifications")) return;
   const now=Date.now();
-  if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800&&!b.hasAttribute('data-aw')&&!b.hasAttribute('data-am'))){ e.stopPropagation(); e.preventDefault(); return }
+  if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800&&!b.hasAttribute('data-aw')&&!b.hasAttribute('data-am')&&b.id!=='admin-more-toggle'&&!b.hasAttribute('data-aw-more-destination'))){ e.stopPropagation(); e.preventDefault(); return }
   _le=b; _lc=now },true);
 
 const $ = id => document.getElementById(id);
@@ -133,7 +133,7 @@ async function onlineBoot(){
   $("login").style.display="none"; $("app").style.display="block";
   if(ACC.role==="staff"){
     $("bell").style.display="none";
-    if(!visTabs().length){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
+    if(!visTabs().some(([key])=>key!=="settings")){ toast("لا توجد صلاحيات مفعّلة لهذا الحساب","err"); await sb.auth.signOut(); showLogin(); return }
     if(await loadAll(true)===false)throw Error("core data unavailable"); if(authGate.blocked) return; renderNav(); go(visTabs()[0][0]); appRefresh.restoreView(); hideSplash(); checkUpdate(); return }
   if(await loadAll(true)===false)throw Error("core data unavailable"); if(authGate.blocked) return; renderNav(); go("home"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
@@ -222,7 +222,7 @@ const pname = id => (D.products.find(p=>p.id===id)||{}).name || "—";
 const wname = id => (D.warehouses.find(w=>w.id===id)||{}).name || "—";
 
 const TABS = [["home","الرئيسية","home"],["orders","طلبات التوصيل","box"],["ship","طلبات الشحن","box"],["carriers","شركات الشحن","store"],["new","طلب جديد","plus"],["stock","المخزون","store"],["customers","العملاء","users"],["stats","إحصائيات عامة","wallet"],["profit","الربحية","wallet"],["captains","الكباتن والمستحقات","users"],["warehouses","المستودعات","store"],["marketers","المسوّقات","users"],["products","المنتجات","tag"],["subscription","إدارة الاشتراك","wallet"],["settings","الإعدادات","gear"]];
-const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
+const visTabs=()=>ACC.role==="staff"?TABS.filter(t=>t[0]==="settings"||(t[0]==="new"&&can("create_orders"))||(t[0]==="orders"&&can("view_orders"))):TABS;
 const MAIN_TABS=["home","orders","new","ship"];
 const pendingPR=()=>(D.prs||[]).filter(x=>x.status==="pending").length;
 function renderNav(){
@@ -232,20 +232,16 @@ function renderNav(){
   const m=visTabs().filter(t=>MAIN_TABS.includes(t[0])).sort((x,y)=>MAIN_TABS.indexOf(x[0])-MAIN_TABS.indexOf(y[0])).map(([k,l,i])=>k==="new"
     ?`<button class="fab ${tab===k?"on":""}" onclick="go('new',{origin:AdminMotion.anchor(this)})" aria-label="${l}"><span class="pl">${ic("plus")}</span></button>`
     :`<button class="${tab===k?"on":""}" onclick="go('${k}')">${ic(i)}<span>${l}</span>${bdg(k)}</button>`).join("");
-  $("bnr").innerHTML=m.replace('<button class="fab','<button class="fab')+`<button class="${MAIN_TABS.includes(tab)?"":"on"}" onclick="openMore(AdminMotion.anchor(this))">${ic("menu")}<span>المزيد</span></button>`;
+  const moreOpen=AdminWorkspace.isMoreOpen();
+  $("bnr").innerHTML=m+`<button type="button" id="admin-more-toggle" aria-controls="admin-more-panel" class="${moreOpen||!MAIN_TABS.includes(tab)?"on":""}" aria-haspopup="dialog" aria-expanded="${moreOpen}" onclick="openMore(AdminMotion.anchor(this))">${ic("menu")}<span>المزيد</span></button>`;
 }
-function openMore(origin){
-  if(globalThis.AdminWorkspace?.full())return AdminWorkspace.more(origin);
-  $("modal").innerHTML=`<div class="sheet"><div class="sh-h"><b>المزيد</b><button class="x" onclick="closeStatus()">${ic("xc")}</button></div><div class="more">${visTabs().filter(t=>!MAIN_TABS.includes(t[0])).map(([k,l,i])=>`<button onclick="closeStatus();go('${k}')">${ic(i)}<span>${l}</span></button>`).join("")}</div></div>`;
-  $("modal").style.display="flex";
-  globalThis.AdminMobile?.more();
-  globalThis.AdminMotion?.sync(origin);
-}
+function openMore(origin){ return AdminWorkspace.more(origin); }
 function go(k,options={}){
   if(k==="notifs")return notificationCenter.open();
   if(k==="new"&&offline.denied())return toast(offline.error().error.message,"err");
   if(globalThis.AdminWorkspace?.needsGuard())return AdminWorkspace.confirmLeave(()=>go(k,options));
   if(!visTabs().some(t=>t[0]===k))return;
+  if(AdminWorkspace.isMoreOpen())closeStatus({fade:options.fromMore});
   if(k==="settings")SSEC=null;
   if(k==="marketers"){MSV="list";MF={q:"",f:"all",g:""};}
   if(k==="products")PSV="list";
@@ -253,11 +249,12 @@ function go(k,options={}){
   if(k==="stock")SV={v:"list",wh:null};
   tab=k;
   renderNav();
-  if(!globalThis.AdminWorkspace?.mobile())document.body.classList.add("anim");
+  if(options.fromMore)document.body.classList.remove("anim");
+  else if(!AdminWorkspace.mobile())document.body.classList.add("anim");
   const result=render();
   if(k==="new"&&options.orderMode==="shipping")setNom("shipping");
   scrollTo({top:0,behavior:"instant"});
-  globalThis.AdminWorkspace?.afterNavigation(k,options.origin);
+  AdminWorkspace.afterNavigation(k,options);
   setTimeout(()=>document.body.classList.remove("anim"),700);
   return result;
 }
@@ -385,7 +382,7 @@ function checkUpdate(){ return appRefresh.checkUpdate(); }
 function applyUpdate(){ return appRefresh.applyUpdate(true); }
 
 
-function render(){ if(globalThis.AdminWorkspace?.dispatch())return; if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew})[tab]?.(); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,subscription:()=>AdminSubscription.render(),settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]?.() }
+function render(){ if(globalThis.AdminWorkspace?.dispatch())return; if(ACC.role==="staff") return ({orders:vMyOrders,new:vNew,settings:vSettings})[tab]?.(); return ({home:vHome,stats:vStats,profit:vProfit,customers:vCustomers,subscription:()=>AdminSubscription.render(),settings:vSettings,orders:vOrders,ship:vShip,carriers:vCarriers,new:vNew,stock:vStock,captains:vCaptains,warehouses:vWarehouses,products:vProducts,marketers:vMarketers})[tab]?.() }
 const mkOptions=(sel,empty)=>`<option value="">${empty}</option>`+D.marketers.filter(m=>m.active||m.id===sel).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}${m.governorate?" — "+esc(m.governorate):""}</option>`).join("");
 const capOptions = (sel,empty) => (empty?`<option value="">${empty}</option>`:"") + D.captains.filter(c=>c.active).map(c=>`<option value="${c.id}" ${c.id===sel?"selected":""}>${esc(c.name)}</option>`).join("");
 
@@ -1775,7 +1772,13 @@ async function savePrices(id){
 const SOPTS=[{k:"in_delivery",l:"قيد التوصيل",i:"🚚"},{k:"delivered",l:"تم التسليم",i:"✅"},{k:"no_answer",l:"لم يتم الرد",i:"📵"},{k:"closed",l:"مغلق",i:"🔒"},{k:"other",l:"ملاحظة أخرى",i:"📝"},{k:"cancelled",l:"إلغاء الطلب",i:"❌"}];
 let SM=null;
 function openStatus(id){ const o=D.orders.find(x=>x.id===id); SM={id,k:SOPTS.some(x=>x.k===o.status)?o.status:null,note:o.captain_note||""}; drawStatus() }
-function closeStatus(){ if($("modal").style.display==='flex')globalThis.AdminMotion?.retire($("modal")); SM=null; OD=null; EO=null; $("modal").style.display="none"; $("modal").innerHTML=""; globalThis.AdminMotion?.sync(); }
+function closeStatus({fade=false}={}){
+  const modal=$("modal"), wasMore=AdminWorkspace.isMoreOpen();
+  if(modal.style.display==="flex")AdminMotion.retire(modal,{fade});
+  SM=null; OD=null; EO=null; modal.style.display="none"; modal.innerHTML="";
+  if(wasMore)AdminWorkspace.syncMoreTrigger();
+  AdminMotion.sync();
+}
 function pickStatus(k){ SM.note=$("sm_note").value; SM.k=k; drawStatus() }
 function drawStatus(){
   const o=D.orders.find(x=>x.id===SM.id);
@@ -1799,7 +1802,14 @@ async function submitStatus(){
 
 /* ================= الإعدادات ================= */
 let SSEC=null;
+function settingsLogoutButton(){
+  return `<button type="button" class="aw-settings-logout" onclick="logout()"><span aria-hidden="true">${ic("logout")}</span> تسجيل الخروج</button>`;
+}
 function vSettings(){
+  if(ACC.role==="staff"){
+    $("main").innerHTML=`<section class="card"><h2>الإعدادات</h2>${settingsLogoutButton()}</section>`;
+    return;
+  }
   if(globalThis.AdminWorkspace?.full()&&!SSEC)return AdminWorkspace.settings();
   const st=D.settings;
   const secs={
@@ -1840,7 +1850,7 @@ function vSettings(){
     $("main").innerHTML=`<button class="b s o" style="margin-bottom:10px" onclick="SSEC=null;vSettings();scrollTo({top:0})">→ رجوع للإعدادات</button>`+secs[SSEC];
     return;
   }
-  $("main").innerHTML=`<div class="card"><h2>الإعدادات</h2><div class="more" style="grid-template-columns:1fr">${meta.map(([k,t,d,i])=>`<button onclick="SSEC='${k}';vSettings();scrollTo({top:0})" style="flex-direction:row;justify-content:flex-start;gap:12px;text-align:right"><span>${ic(i)}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>${t}</b><small class="mut">${d}</small></span></button>`).join("")}</div></div>`;
+  $("main").innerHTML=`<div class="card"><h2>الإعدادات</h2><div class="more" style="grid-template-columns:1fr">${meta.map(([k,t,d,i])=>`<button onclick="SSEC='${k}';vSettings();scrollTo({top:0})" style="flex-direction:row;justify-content:flex-start;gap:12px;text-align:right"><span>${ic(i)}</span><span style="display:flex;flex-direction:column;align-items:flex-start"><b>${t}</b><small class="mut">${d}</small></span></button>`).join("")}</div>${settingsLogoutButton()}</div>`;
 }
 async function saveExchangeRate(){
   const rate=Number($("usd-rate").value);
@@ -1891,7 +1901,7 @@ async function changePw(){
 $("i_mail").innerHTML=ic("mail"); $("i_lock").innerHTML=ic("lock"); $("eye").innerHTML=ic("eye");
 $("eye").onclick=()=>{ const p=$("pw"); p.type=p.type==="password"?"text":"password" };
 $("pw").addEventListener("keydown",e=>{ if(e.key==="Enter") login() }); $("em").addEventListener("keydown",e=>{ if(e.key==="Enter") $("pw").focus() });
-$("hav").innerHTML=ic("box"); $("rf").innerHTML=ic("refresh"); $("lo").innerHTML=ic("logout"); initNotifUI();
+$("hav").innerHTML=ic("box"); $("rf").innerHTML=ic("refresh"); initNotifUI();
 if(!pushClient.native?.embedded) pushClient.registration().catch(e=>console.warn("push registration",e));
 
 let lastReportRefresh=0;

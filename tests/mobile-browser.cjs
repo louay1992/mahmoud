@@ -134,11 +134,15 @@ if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(T
             for(let i=0;i<x.p.length;i+=4)if(x.p[i]!==y.p[i]||x.p[i+1]!==y.p[i+1]||x.p[i+2]!==y.p[i+2]){count++;maxDelta=Math.max(maxDelta,Math.abs(x.p[i]-y.p[i]),Math.abs(x.p[i+1]-y.p[i+1]),Math.abs(x.p[i+2]-y.p[i+2]));const px=(i/4)%x.w,py=Math.floor(i/4/x.w);left=Math.min(left,px);right=Math.max(right,px);top=Math.min(top,py);bottom=Math.max(bottom,py)}
             return {count,maxDelta,left,top,right,bottom};
           },{a:a.toString('base64'),b:b.toString('base64')});
-          assert.equal(diff.count,0,role+'/'+screen+': desktop pixels changed '+JSON.stringify(diff));
+          if(role==='admin'&&diff.count){
+            const headerBottom=await after.locator('#app > header').evaluate(element=>element.getBoundingClientRect().bottom);
+            assert.ok(diff.bottom<headerBottom, 'only the admin header may change when its logout button moves');
+            assert.equal(await after.locator('#app > header #lo').count(),0);
+          }else assert.equal(diff.count,0,role+'/'+screen+': desktop pixels changed '+JSON.stringify(diff));
         }
         await before.close(); await after.close();
       }
-      console.log(role + ': 360/390/430px layouts and original desktop appearance verified');
+      console.log(role + ': 360/390/430px layouts and desktop content verified');
       if(role==='captain'){
         const page=await context.newPage();await page.setViewportSize({width:390,height:844});
         await page.goto(origin+'/captain.html');await populate(page,role,'orders');
