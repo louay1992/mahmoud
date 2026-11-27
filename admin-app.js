@@ -1379,12 +1379,12 @@ function drawCustomers(){
 let orderFul="", orderCap="", orderMk="", orderPer="all", orderGrp="none";
 const ORD_STATUS=["new","assigned","in_delivery","no_answer","closed","other","delivered","cancelled","returned"];
 const SCOL={new:"#64748b",assigned:"#f59e0b",in_delivery:"#2563eb",no_answer:"#ea580c",closed:"#475569",other:"#0891b2",delivered:"#16a34a",cancelled:"#ef4444",returned:"#a855f7"};
-function ordBase(skipStatus){
+function ordBase(skipStatus, captain=orderCap){
   const q=orderQuery.trim().toLowerCase(), now=new Date(), d0=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
   const from=orderPer==="today"?d0:orderPer==="week"?d0-6*864e5:orderPer==="month"?new Date(now.getFullYear(),now.getMonth(),1).getTime():0;
   return D.orders.filter(o=>
     (skipStatus||orderFilter==="all"||o.status===orderFilter)&&
-    (!orderCap||(orderCap==="none"?(!o.captain_id&&o.fulfillment!=="shipping"):o.captain_id===orderCap))&&
+    (!captain||(captain==="none"?!o.captain_id:o.captain_id===captain))&&
     o.fulfillment!=="shipping"&&
     (!orderMk||(orderMk==="none"?!o.marketer_id:o.marketer_id===orderMk))&&
     (!from||new Date(o.created_at).getTime()>=from)&&
