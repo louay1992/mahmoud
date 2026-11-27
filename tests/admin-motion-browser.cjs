@@ -51,14 +51,14 @@ const {serve,route,populate}=require('./workspace-fixture.cjs');
   });
   assert.deepEqual(nav,{sliding:true,sameButton:true,landed:true,docked:true,safeArea:true,pageBlur:true,orderBlur:true,stepBlur:true,footerMotion:0});
   const anchored=await p.evaluate(async()=>{
-    const verify=(trigger,target)=>{
+    const verify=(trigger,target,scale=.9)=>{
       const icon=trigger.querySelector('svg').getBoundingClientRect();
       trigger.click();
       const node=document.querySelector(target),animation=node.getAnimations()[0];
       const [first,last]=animation.effect.getKeyframes();
       animation.finish();
       const box=node.getBoundingClientRect(),[x,y]=first.transformOrigin.split(' ').map(parseFloat);
-      return first.transform==='scale(0.9)'&&last.transform==='scale(1)'&&
+      return first.transform===`scale(${scale})`&&last.transform==='scale(1)'&&
         Math.abs(box.left+x-icon.left-icon.width/2)<1&&Math.abs(box.top+y-icon.top-icon.height/2)<1;
     };
     go('orders');
@@ -66,13 +66,39 @@ const {serve,route,populate}=require('./workspace-fixture.cjs');
     await go('ship');
     const header=verify(document.querySelector('.am-page-title [data-am="create"]'),'.aw-order-content');
     const shipping=NOM==='shipping';
-    const more=verify(document.querySelector('#bnr [data-value="more"]'),'#modal .sheet');
+    const more=verify(document.getElementById('admin-more-toggle'),'#modal .sheet',.22);
     const sheetOpacity=getComputedStyle($('modal').firstElementChild).opacity;
     const backdropOpacity=getComputedStyle($('modal')).opacity;
     closeStatus();
     return {bottom,header,shipping,more,sheetOpacity,backdropOpacity};
   });
   assert.deepEqual(anchored,{bottom:true,header:true,shipping:true,more:true,sheetOpacity:'1',backdropOpacity:'1'});
+  const moreToggle=p.locator('#admin-more-toggle'),morePanel=p.locator('.aw-more-sheet');
+  await p.evaluate(()=>go('home'));
+  await moreToggle.click();
+  await morePanel.waitFor();
+  assert.equal(await moreToggle.getAttribute('aria-expanded'),'true');
+  assert.equal(await p.locator('#app').getAttribute('inert'),null);
+  assert.equal(await p.locator('#main').getAttribute('inert'),'');
+  assert.equal(await morePanel.getByRole('button',{name:'تسجيل الخروج'}).count(),0);
+  await p.waitForFunction(()=>!document.querySelector('.aw-more-sheet').getAnimations().length);
+  const [sheetBox,navBox]=await Promise.all([morePanel.boundingBox(),p.locator('#bnav').boundingBox()]);
+  assert.ok(Math.abs(sheetBox.y+sheetBox.height-navBox.y)<2,'More must stop above the visible bottom navigation');
+  await p.screenshot({path:'test-results/admin-workspace/more-navigation.png'});
+  await p.locator('#bnr [data-value="orders"]').click();
+  await morePanel.waitFor({state:'detached'});
+  assert.equal(await p.evaluate(()=>tab),'orders');
+  await moreToggle.click();
+  const transition=await p.evaluate(()=>{
+    document.querySelector('[data-aw-more-destination="settings"]').click();
+    const opening=$('main').getAnimations()[0]?.effect.getKeyframes();
+    const closing=document.querySelector('.aw-retiring .aw-more-sheet')?.getAnimations()[0]?.effect.getKeyframes();
+    return {tab,entry:opening?.map(frame=>frame.opacity),exit:closing?.map(frame=>frame.opacity)};
+  });
+  assert.equal(transition.tab,'settings');assert.deepEqual(transition.entry,['0','1']);assert.equal(transition.exit?.at(-1),'0');
+  await p.getByRole('button',{name:'تسجيل الخروج'}).click();
+  await p.locator('.dlg #dc').click();
+  assert.equal(await p.evaluate(()=>tab),'settings');
   await p.evaluate(()=>go('stock'));
   const bell=await p.evaluate(async()=>{
     const button=$('bell'),icon=button.querySelector('svg');

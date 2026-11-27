@@ -133,8 +133,15 @@ if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(T
    await page.locator('#am-ship-chips [data-value="cancelled"]').click();assert.equal(await page.locator('#shlist .am-order').count(),1);
    await page.locator('#am-ship-chips [data-value="all"]').click();await page.locator('#am-ship-query').fill('SY-0049-3');assert.equal(await page.locator('#shlist .am-order').count(),1);
    await page.locator('#shlist .am-primary').click();await page.locator('#modal .sheet').waitFor();assert.match(await page.locator('#modal').innerText(),/SY-0049-3/);await page.evaluate(()=>closeStatus());
-   // Logout remains discoverable in More after removing it from the busy top bar.
-   await page.locator('#bnr [data-value="more"]').click();await page.locator('[data-am="logout"]').click();await page.locator('.dlg #dc').click();assert.equal(await page.locator('#app').isVisible(),true);
+   // More keeps navigation accessible, and logout is now inside Settings.
+   await page.locator('#admin-more-toggle').click();
+   assert.equal(await page.locator('#bnav').isVisible(),true);
+   const more=page.getByRole('dialog',{name:'المزيد'});
+   assert.equal(await more.getByRole('button',{name:'تسجيل الخروج'}).count(),0);
+   await more.getByRole('button',{name:'الإعدادات'}).click();
+   await page.getByRole('button',{name:'تسجيل الخروج'}).click();
+   await page.locator('.dlg #dc').click();
+   assert.equal(await page.locator('#app').isVisible(),true);
    if(width===390){
     // A slow or failed shipment load must never replace a newer destination.
     await page.evaluate(()=>{window.savedRpc=sb.rpc;sb.rpc=(name,args)=>name==='working_orders'?new Promise(done=>window.completeShipping=done):savedRpc(name,args);window.savedFrom=sb.from;sb.from=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>name==='orders'?new Promise(done=>window.completeShipping=done).then(resolve):Promise.resolve({data:[],error:null}).then(resolve)};return q};go('ship')});
@@ -152,20 +159,24 @@ if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(T
    }
    await page.close();console.log(width+'px: home, status priority, extra states, search, filters, assignment RPC, shipping aliases/details, empty state and logout verified');
   }
-  // Additional desktop screens preserve the approved source byte-for-byte in screenshots.
+  // Desktop content still matches the reference after moving logout out of the header.
   for(const screen of ['home','ship']){
    const before=await context.newPage(),after=await context.newPage();
    for(const page of [before,after])await page.setViewportSize({width:1440,height:1100});
    await before.goto(origin+'/reference.html');await after.goto(origin+'/admin.html');await populate(before,screen);await populate(after,screen);
    if(screen==='ship')for(const page of [before,after])await page.locator('#shlist').waitFor();
    const height=Math.max(1100,...await Promise.all([before,after].map(p=>p.evaluate(()=>document.documentElement.scrollHeight))));
-   for(const p of [before,after])await p.setViewportSize({width:1440,height});
+   for(const p of [before,after]){
+    await p.setViewportSize({width:1440,height});
+    await p.locator('#app > header').evaluate(header=>{header.style.visibility='hidden';});
+   }
+   assert.equal(await after.locator('#app > header #lo').count(),0);
    const a=await before.screenshot({path:`test-results/admin-redesign-desktop-${screen}-before.png`,fullPage:true}),b=await after.screenshot({path:`test-results/admin-redesign-desktop-${screen}.png`,fullPage:true});
    assert.equal(Buffer.compare(a,b),0,screen+' desktop changed');await before.close();await after.close();
   }
   const staff=await context.newPage();await staff.setViewportSize({width:390,height:844});await staff.goto(origin+'/admin.html');await populate(staff);
   await staff.evaluate(()=>{ACC={role:'staff',perms:['view_orders']};renderNav();go('orders')});
-  assert.equal(await staff.locator('.am-home,.am-list-page').count(),0);assert.equal(await staff.locator('#side button').count(),1);await staff.close();
+  assert.equal(await staff.locator('.am-home,.am-list-page').count(),0);assert.deepEqual(await staff.locator('#side button span').allTextContents(),['طلبات التوصيل','الإعدادات']);await staff.close();
   assert.deepEqual(errors,[]);await context.close();console.log('Desktop home/shipping unchanged; staff destinations remain restricted.');
  }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}
 })().catch(error=>{console.error(error);process.exitCode=1});
