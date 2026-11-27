@@ -1,27 +1,27 @@
 {
   "schema": 1,
-  "sourceCommit": "c681faea7a20326d26fe657d497958bcc6df9fb5",
-  "generatedAt": "2026-11-27T19:08:54.595Z",
+  "sourceCommit": "01df596f163ad0fb010d2550609606f030dbd53c",
+  "generatedAt": "2026-11-27T21:12:39.926Z",
   "apps": {
     "admin": {
       "packageName": "app.hhyyw.admin",
-      "versionCode": 10,
-      "versionName": "1.4.3",
+      "versionCode": 11,
+      "versionName": "1.4.4",
       "minSdk": 23,
-      "size": 3391688,
-      "sha256": "012b0f20d59b1cc1ea5d970139cb8988c62bca85bd85c4084ee0a5ac95c570dd",
-      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.3/Delivery-Admin-1.4.3.apk",
-      "notes": "يتحقق تطبيقَا الإدارة وكابتن التوصيل من صلاحية الاشتراك قبل عرض بيانات العمل ويطبّقان حدود القراءة دون اتصال. يشمل الإصدار تحسينات على صلاحيات الحسابات، وتسجيل الطلبات، وكشوف الكباتن وسلامة البيانات."
+      "size": 3395951,
+      "sha256": "67814e510d9fb6e01e7d8373bda095044557a6eef8b9cce62e0da65e63de4a37",
+      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.4/Delivery-Admin-1.4.4.apk",
+      "notes": "تحديث واجهة الإشعارات للتطبيقين. في تطبيق الإداري، تفتح قائمة المزيد من زرها مع بقاء شريط التنقل، وتفتح الأقسام بتأثير التلاشي. تسجيل الخروج أصبح في الإعدادات."
     },
     "captain": {
       "packageName": "app.hhyyw.captain",
-      "versionCode": 10,
-      "versionName": "1.4.3",
+      "versionCode": 11,
+      "versionName": "1.4.4",
       "minSdk": 23,
-      "size": 3403976,
-      "sha256": "71673f667f12d8a7696f3c8ab03d7418b187f79dc69d5511cd6cd2c555bf8d77",
-      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.3/Delivery-Captain-1.4.3.apk",
-      "notes": "يتحقق تطبيقَا الإدارة وكابتن التوصيل من صلاحية الاشتراك قبل عرض بيانات العمل ويطبّقان حدود القراءة دون اتصال. يشمل الإصدار تحسينات على صلاحيات الحسابات، وتسجيل الطلبات، وكشوف الكباتن وسلامة البيانات."
+      "size": 3408239,
+      "sha256": "86a8e76ba3f7522e16d98114cdd934ee7ac8e7b3929afd6ae4f29879ce529c3a",
+      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.4/Delivery-Captain-1.4.4.apk",
+      "notes": "تحديث واجهة الإشعارات للتطبيقين. في تطبيق الإداري، تفتح قائمة المزيد من زرها مع بقاء شريط التنقل، وتفتح الأقسام بتأثير التلاشي. تسجيل الخروج أصبح في الإعدادات."
     }
   }
 }
