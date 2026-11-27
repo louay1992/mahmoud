@@ -1,7 +1,7 @@
 import { corsHeaders } from "./admin-set-password.ts";
 
 /** Hosted Auth owns email delivery and passwords. This endpoint never returns a verification link or a token. */
-export function createOwnerInviteHandler({ allowedOrigin, service, publicAuth }: { allowedOrigin: string; service: any; publicAuth: any }) {
+export function createOwnerInviteHandler({ allowedOrigin, service, publicAuth, userClient }: { allowedOrigin: string; service: any; publicAuth: any; userClient: (jwt: string) => any }) {
   const productionOrigins = ["https://hhyyw.netlify.app", "https://applications.nature-care.net", "https://owner.nature-care.net"];
   const origins = new Set(productionOrigins.includes(allowedOrigin) ? productionOrigins : [allowedOrigin]);
   return async (req: Request): Promise<Response> => {
@@ -19,6 +19,9 @@ export function createOwnerInviteHandler({ allowedOrigin, service, publicAuth }:
       const { data: owner, error: ownerError } = await service.from("subscription_owners").select("active").eq("user_id", identity.user.id).eq("active", true).maybeSingle();
       if (ownerError) return json({ error: "تعذّر التحقق من صلاحية المالك" }, 503);
       if (!owner) return json({ error: "إضافة المشتركين لمالك النظام فقط" }, 403);
+      const { data: strong, error: strongError } = await userClient(token).rpc("owner_has_strong_session");
+      if (strongError) return json({ error: "تعذّر التحقق من أمان جلسة المالك" }, 503);
+      if (strong !== true) return json({ error: "أكمل التحقق بخطوتين من حساب المالك", code: "OWNER_MFA_REQUIRED" }, 403);
       const raw = await req.text();
       if (raw.length > 4096) return json({ error: "الطلب طويل جدًا" }, 400);
       let body: any;

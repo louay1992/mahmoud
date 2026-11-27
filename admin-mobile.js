@@ -13,7 +13,7 @@
   const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',arrow:'<path d="m14 6-6 6 6 6M8 12h13"/>',pin:'<path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',phone:'<path d="m5 3 4 1 1 5-3 2a16 16 0 0 0 6 6l2-3 5 1 1 4c-1 5-8 2-13-3S0 4 5 3Z"/>',dots:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',chev:'<path d="m6 9 6 6 6-6"/>'};
   const icon = name => `<span aria-hidden="true">${paths[name]?'<svg class="i" viewBox="0 0 24 24">'+paths[name]+'</svg>':ic(name)}</span>`;
   const empty = (title,hint,action='show-all') => `<div class="am-empty">${icon('box')}<h3>${title}</h3><p>${hint}</p>${button('عرض كل الطلبات',action,'','am-btn am-secondary')}</div>`;
-  const amount = value => esc(money(value));
+  const amount = value => money(value);
   const validId = id => typeof id==='string' && /^[a-zA-Z0-9-]+$/.test(id);
   const phoneNumber = o => String(o.customer_phone||'').replace(/[^+0-9*#]/g,'');
   const orderLocation = o => [...new Set([o.governorate,o.customer_address].map(value=>value?.trim()).filter(Boolean))].join('، ');

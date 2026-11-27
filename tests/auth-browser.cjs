@@ -10,7 +10,7 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
  signOut:async()=>({error:{message:'Simulated offline sign-out; cached SDK retains session'}}),
  signInWithPassword:async({email,password})=>{if(password!=='correct-password')return {error:{message:'invalid'}};
  session={access_token:'fixture-token',user:{id:'user-'+email,email}};localStorage.setItem(key,JSON.stringify(session));return {data:{session},error:null}}};
- const table=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:name==='captains'?[{id:'captain-1',email:session?.user.email,name:'كابتن تجريبي',active:true}]:[],error:null}).then(resolve)};return q};
+ const table=name=>{let authUserId;const q={select:()=>q,eq:(key,value)=>{if(key==='auth_user_id')authUserId=value;return q},order:()=>q,limit:()=>q,range:()=>q,then:resolve=>Promise.resolve({data:name==='captains'&&authUserId&&authUserId===session?.user.id?[{id:'captain-1',auth_user_id:authUserId,email:'captain-profile@example.test',name:'كابتن تجريبي',active:true}]:[],error:null}).then(resolve)};return q};
  const channel={on:()=>channel,subscribe:()=>channel};
  return {auth,from:table,rpc:name=>name==='working_orders'?table('orders'):Promise.resolve({data:name==='subscription_access'?{schema:1,allowed:true,configured:false}:name==='my_access'?{role:'full'}:[],error:null}),channel:()=>channel,removeAllChannels:async()=>{}};
 }};`;

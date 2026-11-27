@@ -1,11 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {bootstrap,id}=require('./database-fixture.cjs');
+const {bootstrap,id,claims,seedAccount}=require('./database-fixture.cjs');
 test('owner operations protect owners, transfer exact roles on verified email, revoke deleted accounts and restrict resource/backup controls',async()=>{
  const {PGlite}=await import('@electric-sql/pglite'),db=new PGlite();
  const scalar=async(s,a)=>Object.values((await db.query(s,a)).rows[0])[0];
- const as=async(email,uid=id(901),iat=Math.floor(Date.now()/1000))=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:uid,email,role:'authenticated',iat})]);};
+ const as=async(email,uid=id(901),options={})=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[claims(email,uid,options)]);};
  try{
-  await bootstrap(db);await db.query(`insert into auth.users(id,email,email_confirmed_at,encrypted_password)values($1,'owner@example.test',now(),'owner-password'),($2,'company@example.test',now(),'pass'),($3,'new@example.test',now(),'pass'),($4,'staff@example.test',now(),'pass')`,[id(901),id(902),id(903),id(904)]);await db.query('insert into subscription_owners(user_id)values($1)',[id(901)]);await db.exec(`insert into admins(email,name,perms)values('owner@example.test','Owner',null),('company@example.test','Company',null),('staff@example.test','Staff',array['view_orders']);`);
+  await bootstrap(db);
+  for(const [email,uid] of [['owner',901],['company',902],['new',903],['staff',904]])await seedAccount(db,email+'@example.test',id(uid));
+  await db.query('insert into subscription_owners(user_id)values($1)',[id(901)]);await db.exec(`insert into admins(email,name,perms,auth_user_id)values('owner@example.test','Owner',null,'${id(901)}'),('company@example.test','Company',null,'${id(902)}'),('staff@example.test','Staff',array['view_orders'],'${id(904)}');`);
   for(const email of ['company@example.test','staff@example.test','stranger@example.test']){
    await as(email,id(902));for(const s of ['select owner_admin_invites()','select owner_project_resources()',"select owner_request_backup('create')",'select owner_backup_console()'])await assert.rejects(db.query(s),/غير مسموح/);
    await assert.rejects(db.query("select owner_update_admin_profile('company@example.test','X')"),/مالك النظام/);
@@ -16,8 +18,11 @@ test('owner operations protect owners, transfer exact roles on verified email, r
   await db.query("select owner_begin_admin_email_change('staff@example.test','new@example.test','New staff')");
   assert.ok((await scalar('select owner_admin_invites()')).find(x=>x.email==='staff@example.test').pending_email);
   await as('new@example.test',id(903));await assert.rejects(db.query('select complete_admin_setup()'),/الدعوة/);
-  await db.exec('reset role');await db.query("update subscription_admin_invites set email_sent_at=now(),auth_user_id=$1 where email='new@example.test'",[id(903)]);
-  await as('new@example.test',id(903));await db.query('select complete_admin_setup()');assert.equal(await scalar("select has_perm('view_orders')"),true);assert.equal(await scalar('select is_admin()'),false,'staff email replacement never upgrades to full admin');
+  await db.exec('reset role;set role service_role');const invitation=await scalar("select reserve_subscription_admin_invite($1,'new@example.test','New staff')",[id(901)]);
+  await scalar('select finish_subscription_admin_invite($1,$2,true,$3)',[invitation.email,invitation.send_token,id(903)]);
+  await as('new@example.test',id(903),{method:'otp'});assert.equal((await scalar('select admin_setup_access()')).allowed,true);
+  await db.exec('reset role');await db.query("update auth.users set encrypted_password='new-fixture-password' where id=$1",[id(903)]);
+  await as('new@example.test',id(903),{method:'otp'});await db.query('select complete_admin_setup()');assert.equal(await scalar("select has_perm('view_orders')"),true);assert.equal(await scalar('select is_admin()'),false,'staff email replacement never upgrades to full admin');
   await as('staff@example.test',id(904));assert.equal(await scalar("select has_perm('view_orders')"),false,'old JWT loses its business role');
   await as('owner@example.test');await assert.rejects(db.query("select owner_prepare_admin_delete('company@example.test','wrong@example.test')"),/تأكيد/);
   const deletion=await scalar("select owner_prepare_admin_delete('company@example.test','company@example.test')");assert.ok(deletion.operation_id);
@@ -41,9 +46,10 @@ test('owner operations protect owners, transfer exact roles on verified email, r
  }finally{await db.close();}
 });
 test('account endpoint authenticates owner, handles partial Auth deletion without claiming success and rejects foreign origins',async()=>{
- const {createOwnerAccountHandler}=await import('../supabase/functions/_shared/owner-manage-admin.ts');let owner=true,deleted=false,prepared=false,fail=true;
- const handler=createOwnerAccountHandler({allowedOrigin:'https://applications.nature-care.net',service:{auth:{getUser:async()=>({data:{user:{id:'owner'}}}),admin:{deleteUser:async()=>{deleted=true;return {error:fail?{status:500}:null};}}},rpc:async name=>({data:name==='owner_admin_delete_target'?{complete:false,auth_user_id:'company'}:true})},userClient:()=>({rpc:async name=>{if(name==='owner_prepare_admin_delete')prepared=true;return {data:name==='is_subscription_owner'?owner:{operation_id:'op'},error:null};}}),invite:async()=>new Response('{}')});
+ const {createOwnerAccountHandler}=await import('../supabase/functions/_shared/owner-manage-admin.ts');let owner=true,strong=false,deleted=false,prepared=false,fail=true;
+ const handler=createOwnerAccountHandler({allowedOrigin:'https://applications.nature-care.net',service:{auth:{getUser:async()=>({data:{user:{id:'owner'}}}),admin:{deleteUser:async()=>{deleted=true;return {error:fail?{status:500}:null};}}},rpc:async name=>({data:name==='owner_admin_delete_target'?{complete:false,auth_user_id:'company'}:true})},userClient:()=>({rpc:async name=>{if(name==='owner_prepare_admin_delete')prepared=true;return {data:name==='is_subscription_owner'?owner:name==='owner_has_strong_session'?strong:{operation_id:'op'},error:null};}}),invite:async()=>new Response('{}')});
  const request=(origin='https://applications.nature-care.net')=>new Request('https://fixture.test',{method:'POST',headers:{origin,authorization:'Bearer fixture'},body:JSON.stringify({action:'delete',email:'company@example.test',confirmation:'company@example.test'})});
  assert.equal((await handler(request('https://evil.example'))).status,403);assert.equal(deleted,false);owner=false;assert.equal((await handler(request())).status,403);assert.equal(prepared,false);owner=true;
- let response=await handler(request());assert.equal(response.status,202);assert.equal((await response.json()).access_revoked,true);fail=false;response=await handler(request());assert.equal((await response.json()).ok,true);
+ let response=await handler(request());assert.equal(response.status,403);assert.equal((await response.json()).code,'OWNER_MFA_REQUIRED');assert.equal(prepared,false);strong=true;
+ response=await handler(request());assert.equal(response.status,202);assert.equal((await response.json()).access_revoked,true);fail=false;response=await handler(request());assert.equal((await response.json()).ok,true);
 });

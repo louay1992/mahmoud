@@ -3,8 +3,8 @@ const {chromium}=require('playwright');
 const sdk=`window.fixtureApi={counts:{},fail:false,hold:false};window.supabase={createClient:()=>{
  const role=location.pathname.includes('admin')?'admin':'captain';const id='00000000-0000-0000-0000-000000000001';
  const order={id,order_no:921,fulfillment:'delivery',status:role==='admin'?'new':'assigned',captain_id:'captain-1',customer_name:'زبون تجريبي',customer_phone:'0944000000',customer_address:'دمشق، المزة',created_at:'2026-11-25T09:00:00Z',status_at:'2026-11-25T09:00:00Z',total:30000,items_total:25000,list_total:25000,delivery_fee:5000,order_items:[{id:'item-1',qty:1,unit_price:25000,list_price:25000,products:{name:'منتج تجريبي'}}]};
- const captain={id:'captain-1',email:'fixture@example.test',name:'كابتن تجريبي',active:true,warehouse_id:'warehouse-1'};
- const table=name=>{let signal,shipping=false;const q={select:()=>q,eq:(k,v)=>{if(k==='fulfillment')shipping=true;return q},order:()=>q,limit:()=>q,abortSignal:s=>{signal=s;return q},maybeSingle:async()=>({data:captain,error:null}),then:resolve=>{
+ const captain={id:'captain-1',auth_user_id:'fixture-user',email:'fixture@example.test',name:'كابتن تجريبي',active:true,warehouse_id:'warehouse-1'};
+ const table=name=>{let signal,shipping=false;const q={select:()=>q,eq:(k,v)=>{if(k==='fulfillment')shipping=true;return q},order:()=>q,limit:()=>q,range:()=>q,abortSignal:s=>{signal=s;return q},maybeSingle:async()=>({data:captain,error:null}),then:resolve=>{
    fixtureApi.counts[name]=(fixtureApi.counts[name]||0)+1;
    const result=()=>({data:name==='orders'?(shipping?[]:[order]):name==='captains'?[captain]:name==='settings'?[{key:'business_name',value:'متجر تجريبي'},{key:'currency',value:'ل.س'}]:[],error:fixtureApi.fail?{message:'fixture network failure'}:null});
    if(fixtureApi.hold)return new Promise(done=>signal?.addEventListener('abort',()=>done({data:null,error:{message:'aborted'}}),{once:true})).then(resolve);

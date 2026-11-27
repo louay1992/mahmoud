@@ -12,6 +12,9 @@ export function createOwnerAccountHandler({allowedOrigin,service,userClient,invi
    const jwt=(req.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");if(!jwt)return json({error:"سجّل الدخول إلى لوحة المالك"},401);
    const {data:identity,error}=await service.auth.getUser(jwt);if(error||!identity?.user?.id)return json({error:"تعذّر التحقق من الجلسة"},401);
    const client=userClient(jwt),owner=await client.rpc("is_subscription_owner");if(owner.error||owner.data!==true)return json({error:"هذا الإجراء لمالك النظام فقط"},403);
+   const strong=await client.rpc("owner_has_strong_session");
+   if(strong.error)return json({error:"تعذّر التحقق من أمان جلسة المالك"},503);
+   if(strong.data!==true)return json({error:"أكمل التحقق بخطوتين من حساب المالك",code:"OWNER_MFA_REQUIRED"},403);
    const raw=await req.text();if(raw.length>4096)return json({error:"الطلب طويل جدًا"},400);let body:any;try{body=JSON.parse(raw);}catch{return json({error:"طلب غير صالح"},400);}
    const email=typeof body.email==="string"?body.email.trim().toLowerCase():"",name=typeof body.name==="string"?body.name.trim():"";
    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||name.length>100)return json({error:"أدخل بريدًا صحيحًا واسمًا لا يتجاوز 100 حرف"},400);

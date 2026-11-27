@@ -1,7 +1,7 @@
 /* Run only against a disposable, empty PostgreSQL database supplied in PG_TEST_URL. */
 const assert=require('node:assert/strict');
 const {Client}=require('pg');
-const {bootstrap,id,claims}=require('./database-fixture.cjs');
+const {bootstrap,id,claims,userId,seedAccount}=require('./database-fixture.cjs');
 (async()=>{
  if(!process.env.PG_TEST_URL)throw Error('PG_TEST_URL must identify a disposable, empty test database');
  const main=new Client({connectionString:process.env.PG_TEST_URL}),a=new Client({connectionString:process.env.PG_TEST_URL}),b=new Client({connectionString:process.env.PG_TEST_URL});
@@ -9,11 +9,12 @@ const {bootstrap,id,claims}=require('./database-fixture.cjs');
   await main.connect();
   assert.equal((await main.query("select count(*)::int n from pg_tables where schemaname='public'")).rows[0].n,0,'refuse to change a nonempty database');
   await bootstrap({exec:sql=>main.query(sql),query:(sql,args)=>main.query(sql,args)});
+  for(const email of ['boss@test','captain@test'])await seedAccount(main,email);
   await main.query("select set_config('request.jwt.claims',$1,false)",[claims('boss@test')]);
-  await main.query(`insert into admins values('boss@test',null,null);update warehouses set is_main=false;
+  await main.query(`insert into admins(email,perms,auth_user_id) values('boss@test',null,'${userId('boss@test')}');update warehouses set is_main=false;
    insert into products(id,name,price,cost) values('${id(1)}','concurrency',100,50);
    insert into warehouses(id,name,is_main) values('${id(3)}','source',true),('${id(4)}','target',false);
-   insert into captains(id,name,email,warehouse_id)values('${id(2)}','captain','captain@test','${id(3)}');
+   insert into captains(id,name,email,warehouse_id,auth_user_id)values('${id(2)}','captain','captain@test','${id(3)}','${userId('captain@test')}');
    insert into stock values('${id(3)}','${id(1)}',10),('${id(4)}','${id(1)}',10);`);
   const create=async(name)=>(await main.query('select create_order($1,$2,null,$3,$4::jsonb,null,null,null,null) id',[name,name,id(2),JSON.stringify([{product_id:id(1),qty:7}])])).rows[0].id;
   const orders=[await create('race-one'),await create('race-two')];
@@ -28,8 +29,24 @@ const {bootstrap,id,claims}=require('./database-fixture.cjs');
   await main.query('update stock set qty=10');
   await Promise.all([transaction(a,'select transfer_stock($1,$2,$3,7,null)',[id(3),id(4),id(1)]),transaction(b,'select transfer_stock($1,$2,$3,7,null)',[id(4),id(3),id(1)])]);
   assert.deepEqual((await main.query('select qty from stock order by warehouse_id')).rows.map(x=>x.qty),[10,10]);
-  await main.query(`insert into auth.users(id)values('${id(901)}');insert into subscription_owners(user_id)values('${id(901)}')`);
-  for(const client of [a,b])await client.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({...JSON.parse(claims('owner@test')),sub:id(901)})]);
+  const details=JSON.stringify({p_name:'Same submission',p_phone:'0900000000',p_captain:id(2),p_items:[{product_id:id(1),qty:1,unit_price:100}]});
+  const writes=await Promise.all([a,b].map(client=>transaction(client,"select submit_order($1,'delivery',$2::jsonb) id",[id(902),details])));
+  assert.equal(writes[0].rows[0].id,writes[1].rows[0].id,'parallel retries resolve to one committed order');
+  assert.equal((await main.query("select count(*)::int n from orders where customer_name='Same submission'")).rows[0].n,1);
+  const submitted=writes[0].rows[0].id;
+  await main.query("select set_config('request.jwt.claims',$1,false)",[claims('captain@test')]);
+  const request=(await main.query("select request_price_change($1,130,'customer approval') id",[submitted])).rows[0].id;
+  const priceWork=await Promise.allSettled([
+    transaction(a,'select decide_price_request($1,true,null)',[request]),
+    transaction(b,'select edit_order($1,null,$2::jsonb)',[submitted,JSON.stringify([{product_id:id(1),qty:2,unit_price:120}])]),
+  ]);
+  const priceErrors=priceWork.filter(x=>x.status==='rejected');
+  assert.equal(priceErrors.some(x=>x.reason.code==='40P01'),false);
+  assert.equal(priceWork[1].status,'fulfilled');
+  if(priceErrors.length)assert.match(priceErrors[0].reason.message,/تم البتّ/);
+  console.log('Real PostgreSQL: concurrent retries produced one order, and an order edit and price approval completed without a deadlock.');
+  await seedAccount(main,'owner@test',id(901));await main.query(`insert into subscription_owners(user_id)values('${id(901)}')`);
+  for(const client of [a,b])await client.query("select set_config('request.jwt.claims',$1,false)",[claims('owner@test',id(901))]);
   const saves=await Promise.allSettled([transaction(a,"select save_subscription('2026-11-26','2027-11-25',750,'USD',0)"),transaction(b,"select save_subscription('2026-11-26','2027-11-25',900,'USD',0)")]);
   assert.equal(saves.filter(x=>x.status==='fulfilled').length,1,'one owner edit can win a shared revision');
   assert.match(saves.find(x=>x.status==='rejected').reason.message,/جلسة أخرى/);

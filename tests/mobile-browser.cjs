@@ -96,7 +96,9 @@ if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(T
           await page.evaluate(()=>{sb.rpc=async(name,args)=>{window.reviewOrder={name,args};return {error:{message:'اختبار محلي دون حفظ بيانات'}}}});
           await page.locator('[data-aw="new-next"]').click();
           const submitted=await page.evaluate(()=>window.reviewOrder);
-          assert.equal(submitted.name,'create_order'); assert.equal(submitted.args.p_items[0].qty,2); assert.equal(submitted.args.p_items[0].unit_price,26000);
+          assert.equal(submitted.name,'submit_order'); assert.equal(submitted.args.p_kind,'delivery');
+          assert.match(submitted.args.p_request_id,/^[a-f0-9-]{36}$/i);
+          assert.equal(submitted.args.p_details.p_items[0].qty,2); assert.equal(submitted.args.p_details.p_items[0].unit_price,26000);
           await page.evaluate(() => openMore());
         } else {
           await page.evaluate(id => openStatus(id), orderId);
@@ -137,6 +139,45 @@ if(typeof TABS!=='undefined'&&!TABS.some(t=>t[0]==='subscription'))TABS.splice(T
         await before.close(); await after.close();
       }
       console.log(role + ': 360/390/430px layouts and original desktop appearance verified');
+      if(role==='captain'){
+        const page=await context.newPage();await page.setViewportSize({width:390,height:844});
+        await page.goto(origin+'/captain.html');await populate(page,role,'orders');
+        await page.evaluate(()=>{
+          const order=D.orders[0], now=order.created_at;
+          D.orders=Array.from({length:101},(_,index)=>({...order,id:'work-'+index,order_no:2000+index}));vOrders();
+          const paid={...order,id:'historic-delivery',status:'delivered',items_total:25000,owed_amount:20000,delivered_at:now};
+          const others=Array.from({length:51},(_,index)=>({...paid,id:'historic-'+index,order_no:index+1,owed_amount:1000}));
+          const balance={...D.balance,delivered_total:71000,delivered_count:52};
+          window.captainCalls=[];
+          sb.rpc=async(name,args)=>{
+            captainCalls.push({name,args});
+            if(name==='captain_statement')return {data:{balance,orders:[paid,...others],payments:[]}};
+            if(name==='order_history')return {data:Array.from({length:51},(_,index)=>({status:'delivered',created_at:now,note:'حدث '+(index+1)}))};
+            return {error:{message:'Unknown fixture request'}};
+          };
+          const query={select:()=>query,eq:()=>query,maybeSingle:async()=>({data:paid})};sb.from=()=>query;
+          D.balance=balance;
+        });
+        assert.equal(await page.locator('#groups [data-order-id]').count(),100);
+        await page.locator('[data-more-orders]').click();
+        assert.equal(await page.locator('#groups [data-order-id]').count(),101);
+        await page.evaluate(()=>go('acc'));
+        await page.getByText('مجموع الطلبات المسلّمة',{exact:true}).click();
+        await page.locator('[data-ledger-order]').first().waitFor();
+        assert.match(await page.locator('.stk-n').innerText(),/71,000/);
+        assert.match(await page.locator('[data-ledger-order="historic-delivery"]').innerText(),/20,000/);
+        assert.equal(await page.locator('[data-ledger-order]').count(),50);
+        await page.locator('#ledger-more').click();assert.equal(await page.locator('[data-ledger-order]').count(),52);
+        await page.locator('[data-ledger-order="historic-delivery"]').click();
+        await page.locator('[data-order-history] summary').click();
+        await page.getByText('أحداث أقدم',{exact:true}).waitFor();
+        assert.equal(await page.locator('[data-order-events] > div').count(),50);
+        await page.getByText('أحداث أقدم',{exact:true}).click();
+        assert.equal(await page.locator('[data-order-events] > div').count(),51);
+        const calls=await page.evaluate(()=>captainCalls);
+        assert.ok(calls.some(x=>x.name==='order_history'&&x.args.p_order==='historic-delivery'));
+        await page.close();
+      }
       const nativePage=await context.newPage(); await nativePage.goto(origin+'/'+role+'.html?native=1'); await populate(nativePage,role,'orders');
       await nativePage.evaluate(role=>{
         sb.auth.getSession=async()=>({data:{session:{access_token:'test-current-session',user:{id:'current-user'}}}});

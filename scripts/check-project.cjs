@@ -23,7 +23,7 @@ for (const file of sources) {
 }
 
 // 2. Local links point to source files, Netlify rewrites, or published APKs.
-const pages = ['index.html', 'admin.html', 'captain.html','owner.html','account-setup.html'];
+const pages = ['index.html', 'admin.html', 'captain.html','owner.html','owner-cache.html','account-setup.html'];
 const rewrites = new Map([...read('netlify.toml').matchAll(/from = "\/(\w+)"\s+to = "\/([\w.-]+)"\s+status = 200/g)]
   .map(([, route, file]) => [route, file]));
 const publishedApks = new Set(['downloads/delivery-admin.apk', 'downloads/delivery-captain.apk']);

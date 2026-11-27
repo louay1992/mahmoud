@@ -4,7 +4,8 @@ const { createHash } = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'dist');
 const files = ['subscription-access.js','subscription-access.css','account-setup.html','account-setup.js','account-setup.css','admin-email.js','admin-email.css','owner-operations.js','owner-invitations.js','owner.html','owner-app.js','owner-dashboard.js','owner.css','subscription-utils.js','admin-subscription.js','admin-subscription.css','index.html', 'admin.html', 'captain.html', 'app-config.js', 'admin.css', 'admin-app.js', 'captain.css', 'captain-app.js', 'auth-session.js', 'push-client.js', 'push-diagnostics.js', 'native-push.js', 'app-updates.js', 'app-updates.css', 'mobile-ui.js',
-  'mobile.css', 'admin-mobile.js', 'admin-mobile.css', 'admin-motion.js', 'admin-workspace.js', 'admin-workspace.css', 'app-refresh.js', 'app-refresh.css', 'offline-data.js', 'offline-data.css', 'vendor/supabase.js', 'vendor/SUPABASE-LICENSE.txt', 'vendor/supabase-version.json', 'sw.js', 'manifest-admin.json', 'manifest-captain.json', '.well-known/assetlinks.json'];
+  'mobile.css', 'admin-mobile.js', 'admin-mobile.css', 'admin-motion.js', 'admin-workspace.js', 'admin-workspace.css', 'app-refresh.js', 'app-refresh.css', 'offline-data.js', 'offline-data.css', 'owner-mfa.js', 'vendor/supabase.js', 'vendor/SUPABASE-LICENSE.txt', 'vendor/supabase-version.json', 'sw.js', 'manifest-admin.json', 'manifest-captain.json', '.well-known/assetlinks.json'];
+files.push('owner-cache.html','owner-cache.js');
 for (const name of fs.readdirSync(path.join(root, 'icons'))) if (name.endsWith('.png')) files.push('icons/' + name);
 // Netlify can restore files added to a previous publish directory. Rebuild our generated output.
 if (path.relative(root, output) !== 'dist' || (fs.existsSync(output) && fs.lstatSync(output).isSymbolicLink())) throw new Error('Unsafe web output path');

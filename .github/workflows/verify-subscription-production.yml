@@ -2,7 +2,7 @@ name: Verify production subscription enforcement
 on:
   push:
     branches: [main]
-    paths: ['supabase/migrations/*enforce_subscription_expiry.sql', 'supabase/migrations/*owner_operations_console.sql', 'scripts/verify-subscription-production.cjs', '.github/workflows/verify-subscription-production.yml']
+    paths: ['supabase/migrations/**', 'scripts/verify-subscription-production.cjs', '.github/workflows/verify-subscription-production.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +13,7 @@ jobs:
   verify:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 11
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }

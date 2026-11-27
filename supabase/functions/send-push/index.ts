@@ -1,6 +1,7 @@
 import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.89.0";
 import { createFcmSender, parseFcmAccount } from "../_shared/fcm.ts";
+import { deliverWebPush } from "../_shared/web-push-delivery.ts";
 
 // تتحقق الدالة من كلمة سرّ مشتركة محفوظة في جدول push_config (لا يصل إليه أي تطبيق).
 // مفاتيح VAPID تُولَّد مرة واحدة هنا وتُحفظ في نفس الجدول.
@@ -36,27 +37,35 @@ async function cfg() {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  if (req.method !== "GET" && req.method !== "POST") return json({ error: "method" }, 405);
   const c = await cfg();
   if (req.method === "GET") return json({ key: c.vapid_public });
   if (!c.push_secret || req.headers.get("x-push-secret") !== c.push_secret) return json({ error: "forbidden" }, 403);
   let payload;
   try { payload = await req.json(); } catch (_) { return json({ error: "invalid JSON" }, 400); }
+  if (!payload || typeof payload !== "object") return json({ error: "invalid message" }, 400);
   const { captain_id, admins, title, body, tag, url, icon, order_id } = payload;
   if (typeof title !== "string" || typeof body !== "string") return json({ error: "invalid message" }, 400);
-  webpush.setVapidDetails("mailto:admin@example.com", c.vapid_public, c.vapid_private);
+  const vapidDetails = { subject: "mailto:admin@example.com", publicKey: c.vapid_public, privateKey: c.vapid_private };
   const { data: subs, error: webTargetError } = await db.rpc("web_push_targets", { p_admins: !!admins, p_captain: captain_id || null });
   if (webTargetError) console.warn("web push targeting unavailable");
-  let sent = 0, removed = 0;
+  let sent = 0, removed = 0, web_unsupported = 0, web_failed = 0;
   await Promise.all((subs || []).map(async (s: any) => {
-    try {
-      await webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        JSON.stringify({ title, body, tag, url: url || "/captain.html", icon: icon || "/icons/captain-192.png" }),
-        { TTL: 86400, urgency: "high" },
-      );
-      sent++;
-    } catch (e: any) {
-      if (e.statusCode === 404 || e.statusCode === 410) { await db.from("push_subscriptions").delete().eq("id", s.id); removed++; }
+    const result = await deliverWebPush(s.endpoint, endpoint => webpush.generateRequestDetails(
+      { endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+      JSON.stringify({ title, body, tag, url: url || "/captain.html", icon: icon || "/icons/captain-192.png" }),
+      { TTL: 86400, urgency: "high", vapidDetails },
+    ));
+    if (result === "sent") sent++;
+    else if (result === "unsupported") web_unsupported++;
+    else if (result === "expired") {
+      // A fresh browser registration may update keys while the request is in flight.
+      const { data, error } = await db.from("push_subscriptions").delete().eq("id", s.id)
+        .eq("endpoint", s.endpoint).eq("p256dh", s.p256dh).eq("auth", s.auth).select("id");
+      if (error) web_failed++;
+      else removed += data?.length || 0;
+    } else {
+      web_failed++;
     }
   }));
   let fcm_sent = 0, fcm_removed = 0, fcm_failed = 0;
@@ -75,6 +84,6 @@ Deno.serve(async (req) => {
     } catch (_) { fcm_failed++; }
   }));
   if (native_error || fcm_failed) console.warn("native push delivery", { native_error, fcm_failed });
-  return json({ sent, removed, fcm_sent, fcm_removed, fcm_failed, native_error,
+  return json({ sent, removed, web_unsupported, web_failed, fcm_sent, fcm_removed, fcm_failed, native_error,
     web_error: webTargetError ? "WEB_TARGETING_UNAVAILABLE" : null });
 });

@@ -1,12 +1,13 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const vm=require('node:vm');
-const {bootstrap,id,claims}=require('./database-fixture.cjs');
+const {bootstrap,id,claims,userId,seedAccount}=require('./database-fixture.cjs');
 test('single-company subscription: customer reads, independent owner writes, audit and concurrency are protected',async()=>{
  const {PGlite}=await import('@electric-sql/pglite');const db=new PGlite();
- const as=async(email,uid=id(900))=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({...JSON.parse(claims(email)),sub:uid})]);};
+ const as=async(email,uid)=>{await db.exec('reset role;set role authenticated');await db.query("select set_config('request.jwt.claims',$1,false)",[claims(email,uid)]);};
  const scalar=async(sql,args)=>Object.values((await db.query(sql,args)).rows[0])[0];
  const save=(revision,start='2026-11-26',end='2027-11-25',amount='750.50',currency='USD')=>db.query('select save_subscription($1::date,$2::date,$3::numeric,$4,$5)',[start,end,amount,currency,revision]);
  try{
-  await bootstrap(db);await db.exec(`insert into auth.users values('${id(901)}'),('${id(900)}');insert into admins(email,perms)values('company@test',null),('staff@test',array['view_orders']);insert into subscription_owners(user_id)values('${id(901)}');`);
+  await bootstrap(db);await seedAccount(db,'owner@test',id(901));for(const email of ['company@test','staff@test','captain@test'])await seedAccount(db,email);
+  await db.exec(`insert into admins(email,perms,auth_user_id)values('company@test',null,'${userId('company@test')}'),('staff@test',array['view_orders'],'${userId('staff@test')}');insert into subscription_owners(user_id)values('${id(901)}');`);
   await as('company@test');assert.equal(await scalar('select is_subscription_owner()'),false);
   assert.equal((await scalar('select get_subscription()')).configured,false);
   await assert.rejects(save(0),/مالك النظام/);await assert.rejects(db.query('select owner_subscription()'),/غير مسموح/);
@@ -47,5 +48,5 @@ test('company password reset protects registered subscription owners, including 
  assert.equal((await protectedSubscriptionOwner(mock({data:{user_id:'owner'},error:null}),'owner')).protected,true);assert.equal(target,'owner');
  assert.equal((await protectedSubscriptionOwner(mock({data:null,error:null}),'company')).protected,false);
  assert.ok((await protectedSubscriptionOwner(mock({data:null,error:{message:'unavailable'}}),'owner')).error);
- const source=fs.readFileSync('supabase/functions/admin-set-password/index.ts','utf8');assert.ok(source.indexOf('protection.protected')<source.indexOf('updateUserById'));
+ const source=fs.readFileSync('supabase/functions/_shared/admin-set-password.ts','utf8');assert.ok(source.includes('protection.protected')&&source.indexOf('protection.protected')<source.indexOf('updateUserById'));
 });

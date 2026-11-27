@@ -25,9 +25,10 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 import backup as bk
 
 KEY = re.compile(r"delivery-production/(\d{4})/(\d{2})/(\d{2})/(\d{8}T\d{6}Z)-[a-f0-9]{32}\.tar\.gz\.age\Z")
-PRESERVE = {'subscription_owners', 'project_subscription', 'subscription_changes', 'subscription_admin_invites', 'push_config'}
-BUSINESS = {'admins','captains','captain_payments','carriers','carrier_payments','customers','marketers','marketer_payments','notifications','orders','order_items','order_events','order_item_capital','price_requests','products','settings','shipment_events','stock','stock_invoices','stock_invoice_items','stock_movements','warehouses'}
-EPHEMERAL = {'native_push_devices', 'native_push_preferences', 'push_subscriptions', 'op_guard'}
+PRESERVE = {'admins', 'subscription_owners', 'project_subscription', 'subscription_changes', 'subscription_admin_invites', 'push_config', 'native_push_devices', 'native_push_preferences', 'push_subscriptions'}
+BUSINESS = {'captains','captain_payments','carriers','carrier_payments','customers','marketers','marketer_payments','notifications','orders','order_items','order_events','order_item_capital','price_requests','products','settings','shipment_events','stock','stock_invoices','stock_invoice_items','stock_movements','warehouses'}
+EPHEMERAL = {'op_guard'}
+OPTIONAL_RESTORE = {'order_submissions'}
 
 
 def connection():
@@ -117,6 +118,14 @@ def sync_catalog(db):
     return {'files': len(seen)}
 
 
+def register_verified(cursor, backup):
+    cursor.execute('''insert into owner_private.backup_catalog
+        (object_key,created_at,size_bytes,sha256,verified,metadata) values(%s,%s,%s,%s,true,%s)
+        on conflict(object_key) do update set size_bytes=excluded.size_bytes,sha256=excluded.sha256,
+        verified=true,metadata=excluded.metadata,last_seen_at=now()''',
+        (backup['object_key'],backup['created_at'],backup['size_bytes'],backup['sha256'],Json(backup.get('metadata', {}))))
+
+
 def verified_download(db, key, output):
     if not KEY.fullmatch(key):
         raise bk.BackupError('BACKUP_INVALID')
@@ -186,27 +195,22 @@ def prepare_data(production, stage, root, dump):
     with production.cursor() as cur:
         cur.execute("select tablename from pg_tables where schemaname='public' order by tablename")
         tables = {row[0] for row in cur.fetchall()}
-        if tables != BUSINESS | PRESERVE | EPHEMERAL:
+        if tables - OPTIONAL_RESTORE != BUSINESS | PRESERVE | EPHEMERAL:
             raise bk.BackupError('SCHEMA_INCOMPATIBLE')
-        business = sorted(BUSINESS)
-        cur.execute('select o.user_id::text,lower(u.email) from public.subscription_owners o join auth.users u on u.id=o.user_id')
-        owners = cur.fetchall()
-        if not owners:
-            raise bk.BackupError('OWNER_MISSING')
-        cur.execute("select table_schema,table_name,column_name,is_generated from information_schema.columns where table_schema in ('public','auth') order by ordinal_position")
+        business = sorted(BUSINESS | (tables & OPTIONAL_RESTORE))
+        cur.execute("select table_schema,table_name,column_name,is_generated from information_schema.columns where table_schema='public' order by ordinal_position")
         columns = {}
         for schema, table, column, generated in cur.fetchall():
             if generated == 'NEVER':
                 columns.setdefault((schema, table), []).append(column)
-    allowed = {('public', name) for name in business} | {('auth', 'users'), ('auth','identities')}
+    allowed = {('public', name) for name in business}
     with stage.cursor() as cur:
-        cur.execute('create schema auth')
         for schema, table in sorted(allowed):
             defs = sql.SQL(',').join(sql.SQL('{} text').format(sql.Identifier(name)) for name in columns[(schema,table)])
             cur.execute(sql.SQL('create table {}.{}({})').format(sql.Identifier(schema), sql.Identifier(table), defs))
     stage.commit()
     data_sql = root/'data.sql'
-    bk.run_client(['pg_restore', '--data-only', '--no-owner', '--no-privileges', '--schema=public', '--schema=auth', f'--file={data_sql}', str(dump)])
+    bk.run_client(['pg_restore', '--data-only', '--no-owner', '--no-privileges', '--schema=public', f'--file={data_sql}', str(dump)])
     copies = {}; copy_pattern = re.compile(r'^COPY ("?[a-z_][a-z0-9_]*"?)\.("?[a-z_][a-z0-9_]*"?) \((.+)\) FROM stdin;\s*$')
     with data_sql.open('r', encoding='utf-8', newline='') as source, stage.cursor() as cur:
         for line in source:
@@ -232,49 +236,54 @@ def prepare_data(production, stage, root, dump):
                     statement = sql.SQL('copy {}.{} ({}) from stdin').format(sql.Identifier(schema), sql.Identifier(table), sql.SQL(',').join(map(sql.Identifier,names)))
                     cur.copy_expert(statement.as_string(stage), data)
                     copies[(schema,table)] = names
-    if set(copies) != allowed:
+    if any(('public', table) not in copies for table in BUSINESS):
         # Older snapshots lacking newly introduced business tables fail closed, before maintenance.
         raise bk.BackupError('SCHEMA_INCOMPATIBLE')
     stage.commit()
-    # Never replace an owner's identity, email or administrator row with a historical version.
-    ids, emails = [v[0] for v in owners], [v[1] for v in owners]
-    with stage.cursor() as cur:
-        cur.execute('delete from auth.identities where user_id=any(%s::text[])', (ids,))
-        cur.execute('delete from auth.users where id=any(%s::text[])', (ids,))
-        cur.execute('select count(*) from auth.users where lower(email)=any(%s::text[])', (emails,))
-        if cur.fetchone()[0]:
-            raise bk.BackupError('OWNER_IDENTITY_CONFLICT')
-        cur.execute('delete from public.admins where lower(email)=any(%s::text[])', (emails,))
-    stage.commit()
-    return business, copies, ids, emails
+    return business, copies
 
 
-def apply_data(production, stage, business, copies, owner_ids, owner_emails):
+def apply_data(production, stage, business, copies):
     with production.cursor() as cur:
         # Business triggers must not send notifications or recalculate historical totals on import.
         cur.execute("set local session_replication_role='replica'")
+        cur.execute('create temp table restore_warehouse_assignments on commit drop as select id,captain_id from public.warehouses')
+        cur.execute('create temp table restore_captains (like public.captains) on commit drop')
+        if ('public','order_submissions') in copies:
+            cur.execute('create temp table restore_order_submissions (like public.order_submissions) on commit drop')
         for table in business + sorted(EPHEMERAL):
-            cur.execute('select to_regclass(%s)', ('public.'+table,))
-            if not cur.fetchone()[0]:
-                continue
-            if table == 'admins':
-                cur.execute('delete from public.admins where not(lower(email)=any(%s::text[]))', (owner_emails,))
-            else:
+            if table not in ('captains','order_submissions'):
                 cur.execute(sql.SQL('delete from public.{}').format(sql.Identifier(table)))
-        # Normal Auth cascading deletes maintain provider-managed session/MFA tables and FK references.
-        cur.execute("set local session_replication_role='origin'")
-        cur.execute('delete from auth.users where not(id=any(%s::uuid[]))', (owner_ids,))
-        cur.execute("set local session_replication_role='replica'")
-        for schema, table in [('auth','users'), ('auth','identities')] + [('public', name) for name in business]:
-            names = copies[(schema,table)]
-            target = sql.SQL('{}.{} ({})').format(sql.Identifier(schema),sql.Identifier(table),sql.SQL(',').join(map(sql.Identifier,names)))
+        for table in business:
+            columns = copies.get(('public',table))
+            if not columns:
+                continue
+            names = sql.SQL(',').join(map(sql.Identifier,columns))
+            origin = sql.SQL('public.{} ({})').format(sql.Identifier(table), names)
+            target = (sql.SQL('pg_temp.{} ({})').format(sql.Identifier('restore_'+table),names)
+                if table in ('captains','order_submissions') else origin)
             with tempfile.TemporaryFile(mode='w+',encoding='utf-8',newline='') as content, stage.cursor() as source:
-                source.copy_expert(sql.SQL('copy {} to stdout').format(target).as_string(stage),content)
+                source.copy_expert(sql.SQL('copy {} to stdout').format(origin).as_string(stage),content)
                 content.seek(0); cur.copy_expert(sql.SQL('copy {} from stdin').format(target).as_string(production),content)
-        # Preserve terms/owner audit; historical invitations must never reactivate removed accounts.
-        cur.execute('update public.subscription_admin_invites set approved_by=null,email_sent_at=null,auth_user_id=null where not(email=any(%s::text[]))',(owner_emails,))
+        # Keep revoked historical captains inert while retaining order and payment foreign keys.
+        cur.execute('''insert into public.captains (id,name,delivery_fee,active,created_at)
+            select a.id,a.name,a.delivery_fee,false,a.created_at from restore_captains a
+            where not exists (select 1 from public.captains c where c.id=a.id)''')
+        cur.execute('''update public.captains c set warehouse_id=null where c.warehouse_id is not null
+            and not exists (select 1 from public.warehouses w where w.id=c.warehouse_id)''')
+        cur.execute('update public.warehouses set captain_id=null where captain_id is not null')
+        cur.execute('''update public.warehouses w set captain_id=a.captain_id
+            from restore_warehouse_assignments a where a.id=w.id and a.captain_id is not null''')
+        if 'order_submissions' in business:
+            # Keep consumed request identifiers even when the associated order falls outside this snapshot.
+            cur.execute('''update public.order_submissions s set order_id=null where s.order_id is not null
+                and not exists (select 1 from public.orders o where o.id=s.order_id)''')
+        if ('public','order_submissions') in copies:
+            cur.execute('''insert into public.order_submissions(actor_id,request_id,fingerprint,order_id,created_at)
+                select s.actor_id,s.request_id,s.fingerprint,o.id,s.created_at from restore_order_submissions s
+                left join public.orders o on o.id=s.order_id on conflict(actor_id,request_id) do nothing''')
         cur.execute("set local session_replication_role='origin'")
-        # Validate all public/Auth FKs, including non-deferrable ones skipped during COPY.
+        # Validate foreign keys skipped during the bulk copy.
         cur.execute("""select ns.nspname,c.relname,rns.nspname,r.relname,k.conkey,k.confkey,c.oid,r.oid,k.conname
             from pg_constraint k join pg_class c on c.oid=k.conrelid join pg_namespace ns on ns.oid=c.relnamespace
             join pg_class r on r.oid=k.confrelid join pg_namespace rns on rns.oid=r.relnamespace
@@ -291,16 +300,16 @@ def apply_data(production, stage, business, copies, owner_ids, owner_emails):
             cur.execute(query)
             if cur.fetchone()[0]:
                 raise bk.BackupError('RESTORE_FOREIGN_KEY')
-        for schema,table in copies:
-            cur.execute("select a.attname,pg_get_serial_sequence(format('%%I.%%I',n.nspname,c.relname),a.attname) from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname=%s and c.relname=%s and a.attnum>0 and not a.attisdropped",(schema,table))
-            for column,sequence in cur.fetchall():
-                if sequence:
-                    cur.execute(sql.SQL('select setval(%s,coalesce(max({}),1),max({}) is not null) from {}.{}').format(sql.Identifier(column),sql.Identifier(column),sql.Identifier(schema),sql.Identifier(table)),(sequence,))
+        cur.execute('select last_value,is_called from public.orders_order_no_seq')
+        current, called = cur.fetchone()
+        cur.execute('select coalesce(max(order_no),0) from public.orders')
+        restored = cur.fetchone()[0]
+        cur.execute('alter sequence public.orders_order_no_seq restart with %s', (max(current + called, restored + 1),))
 
 
 def storage_sync(client, manifest, entries, root):
     wanted = {(item['bucket'],item['key']) for item in entries}
-    buckets = {item['Name'] for item in client.list_buckets()['Buckets']}
+    buckets = {item['Name'] for item in client.list_buckets().get('Buckets', [])}
     for bucket in manifest['storage_buckets']:
         if bucket not in buckets:
             client.create_bucket(Bucket=bucket)
@@ -320,63 +329,116 @@ def storage_sync(client, manifest, entries, root):
             keys.extend(item['Key'] for item in page.get('Contents',[]) if (bucket,item['Key']) not in wanted)
         for key in keys:
             client.delete_object(Bucket=bucket,Key=key)
+    actual = {(bucket,item['Key']) for bucket in buckets | set(manifest['storage_buckets'])
+        for page in client.get_paginator('list_objects_v2').paginate(Bucket=bucket) for item in page.get('Contents',[])}
+    if actual != wanted:
+        raise bk.BackupError('RESTORE_STORAGE_VERIFY')
+
+
+def read_backup(db, job, object_key, root):
+    key = root/'identity'
+    identity = decrypt_identity(db, job)
+    with open(key,'x',opener=lambda path,flags: os.open(path,flags,0o600)) as stream:
+        stream.write(identity+'\n')
+    try:
+        verified_download(db, object_key, root/'encrypted.age')
+        try:
+            bk.run_client(['age','--decrypt','-i',str(key),'-o',str(root/'archive.tar.gz'),str(root/'encrypted.age')])
+        except bk.BackupError:
+            raise bk.BackupError('RECOVERY_KEY_INVALID') from None
+    finally:
+        key.unlink()
+    return extract_verified(root/'archive.tar.gz',root/'selected')
+
+
+def finish_restore(db, job, status, result=None, error=None):
+    with db.cursor() as cur:
+        cur.execute('''update owner_private.backup_jobs set status=%s,stage='done',result=%s,error_code=%s,
+            encrypted_identity=null,storage_dirty=false,finished_at=clock_timestamp()
+            where id=%s and lease_id=%s and status='running' ''',
+            (status,Json(result or {}),error,job['id'],job['lease_id']))
+        if cur.rowcount != 1:
+            raise bk.BackupError('LEASE_LOST')
+        cur.execute('''update owner_private.runtime_state set maintenance=false,current_job=null,updated_at=clock_timestamp(),
+            session_cutoff=case when %s then clock_timestamp() else session_cutoff end where id and current_job=%s''',
+            (status == 'succeeded',job['id']))
+        if cur.rowcount != 1:
+            raise bk.BackupError('RECOVERY_STATE_CHANGED')
+    db.commit()
+
+
+def complete_recovery(db, job, manifest, entries, path):
+    storage_sync(storage(),manifest,entries,path)
+    finish_restore(db,job,'failed',error='RESTORE_ROLLED_BACK')
+
+
+def recover_storage(db, job):
+    with tempfile.TemporaryDirectory(prefix='owner-recovery-') as name:
+        root = Path(name)
+        manifest, entries = read_backup(db,job,job['safety_backup_key'],root)
+        db.rollback()
+        complete_recovery(db,job,manifest,entries,root/'selected')
 
 
 def restore(db, job, update):
-    identity = decrypt_identity(db, job)
     with tempfile.TemporaryDirectory(prefix='owner-restore-') as name:
-        root = Path(name); key = root/'identity'; key.write_text(identity+'\n'); key.chmod(0o600)
-        # Wrong key/project/archive/schema is rejected before any production writes.
+        root = Path(name)
         update('validating')
-        verified_download(db, job['object_key'], root/'encrypted.age')
-        bk.run_client(['age','--decrypt','-i',str(key),'-o',str(root/'archive.tar.gz'),str(root/'encrypted.age')])
-        key.unlink(); identity = None
-        manifest, entries = extract_verified(root/'archive.tar.gz',root/'selected')
+        manifest, entries = read_backup(db,job,job['object_key'],root)
         with staging_database(root) as stage, closing(connection()) as transaction:
-            business,copies,ids,emails = prepare_data(db,stage,root,root/'selected/database.dump')
+            business,copies = prepare_data(db,stage,root,root/'selected/database.dump')
             db.rollback()
             update('maintenance')
             with db.cursor() as cur:
-                cur.execute('update owner_private.runtime_state set maintenance=true,current_job=%s,updated_at=now() where id',(job['id'],))
-            db.commit(); storage_started = False; safety = None; committed = False
+                cur.execute('update owner_private.runtime_state set maintenance=true,current_job=%s,updated_at=now() where id and not maintenance',(job['id'],))
+                if cur.rowcount != 1:
+                    raise bk.BackupError('RECOVERY_STATE_CHANGED')
+            db.commit()
             try:
                 with transaction.cursor() as cur:
                     cur.execute("set local lock_timeout='60s';set local statement_timeout='15min'")
                     for table in sorted(business + list(EPHEMERAL)):
-                        cur.execute('select to_regclass(%s)',('public.'+table,))
-                        if cur.fetchone()[0]:
-                            cur.execute(sql.SQL('lock table public.{} in share row exclusive mode').format(sql.Identifier(table)))
-                    cur.execute('lock table auth.users in share row exclusive mode')
-                    # Refuse any platform schema variant that can cascade Auth deletion into Storage metadata.
-                    cur.execute("select count(*) from pg_constraint where contype='f' and conrelid=to_regclass('storage.objects') and confrelid='auth.users'::regclass")
-                    if cur.fetchone()[0]:
-                        raise bk.BackupError('STORAGE_SCHEMA_UNSUPPORTED')
+                        cur.execute(sql.SQL('lock table public.{} in share row exclusive mode').format(sql.Identifier(table)))
                 update('safety_backup')
                 safety = bk.backup(root/'safety')
-                update('restoring_database')
-                apply_data(transaction,stage,business,copies,ids,emails)
-                update('restoring_storage'); storage_started = True
-                storage_sync(storage(),manifest,entries,root/'selected')
-                transaction.commit(); committed = True
                 with db.cursor() as cur:
-                    cur.execute('update owner_private.runtime_state set session_cutoff=now(),maintenance=false,current_job=null,updated_at=now() where id')
+                    register_verified(cur,safety)
+                    cur.execute('update owner_private.backup_jobs set safety_backup_key=%s where id=%s and lease_id=%s and status=%s',
+                        (safety['object_key'],job['id'],job['lease_id'],'running'))
+                    if cur.rowcount != 1:
+                        raise bk.BackupError('LEASE_LOST')
                 db.commit()
-                return {'safety_backup':safety['object_key'],'restored_backup':job['object_key'],'files':len(entries),'accounts_relogin':True}
+                update('restoring_database')
+                apply_data(transaction,stage,business,copies)
+                with db.cursor() as cur:
+                    cur.execute('''update owner_private.backup_jobs set storage_dirty=true,stage='restoring_storage',heartbeat_at=now()
+                        where id=%s and lease_id=%s and status='running' ''',(job['id'],job['lease_id']))
+                    if cur.rowcount != 1:
+                        raise bk.BackupError('LEASE_LOST')
+                db.commit()
+                storage_sync(storage(),manifest,entries,root/'selected')
+                result = {'safety_backup':safety['object_key'],'restored_backup':job['object_key'],'files':len(entries)}
+                finish_restore(transaction,job,'succeeded',result=result)
             except Exception:
-                transaction.rollback()
-                if committed:
-                    # A failed control-state write after commit must never be described as a rolled-back restore.
-                    raise bk.BackupError('RECOVERY_REQUIRED') from None
-                if storage_started:
+                # If the database connection dropped during commit, read the committed outcome before touching S3.
+                if not transaction.closed:
+                    transaction.rollback()
+                db.rollback()
+                with db.cursor() as cur:
+                    cur.execute('select status,storage_dirty from owner_private.backup_jobs where id=%s for update',(job['id'],))
+                    status, dirty = cur.fetchone()
+                db.commit()
+                if status == 'succeeded':
+                    return
+                if dirty:
                     try:
                         safe_manifest = json.loads((root/'safety/manifest.json').read_text())
                         safe_entries = [json.loads(line) for line in (root/'safety/storage.jsonl').read_text().splitlines()]
-                        storage_sync(storage(),safe_manifest,safe_entries,root/'safety')
+                        update('recovering_storage')
+                        complete_recovery(db,job,safe_manifest,safe_entries,root/'safety')
+                        return
                     except Exception:
                         raise bk.BackupError('RECOVERY_REQUIRED') from None
-                with db.cursor() as cur:
-                    cur.execute('update owner_private.runtime_state set maintenance=false,current_job=null,updated_at=now() where id')
-                db.commit()
                 raise
 
 
@@ -405,13 +467,124 @@ def cleanup(db):
     return {'deleted':deleted,'skipped_changed':changed}
 
 
+def mark_interrupted(db):
+    with db.cursor() as cur:
+        cur.execute('''update owner_private.runtime_state r set maintenance=false,current_job=null,updated_at=now()
+            from owner_private.backup_jobs j where r.id and r.current_job=j.id and j.status='running'
+            and not j.storage_dirty and j.stage not in ('restoring_storage','recovering_storage')''')
+        cur.execute('''update owner_private.backup_jobs set
+            status=case when storage_dirty or stage in ('restoring_storage','recovering_storage') then 'recovery_required' else 'failed' end,
+            stage=case when storage_dirty and encrypted_identity is not null then 'recovery_queued'
+                when storage_dirty or stage in ('restoring_storage','recovering_storage') then 'recovery_waiting' else 'done' end,
+            error_code='WORKER_INTERRUPTED',finished_at=now() where status='running' ''')
+        cur.execute("update owner_private.backup_jobs set encrypted_identity=null where status='failed' and encrypted_identity is not null")
+        cur.execute('update owner_private.runtime_state set worker_seen_at=now(),worker_run_url=%s where id',(os.environ.get('WORKER_RUN_URL'),))
+    db.commit()
+
+
+def claim_job(db):
+    with db.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('''select j.* from owner_private.backup_jobs j cross join owner_private.runtime_state r
+            where r.id and ((r.maintenance and r.current_job=j.id and j.status='recovery_required' and j.stage='recovery_queued')
+                or (j.status='queued' and (not r.maintenance or j.action in ('catalog','download'))))
+            order by j.storage_dirty desc,j.created_at for update of j skip locked limit 1''')
+        job = cur.fetchone()
+        if job:
+            job['lease_id'] = str(uuid4())
+            cur.execute("""update owner_private.backup_jobs set status='running',stage=%s,lease_id=%s,
+                started_at=now(),finished_at=null,heartbeat_at=now() where id=%s""",
+                ('recovering_storage' if job['storage_dirty'] else 'starting', job['lease_id'],job['id']))
+    db.commit()
+    return job
+
+
+def error_code(error):
+    code = str(error)
+    return code if isinstance(error,bk.BackupError) and re.fullmatch('[A-Z_]{3,60}',code) else 'OPERATION_FAILED'
+
+
+def fail_job(db, job, code):
+    db.rollback()
+    with db.cursor() as cur:
+        cur.execute('''update owner_private.backup_jobs set
+            status=case when storage_dirty then 'recovery_required' else 'failed' end,
+            stage=case when storage_dirty then 'recovery_waiting' else 'done' end,
+            error_code=%s,encrypted_identity=null,finished_at=now()
+            where id=%s and lease_id=%s and status='running' returning storage_dirty''',(code,job['id'],job['lease_id']))
+        result = cur.fetchone()
+        if result and not result[0]:
+            cur.execute('update owner_private.runtime_state set maintenance=false,current_job=null,updated_at=now() where id and current_job=%s',(job['id'],))
+    db.commit()
+    if result:
+        print('Owner operation failed:',code)
+
+
+def process_job(db, job):
+    def update(stage):
+        with db.cursor() as cur:
+            cur.execute("update owner_private.backup_jobs set stage=%s,heartbeat_at=now() where id=%s and lease_id=%s and status='running'",
+                (stage,job['id'],job['lease_id']))
+            if cur.rowcount != 1:
+                raise bk.BackupError('LEASE_LOST')
+            cur.execute('update owner_private.runtime_state set worker_seen_at=now() where id')
+        db.commit()
+
+    try:
+        # Compensation rolls back a previous operation; revoking that requester cannot leave Storage inconsistent.
+        if job['storage_dirty']:
+            recover_storage(db,job)
+            return
+        with db.cursor() as cur:
+            cur.execute('select active from public.subscription_owners where user_id=%s',(job['actor_id'],))
+            owner = cur.fetchone()
+        db.rollback()
+        if not owner or not owner[0]:
+            raise bk.BackupError('OWNER_REVOKED')
+        if job['action']=='restore':
+            restore(db,job,update)
+            return
+        if job['action']=='catalog':
+            result=sync_catalog(db)
+        elif job['action']=='create':
+            update('exporting');result=bk.backup()
+            with db.cursor() as cur:
+                register_verified(cur,result)
+        elif job['action']=='download':
+            client,bucket=b2();expires=datetime.now(timezone.utc)+timedelta(minutes=10)
+            result={'url':client.generate_presigned_url('get_object',Params={'Bucket':bucket,'Key':job['object_key']},ExpiresIn=600),'expires_at':expires.isoformat()}
+        else:
+            update('cleaning');result=cleanup(db)
+        with db.cursor() as cur:
+            cur.execute("update owner_private.backup_jobs set status='succeeded',stage='done',result=%s,encrypted_identity=null,finished_at=now() where id=%s and lease_id=%s and status='running'",
+                (Json(result),job['id'],job['lease_id']))
+            if cur.rowcount != 1:
+                raise bk.BackupError('LEASE_LOST')
+        db.commit()
+    except Exception as error:
+        fail_job(db,job,error_code(error))
+
+
+def verify_new_backup(db):
+    verified=bk.backup()
+    with db.cursor() as cur:
+        register_verified(cur,verified)
+    db.commit()
+    client,bucket=b2()
+    signed=client.generate_presigned_url('get_object',Params={'Bucket':bucket,'Key':verified['object_key']},ExpiresIn=60)
+    with urllib.request.urlopen(urllib.request.Request(signed,headers={'Range':'bytes=0-31'}),timeout=60) as response:
+        if response.status != 206 or len(response.read(33)) != 32:
+            raise bk.BackupError('SIGNED_DOWNLOAD_FAILED')
+    Path('artifacts/verification').mkdir(parents=True,exist_ok=True)
+    Path('artifacts/verification/owner-backup.json').write_text(json.dumps({'sourceCommit':os.environ.get('GITHUB_SHA'),'created_at':verified['created_at'],'size_bytes':verified['size_bytes'],'sha256':verified['sha256'],'remoteChecksumVerified':True,'privateSignedDownloadVerified':True,'catalogSynchronized':True},indent=2)+'\n')
+
+
 def main():
     os.umask(0o077)
     with closing(connection()) as db:
         with db.cursor() as cur:
             for attempt in range(36):
-                cur.execute("select to_regclass('owner_private.backup_jobs')")
-                if cur.fetchone()[0] is not None:
+                cur.execute("select exists(select 1 from information_schema.columns where table_schema='owner_private' and table_name='backup_jobs' and column_name='storage_dirty')")
+                if cur.fetchone()[0]:
                     break
                 db.rollback();time.sleep(5)
             else:
@@ -419,68 +592,27 @@ def main():
             cur.execute("select pg_try_advisory_lock(hashtextextended('owner-backup-worker',0))")
             if not cur.fetchone()[0]:
                 return
-            # A killed restore must stay locked for recovery, never automatically unlock a partial Storage change.
-            cur.execute("update owner_private.backup_jobs set status=case when action='restore' then 'recovery_required' else 'failed' end,error_code='WORKER_INTERRUPTED',encrypted_identity=null,finished_at=now() where status='running'")
-            cur.execute('update owner_private.runtime_state set worker_seen_at=now(),worker_run_url=%s where id',(os.environ.get('WORKER_RUN_URL'),))
-        db.commit();ensure_transport(db)
-        # Synchronize daily backups as well, even when the UI has not requested a scan.
-        sync_catalog(db)
-        if os.environ.get('VERIFY_BACKUP') == 'true':
-            verified=bk.backup();sync_catalog(db)
-            client,bucket=b2()
-            signed=client.generate_presigned_url('get_object',Params={'Bucket':bucket,'Key':verified['object_key']},ExpiresIn=60)
-            with urllib.request.urlopen(urllib.request.Request(signed,headers={'Range':'bytes=0-31'}),timeout=60) as response:
-                if response.status != 206 or len(response.read(33)) != 32:
-                    raise bk.BackupError('SIGNED_DOWNLOAD_FAILED')
-            Path('artifacts/verification').mkdir(parents=True,exist_ok=True)
-            Path('artifacts/verification/owner-backup.json').write_text(json.dumps({'sourceCommit':os.environ.get('GITHUB_SHA'),'created_at':verified['created_at'],'size_bytes':verified['size_bytes'],'sha256':verified['sha256'],'remoteChecksumVerified':True,'privateSignedDownloadVerified':True,'catalogSynchronized':True},indent=2)+'\n')
-        for _ in range(10):
-            lease = str(uuid4())
-            with db.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("select * from owner_private.backup_jobs where status='queued' order by created_at for update skip locked limit 1")
-                job = cur.fetchone()
+        mark_interrupted(db)
+        try:
+            ensure_transport(db)
+            for _ in range(10):
+                job = claim_job(db)
                 if not job:
-                    db.rollback();break
-                cur.execute('select active from public.subscription_owners where user_id=%s',(job['actor_id'],))
-                owner = cur.fetchone()
-                if not owner or not owner['active']:
-                    cur.execute("update owner_private.backup_jobs set status='failed',error_code='OWNER_REVOKED',encrypted_identity=null,finished_at=now() where id=%s",(job['id'],));db.commit();continue
-                cur.execute('select maintenance from owner_private.runtime_state where id')
-                if cur.fetchone()['maintenance']:
-                    db.rollback();break
-                cur.execute("update owner_private.backup_jobs set status='running',stage='starting',lease_id=%s,started_at=now(),heartbeat_at=now() where id=%s",(lease,job['id']))
+                    break
+                process_job(db,job)
+            sync_catalog(db)
+            if os.environ.get('VERIFY_BACKUP') == 'true':
+                verify_new_backup(db)
+            with db.cursor() as cur:
+                cur.execute("update owner_private.backup_jobs set result=result-'url' where result?'url' and finished_at<now()-interval '10 minutes'")
+                cur.execute('update owner_private.runtime_state set worker_last_success_at=now(),worker_error_code=null where id')
             db.commit()
-            def update(stage):
-                with db.cursor() as cur:
-                    cur.execute("update owner_private.backup_jobs set stage=%s,heartbeat_at=now() where id=%s and lease_id=%s and status='running'",(stage,job['id'],lease))
-                    if cur.rowcount != 1:
-                        raise bk.BackupError('LEASE_LOST')
-                    cur.execute('update owner_private.runtime_state set worker_seen_at=now() where id')
-                db.commit()
-            try:
-                if job['action']=='catalog':
-                    result=sync_catalog(db)
-                elif job['action']=='create':
-                    update('exporting');result=bk.backup();sync_catalog(db)
-                elif job['action']=='download':
-                    client,bucket=b2();expires=datetime.now(timezone.utc)+timedelta(minutes=10)
-                    result={'url':client.generate_presigned_url('get_object',Params={'Bucket':bucket,'Key':job['object_key']},ExpiresIn=600),'expires_at':expires.isoformat()}
-                elif job['action']=='restore':
-                    result=restore(db,job,update);sync_catalog(db)
-                else:
-                    update('cleaning');result=cleanup(db)
-                with db.cursor() as cur:
-                    cur.execute("update owner_private.backup_jobs set status='succeeded',stage='done',result=%s,encrypted_identity=null,finished_at=now() where id=%s and lease_id=%s",(Json(result),job['id'],lease))
-            except Exception as error:
-                db.rollback();code=str(error) if isinstance(error,bk.BackupError) and re.fullmatch('[A-Z_]{3,60}',str(error)) else 'OPERATION_FAILED'
-                with db.cursor() as cur:
-                    cur.execute("update owner_private.backup_jobs set status=%s,error_code=%s,encrypted_identity=null,finished_at=now() where id=%s and lease_id=%s",('recovery_required' if code=='RECOVERY_REQUIRED' else 'failed',code,job['id'],lease))
-                print('Owner operation failed:',code)
+        except Exception as error:
+            db.rollback()
+            with db.cursor() as cur:
+                cur.execute('update owner_private.runtime_state set worker_error_code=%s where id',(error_code(error),))
             db.commit()
-        # Expired download URLs/old encrypted envelopes are not retained as ongoing access paths.
-        with db.cursor() as cur:
-            cur.execute("update owner_private.backup_jobs set result=result-'url' where result?'url' and finished_at<now()-interval '10 minutes'")
-        db.commit()
+            raise
     print('Owner operations worker finished.')
 
 

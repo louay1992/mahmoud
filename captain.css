@@ -255,6 +255,8 @@ textarea:focus,select:focus,input.tx:focus{outline:none;border-color:var(--p);ba
 .row2{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--bd)}.row2:last-child{border:0}
 .row2 .ri{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;color:#fff;flex:none}
 .row2 .m{flex:1;min-width:0}.row2 b.v{white-space:nowrap}
+.ledger-order{width:100%;text-align:start;border:0;border-bottom:1px solid var(--bd);background:transparent;font:inherit;color:inherit;cursor:pointer}
+#ledger-more,[data-more-orders]{width:100%;margin-top:12px}
 .qty{min-width:48px;text-align:center;padding:4px 12px;border-radius:12px;font-weight:800;background:#e8f7ee;color:#15803d}
 .qty.low{background:#fff4dc;color:#b45309}.qty.neg{background:#fde6e6;color:#b91c1c}
 

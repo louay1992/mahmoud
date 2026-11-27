@@ -1,5 +1,7 @@
 // ApyHub "Extract visible text from a webpage": server-only proxy.
 // The token lives in the Edge Function environment and never reaches a page.
+import { businessRequestOrigin, normalizeAppOrigin } from "./app-origins.ts";
+
 export const APYHUB_TEXT_ENDPOINT = "https://api.eu.apyhub.com/apyhub/extract-visible-text-from-a-webpage";
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 export type VisibleText = { url: string; text: string; characters: number; truncated: boolean };
@@ -52,7 +54,8 @@ export async function extractVisibleText(target: URL, options: {
   let response: Response;
   try {
     response = await (options.fetch || fetch)(request.href, {
-      method: "GET", headers: { "apy-token": token, accept: "application/json" }
+      method: "GET", headers: { "apy-token": token, accept: "application/json" },
+      redirect: "error", signal: AbortSignal.timeout(10000)
     });
   } catch { return { ok: false, status: 503, error: "تعذّر الوصول إلى خدمة ApyHub" }; }
   if (!response.ok) {
@@ -83,16 +86,15 @@ export function webpageTextHandler(services: {
   maxCharacters?: number;
 }) {
   return async (request: Request) => {
-    const origin = request.headers.get("origin");
-    const allowedOrigin = services.allowedOrigin || "https://hhyyw.netlify.app";
+    const allowedOrigin = businessRequestOrigin(request.headers.get("origin"), services.allowedOrigin);
     const headers = {
       "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff",
-      "access-control-allow-origin": allowedOrigin,
+      "access-control-allow-origin": allowedOrigin || normalizeAppOrigin(services.allowedOrigin),
       "access-control-allow-headers": "authorization,apikey,content-type",
-      "access-control-allow-methods": "GET, OPTIONS"
+      "access-control-allow-methods": "GET, OPTIONS", "vary": "Origin"
     };
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
-    if (origin && origin !== allowedOrigin) return json({ error: "forbidden origin" }, 403);
+    if (!allowedOrigin) return json({ error: "forbidden origin" }, 403);
     if (request.method === "OPTIONS") return new Response(null, { headers });
     if (request.method !== "GET") return json({ error: "method" }, 405);
     const jwt = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");

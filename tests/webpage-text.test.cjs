@@ -27,6 +27,8 @@ test('ApyHub is called with the documented endpoint, apy-token header and url fi
   assert.equal(called.origin + called.pathname, APYHUB_TEXT_ENDPOINT);
   assert.equal(called.searchParams.get('url'), 'https://example.com/news');
   assert.equal(calls[0].init.method, 'GET');
+  assert.equal(calls[0].init.redirect, 'error');
+  assert.ok(calls[0].init.signal instanceof AbortSignal);
   assert.equal(calls[0].init.headers['apy-token'], 'test-token');
   assert.equal(result.value.text, 'Home\nAbout\n\n Contact');
   assert.equal(result.value.truncated, false);
@@ -79,4 +81,9 @@ test('the handler requires an admin session and a public url, then returns plain
   assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
   const blocked = await handler(new Request('https://x.test/?url=https://example.com', { headers: { origin: 'https://evil.test', authorization: 'Bearer admin-jwt' } }));
   assert.equal(blocked.status, 403);
+  const origin = 'https://applications.nature-care.net';
+  const preflight = await handler(new Request('https://x.test/', { method: 'OPTIONS', headers: { origin } }));
+  assert.equal(preflight.status, 200);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+  assert.equal((await handler(new Request('https://x.test/?url=https://example.com', { headers: { origin } }))).status, 401);
 });
