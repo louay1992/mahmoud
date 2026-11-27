@@ -1,7 +1,7 @@
 import { corsHeaders } from "./admin-set-password.ts";
 /** Owner-only account changes. Business-role revocation is durable before deleting an Auth identity. */
 export function createOwnerAccountHandler({allowedOrigin,service,userClient,invite}:{allowedOrigin:string;service:any;userClient:(jwt:string)=>any;invite:(request:Request)=>Promise<Response>}){
- const production=["https://hhyyw.netlify.app","https://applications.nature-care.net"];
+ const production=["https://hhyyw.netlify.app","https://applications.nature-care.net","https://owner.nature-care.net"];
  const origins=new Set(production.includes(allowedOrigin)?production:[allowedOrigin]);
  return async(req:Request):Promise<Response>=>{
   const origin=req.headers.get("origin"),headers={...corsHeaders(origin&&origins.has(origin)?origin:allowedOrigin),"Content-Type":"application/json"};

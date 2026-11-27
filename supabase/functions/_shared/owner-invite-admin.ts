@@ -2,7 +2,7 @@ import { corsHeaders } from "./admin-set-password.ts";
 
 /** Hosted Auth owns email delivery and passwords. This endpoint never returns a verification link or a token. */
 export function createOwnerInviteHandler({ allowedOrigin, service, publicAuth }: { allowedOrigin: string; service: any; publicAuth: any }) {
-  const productionOrigins = ["https://hhyyw.netlify.app", "https://applications.nature-care.net"];
+  const productionOrigins = ["https://hhyyw.netlify.app", "https://applications.nature-care.net", "https://owner.nature-care.net"];
   const origins = new Set(productionOrigins.includes(allowedOrigin) ? productionOrigins : [allowedOrigin]);
   return async (req: Request): Promise<Response> => {
     const origin = req.headers.get("origin");
