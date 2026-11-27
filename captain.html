@@ -28,6 +28,7 @@
 <link rel="stylesheet" href="/captain.css">
 <link rel="stylesheet" href="/mobile.css">
 <link rel="stylesheet" href="/app-refresh.css">
+<link rel="stylesheet" href="/notification-center.css">
 </head>
 <body>
 <div id="splash"><div class="logo"><svg class="i" viewBox="0 0 24 24" style="fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/></svg></div><b>كابتن التوصيل</b><div class="spin"></div></div>
@@ -54,7 +55,7 @@
   <header>
     <div class="av" id="av">ك</div>
     <div class="tt"><b id="hn">كابتن التوصيل</b><span id="hs"></span></div>
-    <button class="ib" id="bell" onclick="go('notifs')" aria-label="الإشعارات"></button>
+    <button type="button" class="ib" id="bell" aria-label="الإشعارات" aria-haspopup="dialog" aria-expanded="false" aria-controls="delivery-notifications"></button>
     <button class="ib" id="rf" onclick="manualRefresh()" aria-label="تحديث"></button>
     <button class="ib" id="lo" onclick="logout()" aria-label="خروج"></button>
   </header>
@@ -68,6 +69,7 @@
 <div id="upd"></div>
 <div id="modal" onclick="if(event.target===this)closeStatus()"></div>
 <div id="toast"></div>
+<script src="/notification-center.js"></script>
 <script src="/captain-app.js"></script>
 </body>
 </html>

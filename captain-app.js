@@ -5,7 +5,7 @@ const offline = new DeliveryOffline({role:"captain",storageKey:"sb-captain-auth"
 const sb = offline.wrap(supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{storageKey:"sb-captain-auth"}}));
 /* حماية من الضغط المتكرر: تجاهل الضغطة الثانية أثناء تنفيذ عملية أو خلال لحظات */
 let _lc=0,_le=null;
-document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b || b.closest("#pdg") || b.hasAttribute("data-push-diagnostic")) return;
+document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("button"); if(!b || b.closest("#pdg") || b.hasAttribute("data-push-diagnostic") || b.id==="bell" || b.closest("#delivery-notifications")) return;
   const now=Date.now();
   if((typeof busy!=="undefined"&&busy>0)||(_le===b&&now-_lc<800)){ e.stopPropagation(); e.preventDefault(); return }
   _le=b; _lc=now },true);
@@ -91,7 +91,7 @@ async function onlineBoot(){
   $("av").textContent=(me.name||"ك").trim().charAt(0); $("hn").textContent=me.name;
   if(await load(true)===false)throw Error("core data unavailable"); if(authGate.blocked) return; go("orders"); appRefresh.restoreView(); hideSplash(); startLive(); initNotifUI(); ensurePush(); checkUpdate(); openPushTarget();
 }
-function showLogin(){ $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
+function showLogin(){ notificationCenter.reset(); $("app").style.display="none"; $("login").style.display="flex"; hideSplash() }
 function offlineLogin(){me=null;LSEQ++;orderOpenRequest++;resetLedger();D={orders:[],stock:[],payments:[],balance:null,ev:{},settings:{},pr:{},notifs:[]};showLogin();$("main").innerHTML="";$("modal").style.display="none";document.querySelectorAll(".dlg").forEach(d=>d.remove());Promise.resolve(sb.removeAllChannels?.()).catch(()=>{});}
 const loginId=v=>{ v=String(v||"").trim(); if(v.includes("@")) return v.toLowerCase();
   let d=v.replace(/[٠-٩]/g,x=>"٠١٢٣٤٥٦٧٨٩".indexOf(x)).replace(/[۰-۹]/g,x=>"۰۱۲۳۴۵۶۷۸۹".indexOf(x)).replace(/\D/g,"");
@@ -173,8 +173,8 @@ function detect(prev){
 function render_if_idle(){ if($("modal").style.display==="flex"||document.querySelector(".dlg")) return; if(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; const y=scrollY; render(); scrollTo(0,y) }
 async function refresh(){ return appRefresh.refresh({reason:'live'}); }
 async function manualRefresh(){ if(offline.readonly)return offline.retry(); return appRefresh.manual(); }
-function go(t){ tab=t; closeLedger();["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
-function render(){ ({orders:vOrders,stock:vStock,acc:vAcc,notifs:vNotifs})[tab]() }
+function go(t){ if(t==="notifs")return notificationCenter.open(); tab=t; closeLedger();["orders","stock","acc"].forEach(k=>$("t_"+k).classList.toggle("on",k===t||(k==="acc"&&t==="stock"))); document.body.classList.add("anim"); render(); scrollTo({top:0,behavior:"instant"}); setTimeout(()=>document.body.classList.remove("anim"),700) }
+function render(){ ({orders:vOrders,stock:vStock,acc:vAcc})[tab]() }
 
 /* ===== الإشعارات ===== */
 let actx;
@@ -190,54 +190,18 @@ async function notify(title, body, tag){
 }
 const NME=()=>String((me&&me.email)||"").toLowerCase();
 
-/* ===== مركز الإشعارات ===== */
-const NK={new_order:["طلبات"],order_edit:["طلبات"],order_removed:["طلبات"],staff_order:["طلبات"],status:["الحالات"],admin_note:["ملاحظات"],captain_note:["ملاحظات"],payment:["دفعات"],price_request:["أسعار"],price_decision:["أسعار"]};
-const NCAT=[["all","الكل"],["unread","غير مقروء"],["طلبات","الطلبات"],["الحالات","الحالات"],["ملاحظات","الملاحظات"],["دفعات","الدفعات"],["أسعار","الأسعار"]];
-const NLV={info:"#2563eb",success:"#16a34a",warn:"#f59e0b",danger:"#ef4444"};
-let NF="all", NU=new Set();
-const nUnread=n=>!(n.read_by||[]).includes(NME());
-const nCat=n=>(NK[n.kind]||["أخرى"])[0];
-function nDay(s){ const d=new Date(s), t=new Date(), y=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1);
-  if(d.toDateString()===t.toDateString()) return "اليوم"; if(d.toDateString()===y.toDateString()) return "أمس";
-  return d.toLocaleDateString("ar-EG",{weekday:"long",day:"numeric",month:"long"}) }
-function nBadge(){ const c=(D.notifs||[]).filter(nUnread).length; return c?`<i class="nbd">${c>99?"99+":c}</i>`:"" }
-function markRead(){
-  if(offline.denied())return false;
-  const ids=(D.notifs||[]).filter(nUnread).map(n=>n.id); if(!ids.length) return;
-  ids.forEach(i=>NU.add(i)); const m=NME();
-  D.notifs.forEach(n=>{ if(ids.includes(n.id)) n.read_by=[...(n.read_by||[]),m] }); initNotifUI();
-  sb.rpc("mark_notifications_read",{p_ids:ids}).then(()=>{},()=>{});
-}
-function markAllRead(){ markRead(); vNotifs() }
-function vNotifs(){
-  const all=D.notifs||[]; (all.filter(nUnread)).forEach(n=>NU.add(n.id));
-  const cnt=k=>k==="all"?all.length:k==="unread"?all.filter(n=>NU.has(n.id)).length:all.filter(n=>nCat(n)===k).length;
-  const list=all.filter(n=>NF==="all"||(NF==="unread"?NU.has(n.id):nCat(n)===NF));
-  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0">الإشعارات</h2>${NU.size?`<button class="btn" style="min-height:36px;padding:0 12px;background:#eaf1ff;color:#1d4ed8;font-size:13px" onclick="NU=new Set();vNotifs()">تعليم الكل كمقروء</button>`:""}</div>`;
-  if(!pushClient.enabled&&notifState()!=="na") h+=`<div id="push-enable-card" class="card" style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a"><div style="flex:1;font-size:14px">فعّل إشعارات الجهاز لتصلك التنبيهات والتطبيق مغلق</div><button class="btn btn-p" style="min-height:36px;padding:0 14px" onclick="bellClick().then(vNotifs)">تفعيل</button></div>`;
-  h+=`<div class="nchips">${NCAT.map(([k,l])=>`<button class="${NF===k?"on":""}" onclick="NF='${k}';vNotifs()">${l} <i>${cnt(k)}</i></button>`).join("")}</div>`;
-  if(!list.length) h+=`<div class="card mut" style="text-align:center;padding:30px 14px">لا توجد إشعارات${NF!=="all"?" في هذا التصنيف":" بعد"}.</div>`;
-  let last="";
-  list.forEach(n=>{ const dd=nDay(n.created_at); if(dd!==last){ h+=`<div class="nday">${dd}</div>`; last=dd }
-    h+=`<div class="nc ${NU.has(n.id)?"nu":""}" style="border-inline-start-color:${NLV[n.level]||NLV.info}" ${n.order_id?`onclick="openNotif('${n.order_id}')"`:""}>
-      <div class="nh"><b>${esc(n.title)}</b><span>${new Date(n.created_at).toLocaleTimeString("ar-EG",{hour:"numeric",minute:"2-digit"})}</span></div>
-      <div class="nb">${esc(n.body)}</div>
-      <div class="nf"><span class="ncat">${nCat(n)}</span>${n.order_id?`<span class="nlk">عرض الطلب ‹</span>`:""}</div></div>`; });
-  $("main").innerHTML=h; markRead();
-}
-function openNotif(oid){ void openOrder(oid); }
 async function openPushTarget(){
   const params=new URLSearchParams(location.search), id=params.get("order"), incoming=params.get("notification")==="1";
   if(!incoming) return;
   params.delete("notification"); params.delete("order"); history.replaceState(null,"",location.pathname+(params.size?"?"+params:"")+location.hash);
-  if(!id||!/^[0-9a-f-]{36}$/i.test(id)){ go("notifs"); return }
+  if(!id||!/^[0-9a-f-]{36}$/i.test(id))return notificationCenter.open();
   await openOrder(id);
 }
 function detectNotifs(){
   const key="nseen_"+NME(); let S; try{ S=JSON.parse(localStorage.getItem(key)||"null") }catch(e){ S=null }
   const ids=(D.notifs||[]).map(n=>n.id);
-  if(S&&tab!=="notifs"){ const fresh=D.notifs.filter(n=>!S.includes(n.id)&&nUnread(n)).slice(0,4).reverse();
-    fresh.forEach((n,i)=>setTimeout(()=>notify(n.title,n.body.split("\n").slice(0,2).join(" · "),"n"+n.id),i*900)) }
+  if(S&&!notificationCenter.isOpen){ const fresh=D.notifs.filter(n=>!S.includes(n.id)&&notificationCenter.unread(n)).slice(0,4).reverse();
+    fresh.forEach((n,i)=>setTimeout(()=>notify(n.title,String(n.body||"").split("\n").slice(0,2).join(" · "),"n"+n.id),i*900)) }
   try{ localStorage.setItem(key,JSON.stringify(ids.slice(0,150))) }catch(e){}
   initNotifUI();
 }
@@ -247,16 +211,43 @@ const pushClient=new DeliveryPush({
 });
 globalThis.addEventListener?.("delivery-native-ready",async()=>{ if(!authGate.blocked&&(offline.readonly||navigator.onLine===false)){initNotifUI();return;} if(authGate.blocked){ pushClient.native.unbind().catch(()=>{}); initNotifUI(); return } const {data}=await sb.auth.getSession(); if(data.session && !authGate.blocked) ensurePush(); else pushClient.native.unbind().catch(e=>console.warn("native logout",e)); initNotifUI() });
 function notifState(){ return pushClient.permission }
-function initNotifUI(){ const b=$("bell"); b.innerHTML=ic("bell")+(pushClient.enabled?"":'<i class="dot"></i>'); b.classList.toggle("on",pushClient.enabled) }
-async function bellClick(){
+const notificationCenter=new DeliveryNotifications({
+  owner:()=>!authGate.blocked&&!offline.subscription.locked?NME():"",
+  records:()=>D.notifs||[],
+  canWrite:()=>!offline.denied(),
+  write:ids=>sb.rpc("mark_notifications_read",{p_ids:ids}),
+  openOrder:id=>openOrder(id),
+  canEnablePush:()=>notifState()!=="na",
+  pushEnabled:()=>pushClient.enabled,
+  enablePush:()=>bellClick({panel:true}),
+  icon:ic,
+  escape:esc
+});
+function initNotifUI(){ notificationCenter.sync(); }
+async function bellClick({panel=false}={}){
   const s=notifState();
-  if(s==="na") return toast("المتصفح لا يدعم الإشعارات","err");
-  if(s==="denied"&&!pushClient.native?.expected) return toast("الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
+  if(s==="na"||(s==="denied"&&!pushClient.native?.expected)){
+    if(!panel)toast(s==="na"?"المتصفح لا يدعم الإشعارات":"الإشعارات محظورة. فعّلها من إعدادات الموقع/التطبيق","err");
+    return false;
+  }
   try{
-    if(s!=="granted" && await pushClient.requestPermission()!=="granted") return pushDiag();
-    await ensurePush({strict:true});
-    beep(); toast("الإشعارات مفعّلة — ستصلك الطلبات الجديدة وملاحظات الإداري","ok"); render();
-  }catch(e){ initNotifUI(); toast("تعذّر تفعيل الإشعارات. راجع نتيجة الفحص.","err"); await pushDiag(e.name+": "+e.message) }
+    if(s!=="granted"&&await pushClient.requestPermission()!=="granted"){
+      initNotifUI();
+      if(!panel)await pushDiag();
+      return false;
+    }
+    if(!await ensurePush({strict:true}))return false;
+    beep();
+    if(!panel){ toast("الإشعارات مفعّلة — ستصلك الطلبات الجديدة وملاحظات الإداري","ok"); render(); }
+    return true;
+  }catch(e){
+    initNotifUI();
+    if(!panel){
+      toast("تعذّر تفعيل الإشعارات. راجع نتيجة الفحص.","err");
+      await pushDiag(e.name+": "+e.message);
+    }
+    return false;
+  }
 }
 
 /* تعرض الأداة الإذن الفعلي ونتيجة الطلب والحفظ كلّاً على حدة. */
@@ -274,7 +265,7 @@ async function ensurePush({strict=false}={}){
     if(notifState()!=="granted" && !strict) return false;
     await pushClient.subscribe(); return true;
   }catch(e){ if(strict) throw e; console.warn("push",e); return false }
-  finally{ initNotifUI(); if(pushClient.enabled){ $("push-enable-card")?.remove(); $("push-banner")?.remove() } }
+  finally{ initNotifUI(); if(pushClient.enabled){ $("push-banner")?.remove() } }
 }
 async function dropPush(){ await pushClient.unsubscribe() }
 /* تحديث لحظي من القاعدة + احتياطي بالاستعلام الدوري */

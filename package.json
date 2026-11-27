@@ -13,7 +13,7 @@
     "test": "node --test tests/*.test.cjs",
     "test:android-wiring": "python -X utf8 tests/check_android_notifications.py",
     "test:offline": "node tests/offline-browser.cjs",
-    "test:browser": "node tests/notifications-browser.cjs",
+    "test:browser": "node tests/notifications-browser.cjs && node tests/notification-center-browser.cjs",
     "test:mobile": "node tests/mobile-browser.cjs",
     "test:auth": "node tests/auth-browser.cjs",
     "test:diagnostics": "node tests/diagnostics-browser.cjs",
