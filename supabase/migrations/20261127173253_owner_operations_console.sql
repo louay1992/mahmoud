@@ -333,7 +333,7 @@ declare result jsonb; buckets jsonb:='[]'; objects bigint:=0; bytes numeric:=0; 
 begin
  if not is_subscription_owner() then raise exception 'غير مسموح'; end if;
  if to_regclass('storage.objects') is not null then
-  execute $q$select count(*),coalesce(sum(case when metadata->>'size' ~ '^[0-9]+$' then (metadata->>'size')::numeric else 0 end),0),count(*) filter(where metadata->>'size' is null) from storage.objects$q$ into objects,bytes,missing;
+  execute $q$select count(*),coalesce(sum(case when metadata->>'size' ~ '^[0-9]+$' then (metadata->>'size')::numeric else 0 end),0),count(*) filter(where coalesce(metadata->>'size','') !~ '^[0-9]+$') from storage.objects$q$ into objects,bytes,missing;
   execute $q$select coalesce(jsonb_agg(to_jsonb(x)),'[]') from (select b.id,b.public,count(o.name) as object_count,coalesce(sum(case when o.metadata->>'size' ~ '^[0-9]+$' then (o.metadata->>'size')::numeric else 0 end),0) as size_bytes from storage.buckets b left join storage.objects o on o.bucket_id=b.id group by b.id,b.public order by b.id)x$q$ into buckets;
  end if;
  if to_regclass('extensions.pg_stat_statements') is not null then

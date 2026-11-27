@@ -35,7 +35,16 @@ async function main(){
   const missingRuntime=(await client.query("select n.nspname,c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and c.relrowsecurity and ((n.nspname='public' and c.relname not in ('subscription_owners','project_subscription','subscription_changes','subscription_admin_invites')) or(n.nspname='storage' and c.relname='objects')) and not exists(select 1 from pg_policy p where p.polrelid=c.oid and p.polname='owner_runtime_required' and not p.polpermissive)")).rows;assert.deepEqual(missingRuntime,[]);
   const settings=(await client.query("select rolconfig from pg_roles where rolname='authenticator'")).rows[0].rolconfig;assert.ok(settings.includes('pgrst.db_pre_request=public.enforce_subscription_request'));
   const journal=(await client.query("select version,name,md5(array_to_string(statements,'')) as statements_md5 from supabase_migrations.schema_migrations order by version")).rows;
-  const report={sourceCommit:process.env.GITHUB_SHA,migration:version,migrationSourceSHA256:require('node:crypto').createHash('sha256').update(source).digest('hex'),migrationStatementsMatch:true,functions:liveFunctions,missingRestrictivePolicies:missing,preRequestHookMatches:true,migrationJournal:journal};
+  assert.equal((await client.query("select has_schema_privilege('authenticated','owner_private','USAGE') as allowed")).rows[0].allowed,false);
+  assert.equal((await client.query("select has_function_privilege('anon','public.owner_project_resources()','EXECUTE') as allowed")).rows[0].allowed,false);
+  const owner=(await client.query('select user_id from public.subscription_owners where active order by user_id limit 1')).rows[0];assert.ok(owner,'Missing active production owner');
+  await client.query('set role authenticated');await client.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:owner.user_id,role:'authenticated',iat:Math.floor(Date.now()/1000)})]);
+  const metrics=(await client.query('select public.owner_project_resources() as value')).rows[0].value;
+  const backupConsole=(await client.query('select public.owner_backup_console(1) as value')).rows[0].value;
+  assert.ok(metrics.database_bytes>0);assert.ok(Array.isArray(metrics.storage.buckets));assert.equal(metrics.cpu_percent,null);assert.equal(metrics.memory_bytes,null);
+  assert.ok(Array.isArray(backupConsole.files));await client.query('reset role');
+  const resourceSnapshot={checked_at:metrics.checked_at,database_bytes:metrics.database_bytes,storage_bytes:metrics.storage.bytes,storage_objects:metrics.storage.objects,bucket_count:metrics.storage.buckets.length,table_count:metrics.tables.length,safe_cleanup_files:metrics.safe_cleanup.files};
+  const report={sourceCommit:process.env.GITHUB_SHA,migration:version,migrationSourceSHA256:require('node:crypto').createHash('sha256').update(source).digest('hex'),migrationStatementsMatch:true,resourceSnapshot,ownerPrivateSchemaProtected:true,ownerResourceAndBackupRPCsVerified:true,functions:liveFunctions,missingRestrictivePolicies:missing,preRequestHookMatches:true,migrationJournal:journal};
   fs.mkdirSync('artifacts/verification',{recursive:true});fs.writeFileSync('artifacts/verification/subscription-production.json',JSON.stringify(report,null,2)+'\n');
   console.log('Verified production migration text, owner/expiry function bodies/security settings, restrictive policies and the API request hook. No production business data was changed.');
  }finally{await client.end();await expected.close();}
