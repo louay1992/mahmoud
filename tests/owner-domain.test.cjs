@@ -3,7 +3,7 @@ const { test } = require('node:test');
 
 test('owner host serves the dashboard at its root and legacy owner bookmarks redirect', async () => {
   const { default: route } = await import('../netlify/edge-functions/owner-domain.js');
-  const request = url => route(new Request(url), { rewrite: target => target });
+  const request = url => route(new Request(url));
   assert.equal(request('https://owner.nature-care.net/?code=example').href, 'https://owner.nature-care.net/owner.html?code=example');
   for (const oldHost of ['hhyyw.netlify.app', 'applications.nature-care.net']) {
     for (const path of ['/owner', '/owner/', '/owner.html']) {

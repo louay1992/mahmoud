@@ -1,11 +1,11 @@
 const ownerHostname = 'owner.nature-care.net';
 const previousHosts = new Set(['hhyyw.netlify.app', 'applications.nature-care.net']);
 
-export default function ownerDomain(request, context) {
+export default function ownerDomain(request) {
   const url = new URL(request.url);
   if (url.hostname === ownerHostname && url.pathname === '/') {
     url.pathname = '/owner.html';
-    return context.rewrite(url);
+    return url;
   }
   if (previousHosts.has(url.hostname) && ['/owner', '/owner/', '/owner.html'].includes(url.pathname)) {
     const target = new URL(`https://${ownerHostname}/`);
