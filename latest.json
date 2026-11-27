@@ -1,27 +1,27 @@
 {
   "schema": 1,
-  "sourceCommit": "0f4973d8cff18d1359face981246aab5c9460092",
-  "generatedAt": "2026-11-26T23:27:22.431Z",
+  "sourceCommit": "8986db6bacdf5322e049aa3761f7c0f784eb9fed",
+  "generatedAt": "2026-11-27T17:10:30.204Z",
   "apps": {
     "admin": {
       "packageName": "app.hhyyw.admin",
-      "versionCode": 8,
-      "versionName": "1.4.1",
+      "versionCode": 9,
+      "versionName": "1.4.2",
       "minSdk": 23,
-      "size": 3379233,
-      "sha256": "a3aacf9c916d6d430e9492e56c6c19f7b56e99a7e478e5cbe69cc01f19722fa3",
-      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.1/Delivery-Admin-1.4.1.apk",
-      "notes": "أيقونة جديدة لتطبيق الإدارة وأيقونة لكابتن التوصيل، لتسهيل التمييز بين التطبيقين على شاشة الهاتف."
+      "size": 3383329,
+      "sha256": "baca44e1f5c1e69fcdedf7e827d9197e902b6b4149b6092411c6838f928dede2",
+      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.2/Delivery-Admin-1.4.2.apk",
+      "notes": "تنزيل التحديثات التالية عبر دومين تطبيقات NatureCare، مع دعم الترقية من النسخ المثبّتة."
     },
     "captain": {
       "packageName": "app.hhyyw.captain",
-      "versionCode": 8,
-      "versionName": "1.4.1",
+      "versionCode": 9,
+      "versionName": "1.4.2",
       "minSdk": 23,
-      "size": 3391521,
-      "sha256": "e4709106fa76b15ca148c70e942c9026d3c02e2e3ae1a8ce7960bb08a59d81f9",
-      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.1/Delivery-Captain-1.4.1.apk",
-      "notes": "أيقونة جديدة لتطبيق الإدارة وأيقونة لكابتن التوصيل، لتسهيل التمييز بين التطبيقين على شاشة الهاتف."
+      "size": 3395617,
+      "sha256": "aa44b1bce151be7360df3eb7352495e0ffb92250dbfdff43e0e7cccd84eeddeb",
+      "url": "https://github.com/louay1992/mahmoud/releases/download/android-v1.4.2/Delivery-Captain-1.4.2.apk",
+      "notes": "تنزيل التحديثات التالية عبر دومين تطبيقات NatureCare، مع دعم الترقية من النسخ المثبّتة."
     }
   }
 }
