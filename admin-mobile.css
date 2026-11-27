@@ -21,6 +21,7 @@
  .admin-phone .am-page-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}
  .admin-phone .am-page-title h1{margin:0;font-size:23px;line-height:1.45;letter-spacing:-.4px;font-weight:800}
  .admin-phone .am-page-title p{margin:4px 0 0;font-size:12px;color:var(--am-muted);line-height:1.7}
+ .admin-phone #am-delivery .am-page-title{margin-bottom:12px}
  .admin-phone .am-btn,.admin-phone .am-icon-btn,.admin-phone .am-text-btn,.admin-phone .am-filter-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;font:inherit;cursor:pointer;text-decoration:none;min-height:48px;border-radius:12px;font-size:14px;font-weight:700;line-height:1.4}
  .admin-phone .am-btn{padding:11px 15px;min-width:48px}.admin-phone .am-primary{background:var(--am-teal);color:white}.admin-phone .am-secondary{background:#e7efef;color:#285855}
  .admin-phone .am-icon-btn{width:48px;min-width:48px;padding:0;background:#e5f0ed;color:var(--am-teal)}
@@ -57,6 +58,33 @@
  .admin-phone .am-order-footer>span{min-width:0}.admin-phone .am-order-footer small{display:block;font-size:10px;color:var(--am-muted)}.admin-phone .am-order-footer b{display:block;font-size:15px;overflow-wrap:anywhere}
  .admin-phone .am-order-footer>div{display:flex;gap:5px;align-items:center;flex-shrink:0}.admin-phone .am-order-footer .am-btn{font-size:12px;padding:9px 10px;min-height:48px}.admin-phone .am-order-footer .am-icon-btn{width:48px;min-width:48px;min-height:48px;background:#f1f6f5}.admin-phone .am-order-footer .am-icon-btn svg{width:18px;height:18px}
  .admin-phone .am-order-footer .am-icon-btn:last-child{background:transparent;color:var(--am-muted)}
+ .admin-phone .am-delivery-card{border-inline-start:3px solid var(--status);margin-bottom:9px}
+ .admin-phone .am-delivery-card .am-order-main{display:grid;gap:4px;padding:8px 11px 6px;line-height:1.45}
+ .admin-phone .am-delivery-card .am-order-main:focus-visible{outline-offset:-3px}
+ .admin-phone .am-delivery-heading{display:flex;align-items:center;gap:6px;min-width:0}
+ .admin-phone .am-delivery-heading .am-order-number{flex:none;font-size:12px;background:#eff4f4;border-radius:6px;padding:3px 5px}
+ .admin-phone .am-delivery-heading strong{flex:1;min-width:0;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .admin-phone .am-delivery-heading .am-status{flex:none;white-space:nowrap;border-radius:20px;padding:3px 7px;background:#f2f6f6;background:color-mix(in srgb,var(--status) 10%,white)}
+ .admin-phone .am-delivery-team{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px}
+ .admin-phone .am-delivery-team>span{display:flex;align-items:center;gap:4px;min-width:0}
+ .admin-phone .am-delivery-team>span+span{padding-inline-start:8px;border-inline-start:1px solid var(--am-line)}
+ .admin-phone .am-delivery-team svg,.admin-phone .am-delivery-context svg{width:14px;height:14px;color:var(--am-muted)}
+ .admin-phone .am-delivery-team small{flex:none;font-size:11px;color:var(--am-muted)}
+ .admin-phone .am-delivery-team b{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .admin-phone .am-delivery-team .am-unassigned{color:#8c5b13}
+ .admin-phone .am-delivery-context{display:flex;align-items:center;justify-content:space-between;gap:7px;color:var(--am-muted);font-size:12px;min-width:0}
+ .admin-phone .am-delivery-context>span{display:flex;align-items:center;gap:4px;min-width:0}
+ .admin-phone .am-delivery-context>span>span:last-child,.admin-phone .am-delivery-note{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .admin-phone .am-delivery-context svg{width:13px;height:13px}
+ .admin-phone .am-delivery-context time{flex:none;white-space:nowrap}
+ .admin-phone .am-delivery-attention,.admin-phone .am-delivery-note{padding:3px 7px;border-radius:6px;font-size:12px}
+ .admin-phone .am-delivery-attention{display:flex;align-items:center;gap:5px;background:#fff5df;color:#805016;font-weight:700}
+ .admin-phone .am-delivery-attention svg{width:14px;height:14px}
+ .admin-phone .am-delivery-note{background:#f0f5f7;color:#47606d;min-width:0}
+ .admin-phone .am-delivery-card .am-order-footer{padding:3px 10px;gap:6px}
+ .admin-phone .am-delivery-card .am-order-footer .am-btn{min-height:44px;padding:5px 9px}
+ .admin-phone .am-delivery-card .am-order-footer .am-icon-btn{width:44px;min-width:44px;min-height:44px}
+ .admin-phone .am-delivery-card .am-order-footer [data-am]:focus-visible{outline-offset:-2px}
  .admin-phone .am-note{display:block;padding:8px 10px;background:#f0f5f7;border-radius:9px;margin-top:9px;color:#47606d;font-size:12px;overflow-wrap:anywhere;white-space:pre-line}.admin-phone .am-warning{background:#fff5df;color:#8c5b13}
  .admin-phone .am-accounts{margin:21px 0 0;border-top:1px solid var(--am-line)}.admin-phone .am-account-link{width:100%;display:flex;align-items:center;gap:12px;background:none;border:0;border-bottom:1px solid var(--am-line);padding:16px 0;text-align:start;cursor:pointer;color:var(--am-ink)}.admin-phone .am-account-link>span:nth-child(2){flex:1}.admin-phone .am-account-link small{display:block;font-size:12px;color:var(--am-muted)}.admin-phone .am-account-link b{display:block;font-size:14px;margin-top:3px}
  .admin-phone .am-list-tools{display:flex;gap:8px;margin-bottom:14px}.admin-phone .am-search{display:flex;align-items:center;gap:8px;background:white;border:1px solid var(--am-line);border-radius:12px;padding:0 12px;min-width:0;flex:1;color:var(--am-muted)}
@@ -68,6 +96,17 @@
  .admin-phone .am-status-filter b{font-size:12px;color:#4b626e;min-width:20px;text-align:center;background:#eff3f5;padding:1px 5px;border-radius:6px;font-variant-numeric:tabular-nums}
  .admin-phone .am-status-filter[aria-pressed="true"]{background:var(--am-teal);border-color:var(--am-teal);color:#fff}.admin-phone .am-status-filter[aria-pressed="true"] b{color:#fff;background:#ffffff24}
  .admin-phone .am-list-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 1px 11px;color:var(--am-muted);font-size:12px}.admin-phone .am-list-summary b{color:var(--am-ink);font-size:14px}
+ .admin-phone #am-delivery .am-list-summary{margin-block:6px 8px;gap:8px}
+ .admin-phone .am-captain-filter{display:flex;align-items:center;justify-content:center;gap:5px;min-height:44px;max-width:55%;padding:4px 8px;border:1px solid #d0e2de;border-radius:10px;background:#e9f2ef;color:var(--am-teal);font-size:12px;font-weight:700;cursor:pointer}
+ .admin-phone .am-captain-filter>span{min-width:0}.admin-phone .am-captain-filter svg{width:15px;height:15px}
+ .admin-phone .am-captain-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .admin-phone .am-captain-choices,.admin-phone #am-captain-results{display:grid;gap:6px}
+ .admin-phone .am-captain-choices{padding-block:10px 6px}
+ .admin-phone .am-captain-option{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;min-height:44px;border:1px solid var(--am-line);border-radius:10px;background:#fff;color:var(--am-ink);text-align:start;font-size:14px;cursor:pointer}
+ .admin-phone .am-captain-option span{min-width:0;overflow-wrap:anywhere}
+ .admin-phone .am-captain-option b{min-width:25px;padding:2px 5px;border-radius:6px;text-align:center;background:#eff3f5;color:var(--am-muted);font-size:12px}
+ .admin-phone .am-captain-option[aria-pressed="true"]{border-color:#8bbdb4;background:#e6f2ef;color:var(--am-teal);font-weight:700}
+ .admin-phone .am-captain-empty{margin:8px 0;color:var(--am-muted);font-size:13px}
  .admin-phone .am-applied{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px}.admin-phone .am-applied>span{padding:4px 8px;border-radius:7px;background:#e6eeef;color:#4c6671;font-size:11px}
  .admin-phone .am-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:35px 18px;background:white;border:1px dashed #cbdadd;border-radius:18px;gap:9px}.admin-phone .am-empty>span{color:#78968e}.admin-phone .am-empty>span svg{width:35px;height:35px}.admin-phone .am-empty h3{font-size:17px;margin:4px 0 0}.admin-phone .am-empty p{font-size:13px;color:var(--am-muted);line-height:1.7;margin:0 0 8px}
  .admin-phone .am-load-more{width:100%;background:#e4eeec;color:var(--am-teal);margin:3px 0 12px}.admin-phone .am-group{font-size:15px;margin:18px 1px 10px}.admin-phone .am-group span{color:var(--am-muted);font-size:12px;margin-inline-start:5px}

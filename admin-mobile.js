@@ -9,11 +9,12 @@
   const labels = {new:'جديدة',in_delivery:'قيد التوصيل',no_answer:'لم يتم الرد',closed:'مغلق',other:'ملاحظات أخرى',cancelled:'ملغية',all:'الكل'};
   const enabled = () => compact.matches && typeof ACC !== 'undefined' && ACC.role === 'full';
   const button = (label, action, value='', cls='am-btn', extra='') => `<button type="button" class="${cls}" data-am="${action}" data-value="${esc(value)}" ${extra}>${label}</button>`;
-  const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',arrow:'<path d="m14 6-6 6 6 6M8 12h13"/>',pin:'<path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',phone:'<path d="m5 3 4 1 1 5-3 2a16 16 0 0 0 6 6l2-3 5 1 1 4c-1 5-8 2-13-3S0 4 5 3Z"/>'};
+  const paths={search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',arrow:'<path d="m14 6-6 6 6 6M8 12h13"/>',pin:'<path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',phone:'<path d="m5 3 4 1 1 5-3 2a16 16 0 0 0 6 6l2-3 5 1 1 4c-1 5-8 2-13-3S0 4 5 3Z"/>',dots:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',chev:'<path d="m6 9 6 6 6-6"/>'};
   const icon = name => `<span aria-hidden="true">${paths[name]?'<svg class="i" viewBox="0 0 24 24">'+paths[name]+'</svg>':ic(name)}</span>`;
   const empty = (title,hint,action='show-all') => `<div class="am-empty">${icon('box')}<h3>${title}</h3><p>${hint}</p>${button('عرض كل الطلبات',action,'','am-btn am-secondary')}</div>`;
   const amount = value => esc(money(value));
   const validId = id => typeof id==='string' && /^[a-zA-Z0-9-]+$/.test(id);
+  const phoneNumber = o => String(o.customer_phone||'').replace(/[^+0-9*#]/g,'');
   const shipments = () => SHIPS || [];
   const delivery = () => D.orders.filter(o=>o.fulfillment!=='shipping');
   const shippingStatus = o => o.ship_status==='cancelled' ? 'cancelled' : NS(o.ship_status);
@@ -58,37 +59,67 @@
     return true;
   }
   function heading(title,subtitle,shipping=false){
-    return `<div class="am-page-title"><div><h1>${title}</h1><p>${subtitle}</p></div>${button(icon('plus'),'create',shipping?'shipping':'delivery','am-icon-btn',`aria-label="${shipping?'إنشاء طلب شحن':'إنشاء طلب توصيل'}"`)}</div>`;
+    return `<div class="am-page-title"><div><h1>${title}</h1>${subtitle?`<p>${subtitle}</p>`:''}</div>${button(icon('plus'),'create',shipping?'shipping':'delivery','am-icon-btn',`aria-label="${shipping?'إنشاء طلب شحن':'إنشاء طلب توصيل'}"`)}</div>`;
   }
   function badge(o,shipping){
     const key=shipping?shippingStatus(o):o.status;
     const label=shipping?(shipStates.find(x=>x[0]===key)?.[1]||shl(o.ship_status)[1]):(ST[key]||key);
     return `<span class="am-status" style="--status:${colors[key]||'#526274'}"><i></i>${esc(label)}</span>`;
   }
-  function card(o,shipping=false){
-    const key=shipping?shippingStatus(o):o.status, action=shipping?'open-shipment':'open-order';
+  function deliveryCard(o){
+    const key=o.status, open=key==='new'||OPEN.includes(key), assignable=open&&!o.captain_id;
+    const pricePending=(D.pr[o.id]||[]).some(x=>x.status==='pending');
+    const action=pricePending?'review-price':'open-order';
+    const label=pricePending?'مراجعة السعر':assignable?'إسناد':'التفاصيل';
+    const customer=esc(o.customer_name||'زبون'), number=esc(o.order_no), id=esc(o.id);
+    const captain=esc(o.captain_id?cname(o.captain_id):assignable?'بانتظار الإسناد':'غير مُسنَد');
+    const marketer=esc(o.marketer_id?mname(o.marketer_id):'بدون مسوّقة');
+    const location=esc([...new Set([o.governorate,o.customer_address].map(value=>value?.trim()).filter(Boolean))].join('، ')||'لا يوجد عنوان مسجّل');
+    const updated=(key==='delivered'&&o.delivered_at)||o.status_at||o.created_at;
+    return `<article class="am-order am-delivery-card" data-order-id="${id}" data-status="${esc(key)}" style="--status:${colors[key]||'#526274'}">
+      <button type="button" class="am-order-main" data-am="open-order" data-value="${id}" aria-label="تفاصيل الطلب ${number} للزبون ${customer}">
+        <span class="am-delivery-heading">
+          <bdi class="am-order-number" dir="ltr">#${number}</bdi><strong title="${customer}">${customer}</strong>${badge(o,false)}
+        </span>
+        <span class="am-delivery-team">
+          <span>${icon('truck')}<small>الكابتن</small><b class="${assignable?'am-unassigned':''}" title="${captain}">${captain}</b></span>
+          <span>${icon('users')}<small>المسوّقة</small><b title="${marketer}">${marketer}</b></span>
+        </span>
+        <span class="am-delivery-context">
+          <span title="${location}">${icon('pin')}<span>${location}</span></span>
+          ${updated?`<time datetime="${esc(updated)}" title="${esc(dt(updated))}">${esc(when(updated))}</time>`:''}
+        </span>
+        ${pricePending?`<span class="am-delivery-attention">${icon('alert')} تعديل سعر بانتظار قرارك</span>`:''}
+        ${o.captain_note?`<span class="am-delivery-note" title="${esc(o.captain_note)}">ملاحظة الكابتن: ${esc(o.captain_note)}</span>`:''}
+      </button>
+      <div class="am-order-footer">
+        <span><small>${open?'المطلوب من الزبون':'إجمالي الطلب'}</small><b>${amount(o.total)}</b></span>
+        <div>${button(label,action,o.id,'am-btn am-primary',`aria-label="${label}${assignable&&!pricePending?' الكابتن':''} للطلب ${number}"`)}
+        ${button(icon('dots'),'order-options','d:'+o.id,'am-icon-btn',`aria-label="خيارات الطلب ${number}"`)}</div>
+      </div>
+    </article>`;
+  }
+  function shipmentCard(o){
+    const key=shippingStatus(o), action='open-shipment';
     const items=(o.order_items||[]).map(i=>`${i.products?.name||'منتج'} ×${i.qty}`).join('، ');
-    const pending=!shipping&&(D.pr[o.id]||[]).some(x=>x.status==='pending');
     const age=Math.floor((Date.now()-new Date(o.status_at||o.created_at).getTime())/864e5);
     const address=[o.governorate,o.customer_address].filter(Boolean).join('، ');
-    const phone=String(o.customer_phone||'').replace(/[^+0-9*#]/g,'');
-    const owner=shipping?carName(o.carrier_id):(o.captain_id?cname(o.captain_id):'بانتظار إسناد كابتن');
+    const phone=phoneNumber(o);
     return `<article class="am-order" data-order-id="${esc(o.id)}" data-status="${esc(key)}">
-      <button type="button" class="am-order-main" data-am="${action}" data-value="${esc(o.id)}" aria-label="تفاصيل ${shipping?'الشحنة':'الطلب'} ${esc(o.order_no)} للزبون ${esc(o.customer_name)}">
-        <span class="am-order-top"><span class="am-order-number">#${esc(o.order_no)}</span>${badge(o,shipping)}</span>
+      <button type="button" class="am-order-main" data-am="${action}" data-value="${esc(o.id)}" aria-label="تفاصيل الشحنة ${esc(o.order_no)} للزبون ${esc(o.customer_name)}">
+        <span class="am-order-top"><span class="am-order-number">#${esc(o.order_no)}</span>${badge(o,true)}</span>
         <strong class="am-customer">${esc(o.customer_name||'زبون')}</strong>
         <span class="am-address">${icon('pin')}${esc(address||'لا يوجد عنوان مسجّل')}</span>
         <span class="am-products">${esc(items||'لا توجد منتجات')}</span>
-        <span class="am-order-meta"><span>${icon(shipping?'store':'users')}${esc(owner)}</span><time>${esc(when(o.status_at||o.created_at))}</time></span>
-        ${shipping?`<span class="am-waybill">البوليصة <b dir="ltr">${esc(o.waybill||'لم تُضف بعد')}</b></span>`:''}
-        ${pending?'<span class="am-note am-warning">طلب تعديل سعر ينتظر قرارك</span>':''}
-        ${shipping&&key==='handed'&&age>=5?`<span class="am-note am-warning">لدى الشركة منذ ${age} أيام، تحتاج متابعة</span>`:''}
+        <span class="am-order-meta"><span>${icon('store')}${esc(carName(o.carrier_id))}</span><time>${esc(when(o.status_at||o.created_at))}</time></span>
+        <span class="am-waybill">البوليصة <b dir="ltr">${esc(o.waybill||'لم تُضف بعد')}</b></span>
+        ${key==='handed'&&age>=5?`<span class="am-note am-warning">لدى الشركة منذ ${age} أيام، تحتاج متابعة</span>`:''}
         ${o.captain_note?`<span class="am-note">${esc(o.captain_note)}</span>`:''}
       </button>
       <div class="am-order-footer"><span><small>المطلوب تحصيله</small><b>${amount(o.total)}</b></span><div>
         ${phone?`<a class="am-icon-btn am-call" href="tel:${esc(phone)}" aria-label="اتصال بالزبون ${esc(o.customer_name)}">${icon('phone')}</a>`:''}
-        ${button(shipping?'إدارة الشحنة':o.status==='new'?'إسناد':'التفاصيل',action,o.id,'am-btn am-primary',!shipping&&o.status==='new'?'aria-label="إسناد الكابتن للطلب '+esc(o.order_no)+'"':'')}
-        ${button(icon('menu'),'order-options',(shipping?'s:':'d:')+o.id,'am-icon-btn',`aria-label="خيارات الطلب ${esc(o.order_no)}"`)}
+        ${button('إدارة الشحنة',action,o.id,'am-btn am-primary')}
+        ${button(icon('menu'),'order-options','s:'+o.id,'am-icon-btn',`aria-label="خيارات الطلب ${esc(o.order_no)}"`)}
       </div></div></article>`;
   }
   function home(){
@@ -103,18 +134,22 @@
       ${pending?button(`<span class="am-notice-icon">${icon('alert')}</span><span><b>${pending} طلب تعديل سعر</b><small>بانتظار موافقتك أو رفضك</small></span>${icon('arrow')}`,'price-requests','','am-notice'):''}
       <div class="am-destinations">${button(`${icon('truck')}<b>طلبات التوصيل</b><span>${active.length} طلب قيد المتابعة</span>`,'delivery-status','new','am-destination')}${button(`${icon('box')}<b>طلبات الشحن</b><span>${shipping.length} شحنة ضمن أحدث الطلبات</span>`,'shipping-status','preparing','am-destination am-shipping-destination')}</div>
       ${button(`${icon('search')}<span>بحث في طلبات التوصيل</span>`,'search-orders','','am-home-search')}
-      <section class="am-section"><div class="am-section-heading"><div><h2>أولوية المتابعة</h2><p>من أحدث طلبات التوصيل</p></div>${button('عرض الكل','delivery-status','all','am-text-btn')}</div>${queue.length?queue.map(o=>card(o)).join(''):empty('لا توجد طلبات تحتاج متابعة','يمكنك مراجعة الطلبات أو إنشاء طلب جديد.')}</section>
+      <section class="am-section"><div class="am-section-heading"><div><h2>أولوية المتابعة</h2><p>من أحدث طلبات التوصيل</p></div>${button('عرض الكل','delivery-status','all','am-text-btn')}</div>${queue.length?queue.map(deliveryCard).join(''):empty('لا توجد طلبات تحتاج متابعة','يمكنك مراجعة الطلبات أو إنشاء طلب جديد.')}</section>
       <section class="am-today" aria-label="ملخص اليوم"><div><small>سُلِّم اليوم</small><b>${Number(stats.delivered_today||0)} <span>طلب</span></b></div><div><small>مبيعات اليوم</small><b>${amount(stats.sales_today)}</b></div></section>
       <section class="am-accounts">${button(`${icon('wallet')}<span><small>المستحق على الكباتن</small><b>${amount(stats.owed_total)}</b></span>${icon('arrow')}`,'navigate','captains','am-account-link')}${low.length?button(`${icon('alert')}<span><b>${low.length} صنف بمخزون منخفض</b><small>راجع الكميات قبل إسناد الطلبات</small></span>${icon('arrow')}`,'low-stock','','am-account-link'):''}</section>
     </div>`;
   }
   function orders(){
     if(!state.deliverySeen){state.deliverySeen=true;orderFilter='new';}
-    $('main').innerHTML=`<div id="am-delivery" class="am-list-page">${heading('طلبات التوصيل','الجديدة أولًا، ثم متابعة ما يحتاج إجراءك')}
+    $('main').innerHTML=`<div id="am-delivery" class="am-list-page">${heading('طلبات التوصيل','')}
       <div class="am-list-tools"><div class="am-search">${icon('search')}<input id="oq" type="search" aria-label="بحث في طلبات التوصيل" placeholder="اسم الزبون، الموبايل أو رقم الطلب" value="${esc(orderQuery)}" enterkeyhint="search" oninput="orderQuery=this.value;AdminMobile.resetLimit();renderOrderList()"></div>${button(icon('filter')+'<span>فلاتر</span>','filters','delivery','am-filter-btn')}</div>
       <div class="am-status-rail" id="ochips" role="group" aria-label="حالات طلبات التوصيل"></div>
       <div id="am-active-filters"></div><div id="osum" class="am-list-summary" aria-live="polite"></div><div id="olist"></div></div>`;
     orderList();
+  }
+  function captainFilterLabel(){
+    if(orderCap==='none')return 'بدون كابتن';
+    return orderCap?D.captains.find(c=>c.id===orderCap)?.name||'الكابتن المختار':'كل الكباتن';
   }
   function orderList(){
     if(!$('am-delivery')) return;
@@ -122,17 +157,20 @@
     const keys=primary.includes(orderFilter)?primary:[...primary.slice(0,-1),orderFilter,'all'];
     const rail=$('ochips'), offset=rail.scrollLeft;
     rail.innerHTML=keys.map(k=>button(`${esc(labels[k]||ST[k])}<b>${counts[k]||0}</b>`,'delivery-status',k,'am-status-filter',`aria-pressed="${orderFilter===k}"`)).join('');rail.scrollLeft=offset;
-    const tags=[orderCap&&(orderCap==='none'?'بلا كابتن':cname(orderCap)),orderMk&&(orderMk==='none'?'بلا مسوّقة':mname(orderMk)),orderPer!=='all'&&({'today':'اليوم',week:'آخر 7 أيام',month:'هذا الشهر'})[orderPer],orderGrp!=='none'&&'تجميع مفعّل'].filter(Boolean);
+    const tags=[orderMk&&(orderMk==='none'?'بلا مسوّقة':mname(orderMk)),orderPer!=='all'&&({'today':'اليوم',week:'آخر 7 أيام',month:'هذا الشهر'})[orderPer],orderGrp!=='none'&&'تجميع مفعّل'].filter(Boolean);
     $('am-active-filters').innerHTML=tags.length?`<div class="am-applied">${tags.map(t=>`<span>${esc(t)}</span>`).join('')}${button('مسح','reset-filters','delivery','am-text-btn')}</div>`:'';
     const list=sorted(ordBase(false));
-    $('osum').innerHTML=`<span><b>${list.length}</b> طلب ${esc(labels[orderFilter]||ST[orderFilter]||'')}</span><span>${state.sort==='recent'?'الأحدث أولًا':state.sort==='oldest'?'الأقدم أولًا':'حسب الأولوية'}</span>`;
+    const summary=state.sort==='recent'?'الأحدث أولًا':state.sort==='oldest'?'الأقدم أولًا':'حسب الأولوية';
+    const captain=esc(captainFilterLabel());
+    $('osum').innerHTML=`<span><b>${list.length}</b> طلب <span class="am-delivery-sort">· ${summary}</span></span>
+      ${button(`${icon('users')}<span class="am-captain-label">${captain}</span>${icon('chev')}`,'captain-filter','','am-captain-filter',`aria-haspopup="dialog" aria-label="فلترة حسب الكابتن، ${captain}"`)} `;
     const page=list.slice(0,state.deliveryLimit);
     let html='';
-    if(orderGrp==='none') html=page.map(o=>card(o)).join('');
+    if(orderGrp==='none') html=page.map(deliveryCard).join('');
     else{
       const keyOf={status:o=>o.status,captain:o=>o.captain_id||'-',marketer:o=>o.marketer_id||'-',day:o=>new Date(o.created_at).toLocaleDateString('ar')}[orderGrp];
       const groups=new Map();page.forEach(o=>{const k=keyOf(o);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)});
-      for(const [k,records] of groups){const label=orderGrp==='status'?ST[k]:orderGrp==='captain'?(k==='-'?'بلا كابتن':cname(k)):orderGrp==='marketer'?(k==='-'?'بلا مسوّقة':mname(k)):k;html+=`<h2 class="am-group">${esc(label)} <span>${records.length}</span></h2>`+records.map(o=>card(o)).join('');}
+      for(const [k,records] of groups){const label=orderGrp==='status'?ST[k]:orderGrp==='captain'?(k==='-'?'بلا كابتن':cname(k)):orderGrp==='marketer'?(k==='-'?'بلا مسوّقة':mname(k)):k;html+=`<h2 class="am-group">${esc(label)} <span>${records.length}</span></h2>`+records.map(deliveryCard).join('');}
     }
     $('olist').innerHTML=html||empty(orderFilter==='new'&&!orderQuery?'لا توجد طلبات جديدة':'لا توجد نتائج مطابقة','جرّب بحثًا آخر أو اعرض كل الطلبات.');
     globalThis.AdminWorkspace?.decorateEvents();
@@ -165,12 +203,41 @@
     $('am-shipping-filters').innerHTML=tags.length?`<div class="am-applied">${tags.map(t=>`<span>${esc(t)}</span>`).join('')}${button('مسح','reset-filters','shipping','am-text-btn')}</div>`:'';
     $('am-ship-summary').innerHTML=`<span><b>${list.length}</b> شحنة</span><span>${state.sort==='recent'?'الأحدث أولًا':state.sort==='oldest'?'الأقدم أولًا':'حسب الأولوية'}</span>`;
     const page=list.slice(0,state.shippingLimit);
-    $('shlist').innerHTML=page.map(o=>card(o,true)).join('')||empty('لا توجد شحنات مطابقة','جرّب حالة أخرى أو عدّل الفلاتر.','all-shipments');
+    $('shlist').innerHTML=page.map(shipmentCard).join('')||empty('لا توجد شحنات مطابقة','جرّب حالة أخرى أو عدّل الفلاتر.','all-shipments');
     globalThis.AdminWorkspace?.decorateEvents();
     if(list.length>page.length)$('shlist').insertAdjacentHTML('beforeend',button(`عرض شحنات إضافية (${page.length} من ${list.length})`,'load-more','shipping','am-btn am-load-more'));
   }
   const select=(id,label,options,value)=>`<label class="am-filter-field"><span>${label}</span><select id="${id}">${options.map(([k,l])=>`<option value="${esc(k)}" ${k===value?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`;
   function sheet(title,body){$('modal').innerHTML=`<div class="sheet am-sheet" role="dialog" aria-modal="true" aria-label="${title}"><div class="sh-h"><b>${title}</b>${button(icon('x'),'close','','am-icon-btn','aria-label="إغلاق"')}</div>${body}</div>`;$('modal').style.display='flex';}
+  function captainFilter(){
+    const orders=ordBase(true,''), counts=new Map();
+    for(const order of orders){
+      const id=order.captain_id||'none';
+      counts.set(id,(counts.get(id)||0)+1);
+    }
+    const captains=D.captains.filter(c=>c.active!==false||counts.has(c.id)||c.id===orderCap)
+      .sort((a,b)=>(counts.get(b.id)||0)-(counts.get(a.id)||0)||a.name.localeCompare(b.name,'ar'));
+    const option=(id,name,count)=>button(`<span>${esc(name)}</span><b>${count}</b>`,'choose-captain',id,'am-captain-option',`aria-pressed="${id===orderCap}"`);
+    sheet('فلترة حسب الكابتن',`<div class="am-search">${icon('search')}<input id="am-captain-query" type="search" aria-label="بحث باسم الكابتن" placeholder="بحث باسم الكابتن" enterkeyhint="search"></div>
+      <div class="am-captain-choices">${option('','كل الكباتن',orders.length)}${option('none','بدون كابتن',counts.get('none')||0)}<div id="am-captain-results"></div></div>`);
+    const search=$('am-captain-query');
+    function draw(){
+      const query=nrm(search.value);
+      const matching=captains.filter(c=>nrm(c.name).includes(query));
+      $('am-captain-results').innerHTML=matching.map(c=>option(c.id,c.name,counts.get(c.id)||0)).join('')||'<p class="am-captain-empty">لا توجد أسماء مطابقة</p>';
+    }
+    search.addEventListener('input',draw);
+    draw();
+  }
+  function chooseCaptain(id){
+    if(id&&id!=='none'&&!D.captains.some(c=>c.id===id))return;
+    orderCap=id;
+    if(id)orderFilter='all';
+    closeStatus();
+    state.deliveryLimit=30;
+    orderList();
+    $('osum').querySelector('.am-captain-filter').focus({preventScroll:true});
+  }
   function filters(type){
     const shipping=type==='shipping',f=shipping?SHF:{mk:orderMk,per:orderPer};
     let html=shipping?select('am-f-owner','شركة الشحن',[['','كل الشركات'],...D.carriers.map(c=>[c.id,c.name])],SHF.car):select('am-f-owner','الكابتن',[['','كل الكباتن'],['none','بدون كابتن'],...D.captains.map(c=>[c.id,c.name])],orderCap);
@@ -193,8 +260,15 @@
   function shippingFilter(value){state.shippingSeen=true;SHF.st=value;resetLimit();if(tab==='ship'&&$('am-shipping'))shippingList();else go('ship');}
   function options(value){
     const shipping=value.startsWith('s:'),id=value.slice(2),o=(shipping?shipments():D.orders).find(x=>x.id===id);if(!o)return;
-    const map=mapUrl(o),closed=['delivered','returned','cancelled'].includes(shipping?shippingStatus(o):o.status);
-    sheet('خيارات الطلب #'+esc(o.order_no),`<div class="am-options">${button(icon('box')+'التفاصيل',shipping?'open-shipment':'open-order',id,'am-option')}${!closed&&!shipping?button(icon('tag')+'تعديل بيانات الطلب','edit-order',id,'am-option'):''}<a class="am-option" href="${waUrl(o,waText(o))}" target="_blank" rel="noopener">${icon('phone')}واتساب الزبون</a>${map?`<a class="am-option" href="${map}" target="_blank" rel="noopener">${icon('pin')}فتح الخريطة</a>`:''}</div>`);
+    const map=mapUrl(o),phone=phoneNumber(o),closed=['delivered','returned','cancelled'].includes(shipping?shippingStatus(o):o.status);
+    sheet('خيارات الطلب #'+esc(o.order_no),`<div class="am-options">${button(icon('box')+'التفاصيل',shipping?'open-shipment':'open-order',id,'am-option')}${!closed&&!shipping?button(icon('tag')+'تعديل بيانات الطلب','edit-order',id,'am-option'):''}${!shipping&&phone?`<a class="am-option" href="tel:${esc(phone)}">${icon('phone')}اتصال بالزبون</a>`:''}<a class="am-option" href="${waUrl(o,waText(o))}" target="_blank" rel="noopener">${icon('phone')}واتساب الزبون</a>${map?`<a class="am-option" href="${map}" target="_blank" rel="noopener">${icon('pin')}فتح الخريطة</a>`:''}</div>`);
+  }
+  function reviewPrice(id){
+    const order=D.orders.find(o=>o.id===id);
+    if(!order)return;
+    const requests=(D.pr[id]||[]).filter(request=>request.status==='pending');
+    if(!requests.length)return openOrder(id);
+    sheet('مراجعة سعر الطلب #'+esc(order.order_no),requests.map(prItem).join(''));
   }
   function createOrder(type,target){
     go('new',{origin:AdminMotion.anchor(target),orderMode:type});
@@ -209,8 +283,8 @@
     'delivery-status':deliveryStatus,'shipping-status':shippingFilter,
     'retry-shipping':()=>go('ship'),
     'open-order':id=>{if(validId(id))openOrder(id);},'open-shipment':id=>{if(validId(id))openShip(id);},
-    'edit-order':id=>{if(validId(id))openEdit(id);},'order-options':options,
-    filters, 'apply-filters':applyFilters,'reset-filters':resetFilters,close:()=>closeStatus(),
+    'edit-order':id=>{if(validId(id))openEdit(id);},'order-options':options,'review-price':reviewPrice,
+    filters, 'apply-filters':applyFilters,'reset-filters':resetFilters, 'captain-filter':captainFilter,'choose-captain':chooseCaptain,close:()=>closeStatus(),
     logout:()=>{closeStatus();logout();},
     'search-orders':()=>{deliveryStatus('all');$('oq')?.focus();},
     'show-all':()=>{resetFilters('delivery');deliveryStatus('all');},
