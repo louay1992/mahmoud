@@ -52,11 +52,22 @@ Content-Type = "application/json"
 Cache-Control = "public, max-age=300"
 
 [[headers]]
-for = "/downloads/*"
+for = "/downloads/*.apk"
 [headers.values]
 Content-Type = "application/vnd.android.package-archive"
 Content-Disposition = "attachment"
 Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+for = "/downloads/latest.json"
+[headers.values]
+Content-Type = "application/json"
+Cache-Control = "no-store"
+
+[[edge_functions]]
+path = "/downloads/*"
+function = "android-downloads"
+cache = "manual"
 
 [[redirects]]
 from = "/owner"
