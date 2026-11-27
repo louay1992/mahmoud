@@ -1,7 +1,7 @@
 "$schema" = "https://open-api.netlify.com/netlify.schema.json"
 
 [build]
-command = "npm run build"
+command = "npm run build && node --use-env-proxy scripts/stage-android-downloads.mjs"
 publish = "dist"
 
 [build.environment]
@@ -50,6 +50,13 @@ for = "/.well-known/assetlinks.json"
 [headers.values]
 Content-Type = "application/json"
 Cache-Control = "public, max-age=300"
+
+[[headers]]
+for = "/downloads/*"
+[headers.values]
+Content-Type = "application/vnd.android.package-archive"
+Content-Disposition = "attachment"
+Cache-Control = "public, max-age=0, must-revalidate"
 
 [[redirects]]
 from = "/owner"

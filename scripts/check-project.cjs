@@ -22,13 +22,18 @@ for (const file of sources) {
   catch (error) { fail('syntax: ' + file + '\n' + String(error.stderr || error.message).trim()); }
 }
 
-// 2. Local assets referenced by the public pages exist in the repository.
+// 2. Local links point to source files, Netlify rewrites, or published APKs.
 const pages = ['index.html', 'admin.html', 'captain.html','owner.html','account-setup.html'];
+const rewrites = new Map([...read('netlify.toml').matchAll(/from = "\/(\w+)"\s+to = "\/([\w.-]+)"\s+status = 200/g)]
+  .map(([, route, file]) => [route, file]));
+const publishedApks = new Set(['downloads/delivery-admin.apk', 'downloads/delivery-captain.apk']);
 for (const page of pages) {
   const source = read(page);
   for (const match of source.matchAll(/(?:src|href)="(\/[^"]*)"/g)) {
     const asset = match[1].replace(/^\//, '').split(/[?#]/)[0];
-    if (asset && !exists(asset)) fail('missing asset: ' + page + ' -> /' + asset);
+    if (asset && !publishedApks.has(asset) && !exists(rewrites.get(asset) ?? asset)) {
+      fail('missing asset: ' + page + ' -> /' + asset);
+    }
   }
 }
 
@@ -74,7 +79,7 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('✓ ' + sources.length + ' JavaScript sources parse');
-console.log('✓ ' + pages.length + ' pages reference existing local assets');
+console.log('✓ ' + pages.length + ' pages reference local assets or deployment routes');
 console.log('✓ deployment endpoints are read only from app-config.js');
 console.log('✓ all ' + called.size + ' client RPCs are defined in SQL or documented as untracked');
 if (untracked.length) console.log('⚠ ' + untracked.length + ' RPC(s) exist only in the deployed database (see ' + baselinePath + '): ' + untracked.join(', '));
