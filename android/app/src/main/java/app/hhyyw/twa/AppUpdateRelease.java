@@ -5,7 +5,9 @@ import java.net.URL;
 
 /** Public release metadata; downloading never accepts an arbitrary URL from the WebView. */
 final class AppUpdateRelease {
-    static final String FEED = "https://raw.githubusercontent.com/louay1992/mahmoud/android-releases/latest.json";
+    static final String SITE = "https://applications.nature-care.net";
+    static final String FEED = SITE + "/downloads/latest.json";
+    private static final String SITE_PREFIX = "/downloads/releases/";
     static final long MAX_APK_BYTES = 100L * 1024 * 1024;
     final String role, packageName, versionName, url, sha256, notes;
     final int versionCode, minSdk;
@@ -24,14 +26,21 @@ final class AppUpdateRelease {
                 || !sha256.matches("[a-f0-9]{64}") || notes.length() > 2000) throw new IllegalArgumentException("Invalid release metadata");
         URL asset = new URL(url);
         String filename = "Delivery-" + ("admin".equals(role) ? "Admin" : "Captain") + "-" + versionName + ".apk";
-        if (!trustedDownload(asset, false) || asset.getQuery() != null || asset.getRef() != null
-                || !asset.getPath().matches("/louay1992/mahmoud/releases/download/[A-Za-z0-9._-]+/" + java.util.regex.Pattern.quote(filename)))
+        boolean expectedPath = site(asset)
+                ? asset.getPath().equals(SITE_PREFIX + versionName + "/" + sha256 + "/delivery-" + role + ".apk")
+                : asset.getPath().matches("/louay1992/mahmoud/releases/download/[A-Za-z0-9._-]+/" + java.util.regex.Pattern.quote(filename));
+        if (!trustedDownload(asset, false) || !expectedPath || asset.getQuery() != null || asset.getRef() != null)
             throw new IllegalArgumentException("Invalid APK location");
     }
     static AppUpdateRelease parse(JSONObject manifest, String role) throws Exception {
         if (manifest.getInt("schema") != 1 || !manifest.getString("sourceCommit").matches("[a-f0-9]{40}"))
             throw new IllegalArgumentException("Invalid release manifest");
         return new AppUpdateRelease(role, manifest.getJSONObject("apps").getJSONObject(role));
+    }
+    static AppUpdateRelease parseSite(JSONObject manifest, String role) throws Exception {
+        AppUpdateRelease release = parse(manifest, role);
+        if (!site(new URL(release.url))) throw new IllegalArgumentException("Expected an APK on the application domain");
+        return release;
     }
     private static long integer(JSONObject data, String field, long maximum) throws Exception {
         Object value = data.get(field);
@@ -51,9 +60,13 @@ final class AppUpdateRelease {
     static boolean https(URL value) {
         return "https".equals(value.getProtocol()) && value.getUserInfo() == null && (value.getPort() == -1 || value.getPort() == 443);
     }
+    static boolean site(URL value) {
+        return https(value) && "applications.nature-care.net".equalsIgnoreCase(value.getHost());
+    }
     static boolean trustedDownload(URL value, boolean redirect) {
         if (!https(value)) return false;
         String host = value.getHost();
+        if (site(value)) return !redirect && value.getPath().startsWith(SITE_PREFIX);
         if ("github.com".equalsIgnoreCase(host)) return value.getPath().startsWith("/louay1992/mahmoud/releases/download/");
         return redirect && ("release-assets.githubusercontent.com".equalsIgnoreCase(host) || "objects.githubusercontent.com".equalsIgnoreCase(host));
     }

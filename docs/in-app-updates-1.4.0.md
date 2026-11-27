@@ -17,9 +17,9 @@
 3. انشر GitHub Release باسم `android-vVERSION` على commit المصدر نفسه، وأرفق `Delivery-Admin-VERSION.apk` و`Delivery-Captain-VERSION.apk`. تحقق من بصمات الملفات المنشورة بعد تنزيلها.
 4. **بعد** إتاحة الملفين للعامة، حدّث `latest.json` على فرع `android-releases` بالمحتوى المتولد. هذا الفرع مخصص لبيانات الإصدار، ولا يغيّر كود `main`.
 5. نزّل بيان الإصدار الحي وتحقق من رقمَي الإصدار والحجم والبصمات ومطابقة sourceCommit. الإصدار لا يصبح متاحًا للتحديث داخل التطبيقات قبل هذه الخطوة.
-6. أعد نشر الموقع على Netlify بعد تحديث البيان. يتحقق البناء من حجم وبصمة الملفين وينشرهما على `/downloads/delivery-admin.apk` و`/downloads/delivery-captain.apk` ضمن دومين الموقع.
+6. افحص بيان `/downloads/latest.json` ورابطَي `/downloads/delivery-admin.apk` و`/downloads/delivery-captain.apk` على `applications.nature-care.net`. تتبع هذه الروابط بيان الإصدار تلقائيًا دون إعادة نشر الموقع. إن تعذّر جلب المصدر، يقدّم الموقع آخر نسخة تحقّق منها البناء.
 
-عنوان البيان الثابت: `https://raw.githubusercontent.com/louay1992/mahmoud/android-releases/latest.json`. روابط APK محصورة بإصدارات المستودع نفسه، مع السماح بإعادة توجيه HTTPS إلى مخازن GitHub الرسمية فقط. لا تدخل مفاتيح التوقيع أو حساب الخدمة إلى البيان أو APK.
+تقرأ التطبيقات من الإصدار `1.4.2` بيان وملفات التحديث عبر `https://applications.nature-care.net/downloads/latest.json`. تبقى قناة GitHub الأصلية متاحة للنسخ السابقة حتى تثبيت الإصدار الانتقالي بالتوقيع نفسه. لا تدخل مفاتيح التوقيع أو حساب الخدمة إلى البيان أو APK.
 
 ## الاختبارات
 
