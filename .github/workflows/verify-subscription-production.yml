@@ -1,0 +1,28 @@
+name: Verify production subscription enforcement
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/*enforce_subscription_expiry.sql', 'scripts/verify-subscription-production.cjs', '.github/workflows/verify-subscription-production.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: delivery-subscription-verification
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: npm ci --ignore-scripts
+      - name: Verify the deployed database against GitHub source
+        env:
+          SUPABASE_DB_URL: ${{ secrets.BACKUP_SUPABASE_DB_URL }}
+        run: node scripts/verify-subscription-production.cjs
+      - uses: actions/upload-artifact@v4
+        with: { name: subscription-production-verification, path: artifacts/verification/ }

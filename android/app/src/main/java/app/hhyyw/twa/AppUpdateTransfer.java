@@ -13,9 +13,11 @@ final class AppUpdateTransfer {
     interface Progress { void changed(long downloaded, long total); }
     static HttpURLConnection open(String address, boolean apk) throws Exception {
         URL url = new URL(address);
+        boolean sameDomain = AppUpdateRelease.site(url);
         for (int redirects = 0; redirects <= 5; redirects++) {
             boolean allowed = apk ? AppUpdateRelease.trustedDownload(url, redirects > 0)
-                    : AppUpdateRelease.https(url) && "raw.githubusercontent.com".equalsIgnoreCase(url.getHost());
+                    : AppUpdateRelease.FEED.equals(url.toExternalForm());
+            if (sameDomain && redirects > 0) allowed = false;
             if (!allowed) throw new IOException("تعذّر التحقق من مصدر التحديث");
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(10000); connection.setReadTimeout(15000);
@@ -42,7 +44,7 @@ final class AppUpdateTransfer {
                 if (output.size() + count > 65536) throw new IOException("بيانات الإصدار غير صالحة");
                 output.write(buffer, 0, count);
             }
-            return AppUpdateRelease.parse(new JSONObject(output.toString(StandardCharsets.UTF_8.name())), role);
+            return AppUpdateRelease.parseSite(new JSONObject(output.toString(StandardCharsets.UTF_8.name())), role);
         } finally { connection.disconnect(); }
     }
     static File download(AppUpdateRelease release, File directory, AtomicBoolean cancelled, Progress progress) throws Exception {

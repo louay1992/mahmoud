@@ -1,11 +1,14 @@
-import { corsHeaders, originRejected } from "./admin-set-password.ts";
+import { corsHeaders } from "./admin-set-password.ts";
 
 /** Hosted Auth owns email delivery and passwords. This endpoint never returns a verification link or a token. */
 export function createOwnerInviteHandler({ allowedOrigin, service, publicAuth }: { allowedOrigin: string; service: any; publicAuth: any }) {
-  const headers = { ...corsHeaders(allowedOrigin), "Content-Type": "application/json" };
-  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+  const productionOrigins = ["https://hhyyw.netlify.app", "https://applications.nature-care.net"];
+  const origins = new Set(productionOrigins.includes(allowedOrigin) ? productionOrigins : [allowedOrigin]);
   return async (req: Request): Promise<Response> => {
-    if (originRejected(req.headers.get("origin"), allowedOrigin)) return json({ error: "forbidden origin" }, 403);
+    const origin = req.headers.get("origin");
+    const headers = { ...corsHeaders(origin && origins.has(origin) ? origin : allowedOrigin), "Content-Type": "application/json" };
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
+    if (origin && !origins.has(origin)) return json({ error: "forbidden origin" }, 403);
     if (req.method === "OPTIONS") return new Response(null, { headers });
     if (req.method !== "POST") return json({ error: "method" }, 405);
     try {
