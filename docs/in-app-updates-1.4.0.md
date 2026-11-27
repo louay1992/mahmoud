@@ -17,6 +17,7 @@
 3. انشر GitHub Release باسم `android-vVERSION` على commit المصدر نفسه، وأرفق `Delivery-Admin-VERSION.apk` و`Delivery-Captain-VERSION.apk`. تحقق من بصمات الملفات المنشورة بعد تنزيلها.
 4. **بعد** إتاحة الملفين للعامة، حدّث `latest.json` على فرع `android-releases` بالمحتوى المتولد. هذا الفرع مخصص لبيانات الإصدار، ولا يغيّر كود `main`.
 5. نزّل بيان الإصدار الحي وتحقق من رقمَي الإصدار والحجم والبصمات ومطابقة sourceCommit. الإصدار لا يصبح متاحًا للتحديث داخل التطبيقات قبل هذه الخطوة.
+6. أعد نشر الموقع على Netlify بعد تحديث البيان. يتحقق البناء من حجم وبصمة الملفين وينشرهما على `/downloads/delivery-admin.apk` و`/downloads/delivery-captain.apk` ضمن دومين الموقع.
 
 عنوان البيان الثابت: `https://raw.githubusercontent.com/louay1992/mahmoud/android-releases/latest.json`. روابط APK محصورة بإصدارات المستودع نفسه، مع السماح بإعادة توجيه HTTPS إلى مخازن GitHub الرسمية فقط. لا تدخل مفاتيح التوقيع أو حساب الخدمة إلى البيان أو APK.
 
