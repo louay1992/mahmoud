@@ -43,4 +43,22 @@ public class AppUpdateReleaseTest {
         assertFalse(AppUpdateRelease.trustedDownload(new URL("https://github.com.evil.example/asset"), true));
         assertFalse(AppUpdateRelease.trustedDownload(new URL("http://release-assets.githubusercontent.com/asset"), true));
     }
+    @Test public void newFeedRequiresTheExactSameDomainRoleVersionAndHash() throws Exception {
+        String role = BuildConfig.APP_SCOPE;
+        JSONObject manifest = AppUpdateTestData.manifest(new byte[]{1,2});
+        JSONObject app = manifest.getJSONObject("apps").getJSONObject(role);
+        assertThrows(Exception.class, () -> AppUpdateRelease.parseSite(manifest, role));
+        String path = "/downloads/releases/" + app.getString("versionName") + "/" + app.getString("sha256") + "/delivery-" + role + ".apk";
+        String url = AppUpdateRelease.SITE + path;
+        app.put("url", url);
+        AppUpdateRelease release = AppUpdateRelease.parseSite(manifest, role);
+        assertEquals(url, AppUpdateRelease.restore(release.json(), role).url);
+        assertFalse(AppUpdateRelease.trustedDownload(new URL(url), true));
+        for (String invalid : new String[]{url + "?alternate=1", url.replace("https:", "http:"),
+                url.replace(app.getString("sha256"), "a".repeat(64)), url.replace("delivery-" + role, "delivery-other"),
+                url.replace(app.getString("versionName"), "9.9.9")}) {
+            app.put("url", invalid);
+            assertThrows(Exception.class, () -> AppUpdateRelease.parseSite(manifest, role));
+        }
+    }
 }
