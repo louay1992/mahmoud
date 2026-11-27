@@ -94,10 +94,16 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
    denied=true;await page.evaluate(()=>offline.lost());await page.evaluate(()=>offline.retry());
    await page.locator('#login').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>offline.ownerId),null);
+   // A cold offline start cannot restore a snapshot whose verified subscription has expired.
+   denied=false;await page.reload();await page.waitForFunction(()=>!!offline.savedAt);
+   await page.evaluate(async()=>{const snapshot=await offline.get('snapshot');snapshot.record.profile.subscription.expires_at=new Date(Date.now()-864e5).toISOString();snapshot.checksum=await offline.digest(snapshot.record);await offline.tx('readwrite',s=>s.put(snapshot));});
+   networkOffline=true;await context.setOffline(true);await page.reload();await page.locator('#subscription-lock').waitFor();
+   assert.equal(await page.locator('#app').isVisible(),false);await page.waitForFunction(async()=>!await offline.get('snapshot'));
+   assert.equal(await page.evaluate(()=>document.getElementById('main').textContent),'');
    assert.deepEqual(errors,[]);await context.close();context=null;
    // Only remove the known generated profile in our test workspace.
    assert.ok(path.resolve(profile).startsWith(path.join(root,'.tools')+path.sep));await fs.rm(profile,{recursive:true,force:true});
-   console.log(role+': cold offline startup, expired session, exact cached queries, missing data, blocked writes, account isolation, logout purge and revoked access passed');
+   console.log(role+': cold offline startup, expired session, exact cached queries, missing data, blocked writes, account isolation, logout purge, revoked access and expired-subscription snapshot denial passed');
   }
  }finally{await context?.close();await new Promise(r=>server.close(r));}
 })().catch(error=>{console.error(error);process.exitCode=1});
