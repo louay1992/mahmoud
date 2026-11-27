@@ -110,6 +110,7 @@ async function onlineBoot(){
   const {data:{session}} = await offline.onlineSession(sb.auth);
   if(authGate.blocked){ showLogin(); return }
   if(!session){ await offline.invalidate(); showLogin(); return }
+  if(!await offline.subscription.verify())return;
   ME = (session.user.email || "").toLowerCase();
   const {data:acc,error:accessError} = await sb.rpc("my_access");
   if(accessError)throw Object.assign(new Error(accessError.message),{code:offline.networkError({error:accessError})?"NETWORK":"ACCESS_DENIED"});

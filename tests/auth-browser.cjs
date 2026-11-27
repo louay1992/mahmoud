@@ -12,7 +12,7 @@ const sdk=`window.supabase={createClient:(_url,_key,options)=>{
  session={access_token:'fixture-token',user:{id:'user-'+email,email}};localStorage.setItem(key,JSON.stringify(session));return {data:{session},error:null}}};
  const table=name=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:resolve=>Promise.resolve({data:name==='captains'?[{id:'captain-1',email:session?.user.email,name:'كابتن تجريبي',active:true}]:[],error:null}).then(resolve)};return q};
  const channel={on:()=>channel,subscribe:()=>channel};
- return {auth,from:table,rpc:name=>name==='working_orders'?table('orders'):Promise.resolve({data:name==='my_access'?{role:'full'}:[],error:null}),channel:()=>channel,removeAllChannels:async()=>{}};
+ return {auth,from:table,rpc:name=>name==='working_orders'?table('orders'):Promise.resolve({data:name==='subscription_access'?{schema:1,allowed:true,configured:false}:name==='my_access'?{role:'full'}:[],error:null}),channel:()=>channel,removeAllChannels:async()=>{}};
 }};`;
 (async()=>{
  const root=process.cwd();

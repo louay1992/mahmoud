@@ -35,9 +35,9 @@ test('owner invitation endpoint validates identity and owner role, pins redirect
   const calls=[];const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:options.denied?null:{active:true},error:options.ownerError?{}:null})};
   const service={from:()=>q,auth:{getUser:async()=>({data:{user:{id:'owner-fixture'}},error:options.badToken?{}:null}),admin:{inviteUserByEmail:async(email,opt)=>{calls.push({method:'invite',email,opt});return {data:{user:{id:'new-user'}},error:options.sendError?{code:'smtp_failed'}:null}}}},rpc:async(name,args)=>{calls.push({method:name,args});return name==='reserve_subscription_admin_invite'?{data:{email:args.p_email,send_token:'reservation',existing_user:options.existing,auth_user_id:options.existing?'existing-user':null},error:options.limited?{message:'انتظر دقيقة'}:null}:{data:!options.recordError,error:options.recordError?{}:null}}};
   const publicAuth={resetPasswordForEmail:async(email,opt)=>{calls.push({method:'recovery',email,opt});return {error:options.sendError?{}:null}}};
-  const handler=createOwnerInviteHandler({allowedOrigin:'https://app.example.test',service,publicAuth});
-  const response=await handler(new Request('https://function.example.test',{method:'POST',headers:{authorization:'Bearer fixture-session',origin:options.foreign?'https://foreign.example.test':'https://app.example.test'},body:JSON.stringify({email:options.invalid?'bad':' NEW@example.test ',name:'Name'})}));
-  return {calls,status:response.status,body:await response.json()};
+  const handler=createOwnerInviteHandler({allowedOrigin:options.allowedOrigin||'https://app.example.test',service,publicAuth});
+  const response=await handler(new Request('https://function.example.test',{method:'POST',headers:{authorization:'Bearer fixture-session',origin:options.origin||(options.foreign?'https://foreign.example.test':'https://app.example.test')},body:JSON.stringify({email:options.invalid?'bad':' NEW@example.test ',name:'Name'})}));
+  return {calls,status:response.status,body:await response.json(),allowOrigin:response.headers.get('access-control-allow-origin')};
  }
  for(const options of [{denied:true},{badToken:true},{ownerError:true},{foreign:true},{invalid:true}]){const r=await run(options);assert.ok(r.status>=400);assert.equal(r.calls.some(c=>c.method==='invite'||c.method==='recovery'),false);}
  let r=await run();assert.equal(r.status,200);assert.equal(r.calls.find(c=>c.method==='invite').opt.redirectTo,'https://app.example.test/account-setup.html');assert.equal(r.calls.find(c=>c.method==='finish_subscription_admin_invite').args.p_success,true);assert.deepEqual(r.body,{ok:true,email:'new@example.test'});assert.doesNotMatch(JSON.stringify(r.body),/token|reservation|new-user/);
@@ -45,4 +45,9 @@ test('owner invitation endpoint validates identity and owner role, pins redirect
  r=await run({sendError:true});assert.equal(r.status,502);assert.equal(r.calls.find(c=>c.method==='finish_subscription_admin_invite').args.p_success,false);
  r=await run({recordError:true});assert.equal(r.status,503);assert.doesNotMatch(JSON.stringify(r.body),/fixture-session/);
  r=await run({limited:true});assert.equal(r.status,429);assert.equal(r.calls.some(c=>c.method==='invite'),false);
+ for(const origin of ['https://hhyyw.netlify.app','https://applications.nature-care.net']){
+  r=await run({allowedOrigin:'https://hhyyw.netlify.app',origin});assert.equal(r.status,200);assert.equal(r.allowOrigin,origin);assert.equal(r.calls.find(c=>c.method==='invite').opt.redirectTo,'https://hhyyw.netlify.app/account-setup.html','email callback remains pinned to configured Auth redirect');
+ }
+ r=await run({allowedOrigin:'https://hhyyw.netlify.app',origin:'https://applications.nature-care.net.attacker.test'});assert.equal(r.status,403);assert.equal(r.calls.length,0);
+ r=await run({origin:'https://applications.nature-care.net'});assert.equal(r.status,403,'other environments do not inherit production origins');
 });

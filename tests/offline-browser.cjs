@@ -32,7 +32,7 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
      if(networkOffline)return route.abort('internetdisconnected');
      if(url.hostname!=='jabapvnmfdflysxfxwwf.supabase.co')return route.abort();
      calls++;if(url.searchParams.get('limit')==='42')await new Promise(resolve=>setTimeout(resolve,500));let data=[];if(denied)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({message:'Access revoked',code:'42501'})});
-     if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='working_orders'?tables.orders:rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
+     if(url.pathname.includes('/rpc/')){const rpc=url.pathname.split('/').pop();data=rpc==='subscription_access'?{schema:1,allowed:true,configured:true,expires_at:new Date(Date.now()+864e5*30).toISOString()}:rpc==='working_orders'?tables.orders:rpc==='my_access'?{role:'full'}:rpc==='admin_products'?[product]:rpc==='dashboard_stats'?{}:[];}
      else {const table=url.pathname.split('/').pop();data=tables[table]||[];if(table==='orders'&&url.searchParams.get('fulfillment')==='eq.shipping')data=[];}
      return route.fulfill({status:200,headers:{'content-type':'application/json','access-control-allow-origin':'*'},body:JSON.stringify(data)});
     });const page=context.pages()[0]||await context.newPage();page.on('pageerror',e=>errors.push(e.message));return page;
@@ -94,10 +94,16 @@ const tables={captains:[captain],orders:[order],settings:[{key:'business_name',v
    await page.goto(origin+'/'+role);await page.waitForFunction(()=>!!offline.savedAt);
    denied=true;await page.evaluate(()=>offline.lost());await page.evaluate(()=>offline.retry());
    await page.locator('#login').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>offline.ownerId),null);
+   // A cold offline start cannot restore a snapshot whose verified subscription has expired.
+   denied=false;await page.reload();await page.waitForFunction(()=>!!offline.savedAt);
+   await page.evaluate(async()=>{const snapshot=await offline.get('snapshot');snapshot.record.profile.subscription.expires_at=new Date(Date.now()-864e5).toISOString();snapshot.checksum=await offline.digest(snapshot.record);await offline.tx('readwrite',s=>s.put(snapshot));});
+   networkOffline=true;await context.setOffline(true);await page.reload();await page.locator('#subscription-lock').waitFor();
+   assert.equal(await page.locator('#app').isVisible(),false);await page.waitForFunction(async()=>!await offline.get('snapshot'));
+   assert.equal(await page.evaluate(()=>document.getElementById('main').textContent),'');
    assert.deepEqual(errors,[]);await context.close();context=null;
    // Only remove the known generated profile in our test workspace.
    assert.ok(path.resolve(profile).startsWith(path.join(root,'.tools')+path.sep));await fs.rm(profile,{recursive:true,force:true});
-   console.log(role+': cold offline startup, expired session, exact cached queries, missing data, blocked writes, account isolation, logout purge and revoked access passed');
+   console.log(role+': cold offline startup, expired session, exact cached queries, missing data, blocked writes, account isolation, logout purge, revoked access and expired-subscription snapshot denial passed');
   }
  }finally{await context?.close();await new Promise(r=>server.close(r));}
 })().catch(error=>{console.error(error);process.exitCode=1});
