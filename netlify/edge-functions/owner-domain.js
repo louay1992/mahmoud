@@ -2,6 +2,7 @@ const ownerHostname = 'owner.nature-care.net';
 const previousHosts = new Set(['hhyyw.netlify.app', 'applications.nature-care.net']);
 
 export default function ownerDomain(request) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return;
   const url = new URL(request.url);
   if (url.hostname === ownerHostname && url.pathname === '/') {
     url.pathname = '/owner.html';
@@ -17,4 +18,4 @@ export default function ownerDomain(request) {
   }
 }
 
-export const config = { path: ['/', '/owner', '/owner/', '/owner.html'], method: ['GET', 'HEAD'] };
+export const config = { path: ['/', '/owner', '/owner/', '/owner.html'] };
