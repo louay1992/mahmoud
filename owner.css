@@ -11,3 +11,16 @@ html{scroll-behavior:smooth;scroll-padding-top:85px}.owner-dashboard{max-width:1
 /* Owner operations: narrow-screen cards, deliberate destructive actions and bounded details. */
 .owner-account-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.owner-account-actions .b{font-size:13px;min-height:40px}.b.danger{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}.b.danger:hover{background:#ffe4e6}.owner-invite-row>div:first-child{min-width:0}.owner-invite-row span,.owner-backup-row code,.owner-cleanup-preview code{overflow-wrap:anywhere}.owner-backup-row,.owner-job{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0;border-bottom:1px solid #e2e8f0}.owner-backup-row>div,.owner-job>div{min-width:0}.owner-backup-row b,.owner-backup-row small,.owner-job small{display:block}.owner-backup-row small,.owner-job small{margin-top:5px;color:#64748b}.owner-backup-row code{display:block;font-size:12px;word-break:break-all}.owner-job.running{border-inline-start:3px solid #0d9488;padding-inline-start:12px}.owner-job.failed,.owner-job.recovery_required{color:#9f1239}.owner-job p{max-width:540px;font-size:13px}.owner-table-wrap{overflow:auto;max-height:400px}.owner-table-wrap table{width:100%;border-collapse:collapse;font-size:13px}.owner-table-wrap th,.owner-table-wrap td{text-align:start;padding:10px;border-bottom:1px solid #e2e8f0}.owner-table-wrap td:first-child{overflow-wrap:anywhere;min-width:160px}#owner-operations .owner-panel{margin-bottom:20px}#owner-operations summary{cursor:pointer;padding:14px 0;font-weight:700}#owner-operations details{min-width:0;max-width:100%}.owner-resource-notes{font-size:13px;color:#64748b;line-height:1.9}.owner-confirm-inner{max-width:650px;max-height:85dvh;overflow:auto}.owner-confirm-inner label{display:grid;gap:8px;margin:16px 0}.owner-confirm-inner input{width:100%;min-width:0;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font:inherit;box-sizing:border-box}.owner-confirm-inner input[type=file]{font-size:13px}.error{color:#b91c1c}#owner-cleanup-preview code{overflow-wrap:anywhere}#owner-restore-dialog,#owner-account-dialog{max-width:min(720px,calc(100vw - 24px));border:0;border-radius:22px;padding:0}#owner-restore-dialog::backdrop,#owner-account-dialog::backdrop{background:#0f172a88;backdrop-filter:blur(4px)}
 @media(max-width:640px){.owner-invite-row,.owner-backup-row,.owner-job{flex-direction:column;align-items:stretch}.owner-account-actions{width:100%}.owner-account-actions .b{flex:1}.owner-confirm-inner{padding:20px}.owner-job p{max-width:100%}}
+
+.owner-projects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding: 16px;
+  border-bottom: 1px solid #d9e8e3;
+}
+.owner-projects a { text-decoration: none; }
